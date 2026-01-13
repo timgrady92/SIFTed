@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | Memory Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("tools") }}
+
+    <header class="hero compact">
+      <div class="hero-text">
+        <p class="eyebrow">Memory Analysis</p>
+        <h1>Memory tools</h1>
+        <p class="lead">Start with Volatility 3 and expand from there.</p>
+        <p class="source-hint">Source artifact: memory image (raw, crash dump, or LiME).</p>
+      </div>
+    </header>
+
+    <main class="carving">
+      <section class="tool-grid">
+        <article class="tool-card primary">
+          <div class="tool-header">
+            <div>
+              <h2>Volatility 3</h2>
+              <p>Memory triage with guided plugins and clean output.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">
+            Start with high-signal plugins and build understanding as you go.
+          </p>
+          <div class="tool-actions">
+            <a class="action" href="/volatility">Open workflow</a>
+            <a class="ghost" href="/guides">Use cases</a>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    {% from "_components.html" import glossary_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+  </body>
+</html>

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | File Carving</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("tools") }}
+
+    <header class="hero compact">
+      <div class="hero-text">
+        <p class="eyebrow">File Carving</p>
+        <h1>Choose Your Tool</h1>
+        <p class="lead">
+          Start with a guided workflow. Each tool keeps inputs, outputs, and commands visible.
+        </p>
+        <p class="source-hint">Source artifact: raw disk or partition image (dd, E01).</p>
+      </div>
+    </header>
+
+    <main class="carving">
+      <section class="tool-grid">
+        <article class="tool-card primary">
+          <div class="tool-header">
+            <div>
+              <h2>Foremost</h2>
+              <p>Classic file carving with familiar signatures.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">
+            Best for quick recovery from raw disk images. Ideal first workflow for junior analysts.
+          </p>
+          <div class="tool-actions">
+            <a class="action" href="/foremost">Open workflow</a>
+            <a class="ghost" href="/guides">Use cases</a>
+          </div>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-header">
+            <div>
+              <h2>Bulk Extractor</h2>
+              <p>High-volume carve for features and artifacts.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">
+            Extracts URLs, emails, and phone numbers at scale. Useful for rapid triage.
+          </p>
+          <div class="tool-actions">
+            <a class="action" href="/bulk-extractor">Open workflow</a>
+            <a class="ghost" href="/guides">Use cases</a>
+          </div>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-header">
+            <div>
+              <h2>Scalpel</h2>
+              <p>Config-driven carving for specific file types.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">
+            Focused carving for photos, documents, and targeted recovery needs.
+          </p>
+          <div class="tool-actions">
+            <a class="action" href="/scalpel">Open workflow</a>
+            <a class="ghost" href="/guides">Use cases</a>
+          </div>
+        </article>
+      </section>
+
+    </main>
+
+    {% from "_components.html" import glossary_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+  </body>
+</html>

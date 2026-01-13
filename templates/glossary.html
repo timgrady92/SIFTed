@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | Glossary</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav, glossary_tiles %}
+    {{ site_nav("glossary") }}
+
+    <main class="glossary-page">
+      <section
+        class="card glossary-panel glossary-surface"
+        data-glossary-surface="page"
+        data-glossary-mode="split"
+        data-glossary-state="grid"
+      >
+        <div class="glossary-page-toolbar">
+          <div class="glossary-page-intro">
+            <h2>Browse artifacts</h2>
+            <p class="helper">Select a tile to review context, corroboration, and locations.</p>
+          </div>
+          <div class="glossary-page-controls">
+            <div class="glossary-search">
+              <input
+                type="text"
+                data-glossary-search
+                placeholder="Filter artifacts..."
+                autocomplete="off"
+              />
+            </div>
+            <div class="glossary-filters">
+              <span class="filter-label">Operating system</span>
+              <div class="filter-row" data-glossary-filter-group="os">
+                <button class="filter-chip active" type="button" data-glossary-filter-value="all">All</button>
+                <button class="filter-chip" type="button" data-glossary-filter-value="windows">Windows</button>
+                <button class="filter-chip" type="button" data-glossary-filter-value="macos">macOS</button>
+                <button class="filter-chip" type="button" data-glossary-filter-value="linux">Linux</button>
+                <button class="filter-chip" type="button" data-glossary-filter-value="cross">Cross-platform</button>
+              </div>
+            </div>
+            <div class="glossary-meta">
+              <span data-glossary-count></span>
+              <span class="glossary-meta-note">Click a tile to load details.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="glossary-page-body">
+          <div class="glossary-grid" data-glossary-grid>
+            {{ glossary_tiles() }}
+          </div>
+          <div class="glossary-detail" data-glossary-detail>
+            <button class="glossary-back" data-glossary-back type="button">&larr; All artifacts</button>
+            <div class="glossary-detail-content" data-glossary-detail-content></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    {% from "_components.html" import active_jobs_drawer %}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+  </body>
+</html>

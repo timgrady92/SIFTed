@@ -1,0 +1,523 @@
+{% macro run_context(
+  cases,
+  output_placeholder,
+  tool_slug="tool",
+  show_browse=true,
+  source_title="Image",
+  source_label="Image path",
+  source_placeholder="/cases/case-name/evidence.dd",
+  source_hint=None
+) %}
+  <section class="context-group">
+    <div class="card context-card open">
+      <button class="context-toggle" type="button">
+        <div>
+          <h2>Case Settings</h2>
+          <p class="helper">Set once, collapse when you are ready to run.</p>
+        </div>
+        <span class="toggle-icon chevron">&gt;</span>
+      </button>
+      <div class="context-body">
+        <div class="block">
+          <h3>Case (optional)</h3>
+          <label class="input-stack">
+            Link this run to a case
+            <select id="caseSelect" data-tool="{{ tool_slug }}">
+              <option value="">No case selected</option>
+              {% for case in cases|reverse %}
+                <option value="{{ case.id }}" data-slug="{{ case.slug }}" data-image="{{ case.image_path }}">
+                  {{ case.name }}
+                </option>
+              {% endfor %}
+            </select>
+          </label>
+          {% if cases %}
+            <div class="helper-row">
+              <span class="helper-label">Recent cases</span>
+              <div class="chip-grid compact">
+                {% for case in cases|reverse %}
+                  {% if loop.index <= 3 %}
+                    <button class="chip" data-case-id="{{ case.id }}" type="button">
+                      {{ case.name }}
+                    </button>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+          <p class="helper">Cases keep related runs together for reporting.</p>
+        </div>
+
+        <div class="block">
+          <div class="block-header">
+            <h3>{{ source_title }}</h3>
+            {% if show_browse %}
+              <button class="ghost" id="openBrowser">Browse</button>
+            {% endif %}
+          </div>
+          <label class="input-stack">
+            {{ source_label }}
+            <input
+              id="imagePath"
+              type="text"
+              placeholder="{{ source_placeholder }}"
+            />
+          </label>
+          {% if source_hint %}
+            <p class="source-hint">{{ source_hint }}</p>
+          {% endif %}
+        </div>
+
+        <div class="block">
+          <h3>Output</h3>
+          <label class="input-stack">
+            Output folder
+            <input id="outputPath" type="text" placeholder="{{ output_placeholder }}" />
+          </label>
+          <p class="helper">Default is grouped under the selected case.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endmacro %}
+
+{% macro site_nav(active=None) %}
+  <nav class="top-nav">
+    <div class="brand">SIFTed</div>
+    <div class="nav-links">
+      <a class="nav-link job-pill" id="activeJobs" href="/cases" hidden>Active jobs</a>
+      <a class="nav-link{% if active == 'home' %} active{% endif %}" href="/">Home</a>
+      <a class="nav-link{% if active == 'cases' %} active{% endif %}" href="/cases">Cases</a>
+      <a class="nav-link{% if active == 'tools' %} active{% endif %}" href="/tools">Tools</a>
+      <a class="nav-link{% if active == 'guides' %} active{% endif %}" href="/guides">Guides</a>
+      <a class="nav-link{% if active == 'glossary' %} active{% endif %}" href="/glossary">Glossary</a>
+    </div>
+  </nav>
+{% endmacro %}
+
+{% macro glossary_tiles() %}
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="prefetch">
+    <span class="glossary-tile-icon" data-artifact="prefetch"></span>
+    <span class="glossary-tile-name">Prefetch</span>
+    <span class="glossary-tile-hint">Execution hints</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="lnk">
+    <span class="glossary-tile-icon" data-artifact="lnk"></span>
+    <span class="glossary-tile-name">LNK Files</span>
+    <span class="glossary-tile-hint">Access history</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="recentdocs">
+    <span class="glossary-tile-icon" data-artifact="recentdocs"></span>
+    <span class="glossary-tile-name">RecentDocs</span>
+    <span class="glossary-tile-hint">Recent files</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="userassist">
+    <span class="glossary-tile-icon" data-artifact="userassist"></span>
+    <span class="glossary-tile-name">UserAssist</span>
+    <span class="glossary-tile-hint">GUI launches</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="shimcache">
+    <span class="glossary-tile-icon" data-artifact="shimcache"></span>
+    <span class="glossary-tile-name">AppCompatCache</span>
+    <span class="glossary-tile-hint">Legacy cache</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="amcache">
+    <span class="glossary-tile-icon" data-artifact="amcache"></span>
+    <span class="glossary-tile-name">Amcache</span>
+    <span class="glossary-tile-hint">Install traces</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="runkeys">
+    <span class="glossary-tile-icon" data-artifact="runkeys"></span>
+    <span class="glossary-tile-name">Run Keys</span>
+    <span class="glossary-tile-hint">Persistence</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="scheduledtasks">
+    <span class="glossary-tile-icon" data-artifact="scheduledtasks"></span>
+    <span class="glossary-tile-name">Scheduled Tasks</span>
+    <span class="glossary-tile-hint">Automation</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="eventlogs">
+    <span class="glossary-tile-icon" data-artifact="eventlogs"></span>
+    <span class="glossary-tile-name">Event Logs</span>
+    <span class="glossary-tile-hint">System activity</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="timeline">
+    <span class="glossary-tile-icon" data-artifact="timeline"></span>
+    <span class="glossary-tile-name">Timeline (Plaso)</span>
+    <span class="glossary-tile-hint">Cross-source view</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="defender">
+    <span class="glossary-tile-icon" data-artifact="defender"></span>
+    <span class="glossary-tile-name">Windows Defender</span>
+    <span class="glossary-tile-hint">Detections</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="browser">
+    <span class="glossary-tile-icon" data-artifact="browser"></span>
+    <span class="glossary-tile-name">Browser History</span>
+    <span class="glossary-tile-hint">User intent</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="mft">
+    <span class="glossary-tile-icon" data-artifact="mft"></span>
+    <span class="glossary-tile-name">$MFT / USN</span>
+    <span class="glossary-tile-hint">Filesystem changes</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="recyclebin">
+    <span class="glossary-tile-icon" data-artifact="recyclebin"></span>
+    <span class="glossary-tile-name">Recycle Bin</span>
+    <span class="glossary-tile-hint">Deletes</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="jumplists">
+    <span class="glossary-tile-icon" data-artifact="jumplists"></span>
+    <span class="glossary-tile-name">Jump Lists</span>
+    <span class="glossary-tile-hint">Recent items</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="shellbags">
+    <span class="glossary-tile-icon" data-artifact="shellbags"></span>
+    <span class="glossary-tile-name">Shellbags</span>
+    <span class="glossary-tile-hint">Folder views</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="srum">
+    <span class="glossary-tile-icon" data-artifact="srum"></span>
+    <span class="glossary-tile-name">SRUM</span>
+    <span class="glossary-tile-hint">Usage telemetry</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="usb">
+    <span class="glossary-tile-icon" data-artifact="usb"></span>
+    <span class="glossary-tile-name">USB History</span>
+    <span class="glossary-tile-hint">Removable media</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="services">
+    <span class="glossary-tile-icon" data-artifact="services"></span>
+    <span class="glossary-tile-name">Services</span>
+    <span class="glossary-tile-hint">Auto-starts</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="wmi">
+    <span class="glossary-tile-icon" data-artifact="wmi"></span>
+    <span class="glossary-tile-name">WMI Subscriptions</span>
+    <span class="glossary-tile-hint">Hidden persistence</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="powershell">
+    <span class="glossary-tile-icon" data-artifact="powershell"></span>
+    <span class="glossary-tile-name">PowerShell Logs</span>
+    <span class="glossary-tile-hint">Script execution</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="bits">
+    <span class="glossary-tile-icon" data-artifact="bits"></span>
+    <span class="glossary-tile-name">BITS Jobs</span>
+    <span class="glossary-tile-hint">Background transfers</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="rdp">
+    <span class="glossary-tile-icon" data-artifact="rdp"></span>
+    <span class="glossary-tile-name">RDP Artifacts</span>
+    <span class="glossary-tile-hint">Remote access</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="bam">
+    <span class="glossary-tile-icon" data-artifact="bam"></span>
+    <span class="glossary-tile-name">BAM/DAM</span>
+    <span class="glossary-tile-hint">Execution tracking</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="typedpaths">
+    <span class="glossary-tile-icon" data-artifact="typedpaths"></span>
+    <span class="glossary-tile-name">TypedPaths</span>
+    <span class="glossary-tile-hint">User navigation</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="startupfolder">
+    <span class="glossary-tile-icon" data-artifact="startupfolder"></span>
+    <span class="glossary-tile-name">Startup Folder</span>
+    <span class="glossary-tile-hint">Logon programs</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="vss">
+    <span class="glossary-tile-icon" data-artifact="vss"></span>
+    <span class="glossary-tile-name">Volume Shadow Copies</span>
+    <span class="glossary-tile-hint">Point-in-time snapshots</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="ads">
+    <span class="glossary-tile-icon" data-artifact="ads"></span>
+    <span class="glossary-tile-name">Alternate Data Streams</span>
+    <span class="glossary-tile-hint">Hidden data / MOTW</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="searchindex">
+    <span class="glossary-tile-icon" data-artifact="searchindex"></span>
+    <span class="glossary-tile-name">Windows Search Index</span>
+    <span class="glossary-tile-hint">Indexed content</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="thumbcache">
+    <span class="glossary-tile-icon" data-artifact="thumbcache"></span>
+    <span class="glossary-tile-name">Thumbnail Cache</span>
+    <span class="glossary-tile-hint">Image previews</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="networkshares">
+    <span class="glossary-tile-icon" data-artifact="networkshares"></span>
+    <span class="glossary-tile-name">Network Shares</span>
+    <span class="glossary-tile-hint">Mapped drives</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="wer">
+    <span class="glossary-tile-icon" data-artifact="wer"></span>
+    <span class="glossary-tile-name">Error Reporting</span>
+    <span class="glossary-tile-hint">Crash dumps</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="muicache">
+    <span class="glossary-tile-icon" data-artifact="muicache"></span>
+    <span class="glossary-tile-name">MUICache</span>
+    <span class="glossary-tile-hint">Program names</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="wordwheelquery">
+    <span class="glossary-tile-icon" data-artifact="wordwheelquery"></span>
+    <span class="glossary-tile-name">WordWheelQuery</span>
+    <span class="glossary-tile-hint">Explorer searches</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="lastvisitedmru">
+    <span class="glossary-tile-icon" data-artifact="lastvisitedmru"></span>
+    <span class="glossary-tile-name">LastVisitedMRU</span>
+    <span class="glossary-tile-hint">Open/Save dialogs</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="networkprofiles">
+    <span class="glossary-tile-icon" data-artifact="networkprofiles"></span>
+    <span class="glossary-tile-name">Network Profiles</span>
+    <span class="glossary-tile-hint">Connection history</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="bashhistory">
+    <span class="glossary-tile-icon" data-artifact="bashhistory"></span>
+    <span class="glossary-tile-name">Bash History</span>
+    <span class="glossary-tile-hint">Command history</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="authlogs">
+    <span class="glossary-tile-icon" data-artifact="authlogs"></span>
+    <span class="glossary-tile-name">Auth Logs</span>
+    <span class="glossary-tile-hint">Logins + sudo</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="syslog">
+    <span class="glossary-tile-icon" data-artifact="syslog"></span>
+    <span class="glossary-tile-name">Syslog</span>
+    <span class="glossary-tile-hint">System messages</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="journal">
+    <span class="glossary-tile-icon" data-artifact="journal"></span>
+    <span class="glossary-tile-name">systemd Journal</span>
+    <span class="glossary-tile-hint">Unified logs</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="cron">
+    <span class="glossary-tile-icon" data-artifact="cron"></span>
+    <span class="glossary-tile-name">Cron Jobs</span>
+    <span class="glossary-tile-hint">Schedules</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="packages">
+    <span class="glossary-tile-icon" data-artifact="packages"></span>
+    <span class="glossary-tile-name">Package Logs</span>
+    <span class="glossary-tile-hint">Installs</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="sshkeys">
+    <span class="glossary-tile-icon" data-artifact="sshkeys"></span>
+    <span class="glossary-tile-name">SSH Keys</span>
+    <span class="glossary-tile-hint">Trusted access</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="wtmp">
+    <span class="glossary-tile-icon" data-artifact="wtmp"></span>
+    <span class="glossary-tile-name">Login Records</span>
+    <span class="glossary-tile-hint">wtmp/btmp</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="auditd">
+    <span class="glossary-tile-icon" data-artifact="auditd"></span>
+    <span class="glossary-tile-name">Audit Logs</span>
+    <span class="glossary-tile-hint">Syscall logging</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="systemdunits">
+    <span class="glossary-tile-icon" data-artifact="systemdunits"></span>
+    <span class="glossary-tile-name">Systemd Units</span>
+    <span class="glossary-tile-hint">Service persistence</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="procfs">
+    <span class="glossary-tile-icon" data-artifact="procfs"></span>
+    <span class="glossary-tile-name">/proc Filesystem</span>
+    <span class="glossary-tile-hint">Live process state</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="envfiles">
+    <span class="glossary-tile-icon" data-artifact="envfiles"></span>
+    <span class="glossary-tile-name">Environment Files</span>
+    <span class="glossary-tile-hint">Shell config</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="passwdshadow">
+    <span class="glossary-tile-icon" data-artifact="passwdshadow"></span>
+    <span class="glossary-tile-name">User Accounts</span>
+    <span class="glossary-tile-hint">passwd/shadow</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="webserverlogs">
+    <span class="glossary-tile-icon" data-artifact="webserverlogs"></span>
+    <span class="glossary-tile-name">Web Server Logs</span>
+    <span class="glossary-tile-hint">HTTP requests</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="tmpshm">
+    <span class="glossary-tile-icon" data-artifact="tmpshm"></span>
+    <span class="glossary-tile-name">/tmp and /dev/shm</span>
+    <span class="glossary-tile-hint">Staging areas</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="etchosts">
+    <span class="glossary-tile-icon" data-artifact="etchosts"></span>
+    <span class="glossary-tile-name">/etc/hosts</span>
+    <span class="glossary-tile-hint">DNS overrides</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="kernellogs">
+    <span class="glossary-tile-icon" data-artifact="kernellogs"></span>
+    <span class="glossary-tile-name">Kernel Logs</span>
+    <span class="glossary-tile-hint">dmesg / kern.log</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="coredumps">
+    <span class="glossary-tile-icon" data-artifact="coredumps"></span>
+    <span class="glossary-tile-name">Core Dumps</span>
+    <span class="glossary-tile-hint">Crash analysis</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="suidsgid">
+    <span class="glossary-tile-icon" data-artifact="suidsgid"></span>
+    <span class="glossary-tile-name">SUID/SGID Binaries</span>
+    <span class="glossary-tile-hint">Privilege escalation</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="atjobs">
+    <span class="glossary-tile-icon" data-artifact="atjobs"></span>
+    <span class="glossary-tile-name">at Jobs</span>
+    <span class="glossary-tile-hint">One-time tasks</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="capabilities">
+    <span class="glossary-tile-icon" data-artifact="capabilities"></span>
+    <span class="glossary-tile-name">Capabilities</span>
+    <span class="glossary-tile-hint">Fine-grained privs</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="ldpreload">
+    <span class="glossary-tile-icon" data-artifact="ldpreload"></span>
+    <span class="glossary-tile-name">LD_PRELOAD</span>
+    <span class="glossary-tile-hint">Library injection</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="fsevents">
+    <span class="glossary-tile-icon" data-artifact="fsevents"></span>
+    <span class="glossary-tile-name">FSEvents</span>
+    <span class="glossary-tile-hint">File system journal</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="spotlight">
+    <span class="glossary-tile-icon" data-artifact="spotlight"></span>
+    <span class="glossary-tile-name">Spotlight</span>
+    <span class="glossary-tile-hint">Indexed metadata</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="quarantine">
+    <span class="glossary-tile-icon" data-artifact="quarantine"></span>
+    <span class="glossary-tile-name">Quarantine Events</span>
+    <span class="glossary-tile-hint">Download tracking</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="unifiedlogs">
+    <span class="glossary-tile-icon" data-artifact="unifiedlogs"></span>
+    <span class="glossary-tile-name">Unified Logs</span>
+    <span class="glossary-tile-hint">System events</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="launchagents">
+    <span class="glossary-tile-icon" data-artifact="launchagents"></span>
+    <span class="glossary-tile-name">Launch Agents</span>
+    <span class="glossary-tile-hint">macOS persistence</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="tccdb">
+    <span class="glossary-tile-icon" data-artifact="tccdb"></span>
+    <span class="glossary-tile-name">TCC Database</span>
+    <span class="glossary-tile-hint">Privacy permissions</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="keychain">
+    <span class="glossary-tile-icon" data-artifact="keychain"></span>
+    <span class="glossary-tile-name">Keychain</span>
+    <span class="glossary-tile-hint">Stored credentials</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="knownnetworks">
+    <span class="glossary-tile-icon" data-artifact="knownnetworks"></span>
+    <span class="glossary-tile-name">Known Networks</span>
+    <span class="glossary-tile-hint">WiFi history</span>
+  </button>
+  <button class="glossary-tile" type="button" data-glossary-tile data-artifact="loginitems">
+    <span class="glossary-tile-icon" data-artifact="loginitems"></span>
+    <span class="glossary-tile-name">Login Items</span>
+    <span class="glossary-tile-hint">Startup apps</span>
+  </button>
+{% endmacro %}
+
+{% macro glossary_sidebar() %}
+  <aside
+    class="glossary-sidebar glossary-surface"
+    data-glossary-surface="sidebar"
+    data-glossary-mode="stack"
+    data-glossary-state="grid"
+    aria-hidden="true"
+  >
+    <div class="glossary-header">
+      <div>
+        <h2>Artifact Glossary</h2>
+        <p class="glossary-subtitle">Quick reference for common host artifacts.</p>
+      </div>
+      <div class="glossary-actions">
+        <a class="ghost glossary-link" href="/glossary">Full view</a>
+        <button class="glossary-close" data-glossary-close type="button" aria-label="Close glossary">&times;</button>
+      </div>
+    </div>
+    <div class="glossary-search">
+      <input
+        type="text"
+        data-glossary-search
+        placeholder="Filter artifacts..."
+        autocomplete="off"
+      />
+    </div>
+    <div class="glossary-meta">
+      <span data-glossary-count></span>
+    </div>
+    <div class="glossary-grid" data-glossary-grid>
+      {{ glossary_tiles() }}
+    </div>
+
+    <div class="glossary-detail" data-glossary-detail hidden>
+      <button class="glossary-back" data-glossary-back type="button">&larr; All artifacts</button>
+      <div class="glossary-detail-content" data-glossary-detail-content></div>
+    </div>
+  </aside>
+
+  <button class="glossary-toggle" data-glossary-toggle="sidebar" type="button" aria-label="Open artifact glossary">
+    <span class="glossary-toggle-icon"></span>
+    <span class="glossary-toggle-label">Artifacts</span>
+  </button>
+
+  <div class="artifact-tooltip" id="artifactTooltip" hidden>
+    <div class="artifact-tooltip-content" id="artifactTooltipContent"></div>
+  </div>
+{% endmacro %}
+
+{% macro browse_drawer() %}
+  <div class="browser-drawer" id="browserDrawer" aria-hidden="true">
+    <div class="drawer-surface">
+      <div class="drawer-header">
+        <div>
+          <h3>Select an image</h3>
+          <p class="drawer-path" id="currentPath">/cases</p>
+        </div>
+        <button class="ghost" id="closeBrowser">Close</button>
+      </div>
+      <div class="drawer-paths">
+        <button class="path-chip" data-path="/cases">/cases</button>
+        <button class="path-chip" data-path="/">/</button>
+      </div>
+      <div class="drawer-list" id="drawerList"></div>
+      <p class="drawer-error" id="drawerError" hidden>Unable to read that path.</p>
+      <div class="drawer-footer">
+        <label class="input-stack">
+          Use a different path
+          <input id="manualPath" type="text" placeholder="/other/location/image.dd" />
+        </label>
+        <button class="action" id="useManualPath">Use path</button>
+      </div>
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro active_jobs_drawer() %}
+  <div class="job-drawer" id="activeJobsDrawer" aria-hidden="true">
+    <div class="drawer-surface">
+      <div class="drawer-header">
+        <h3>Active jobs</h3>
+        <button class="ghost" id="closeActiveJobs">Close</button>
+      </div>
+      <p class="drawer-status" id="activeJobsStatus"></p>
+      <div class="job-list" id="activeJobsList"></div>
+    </div>
+  </div>
+{% endmacro %}

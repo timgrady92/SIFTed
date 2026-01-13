@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | File Viewer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("") }}
+
+    <main class="single">
+      <section class="card block">
+        <div class="drawer-header">
+          <h1>File Viewer</h1>
+          <button class="ghost" id="closeViewer">Back</button>
+        </div>
+        <div class="viewer-actions">
+          <a class="ghost{% if view_mode == 'raw' %} active{% endif %}" href="{{ url_for('view_file') }}?path={{ path|urlencode }}&view=raw">Raw</a>
+          {% if table_available %}
+            <a class="ghost{% if view_mode == 'table' %} active{% endif %}" href="{{ url_for('view_file') }}?path={{ path|urlencode }}&view=table">Table</a>
+          {% endif %}
+        </div>
+        <div class="viewer-meta">
+          <div class="viewer-meta-row">
+            <span class="viewer-meta-label">Source file</span>
+            <code class="viewer-meta-value" id="viewerPath">{{ path }}</code>
+          </div>
+          <button class="ghost viewer-meta-btn" id="copyViewerPath" type="button">Copy path</button>
+        </div>
+        {% if error %}
+          <p class="run-status" data-tone="error">{{ error }}</p>
+        {% else %}
+          {% if view_mode == 'table' %}
+            {% if table_error %}
+              <p class="run-status" data-tone="error">{{ table_error }}</p>
+              {% if content %}
+                <p class="helper">Showing raw preview instead.</p>
+                <pre class="run-log">{{ content }}</pre>
+              {% endif %}
+            {% elif table_data %}
+              <div class="table-controls">
+                <div class="table-info">
+                  {% if table_truncated %}
+                    <span class="table-row-count" id="rowCount">Showing first 100 of {{ table_total }} rows (scroll for more)</span>
+                  {% elif table_total %}
+                    <span class="table-row-count" id="rowCount">{{ table_total }} rows</span>
+                  {% endif %}
+                  <span class="table-col-count" id="columnCount"></span>
+                  <span class="table-tip">Tip: click a column header to sort.</span>
+                </div>
+                <div class="table-actions-row">
+                  <button class="ghost table-control-btn" id="columnToggleBtn" type="button">Filter Columns</button>
+                </div>
+              </div>
+              <div class="column-dropdown" id="columnDropdown" hidden>
+                <div class="column-dropdown-header">
+                  <span>Filter Columns</span>
+                  <button class="column-dropdown-close" id="columnDropdownClose">&times;</button>
+                </div>
+                <div class="column-dropdown-tools">
+                  <label class="input-stack column-search">
+                    Search columns
+                    <input id="columnSearch" type="text" placeholder="Filter column names" />
+                  </label>
+                  <div class="column-dropdown-actions">
+                    <button class="ghost" id="columnShowAll" type="button">Show all</button>
+                    <button class="ghost" id="columnHideAll" type="button">Hide all</button>
+                  </div>
+                </div>
+                <div class="column-dropdown-list" id="columnDropdownList">
+                  {% for column in table_data.columns %}
+                    <label class="column-toggle-item">
+                      <input type="checkbox" checked data-col-index="{{ loop.index0 }}" />
+                      <span>{{ column }}</span>
+                    </label>
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="table-wrap" id="tableWrap"
+                   data-file-path="{{ path }}"
+                   data-total-rows="{{ table_total }}"
+                   data-initial-rows="{{ table_data.rows|length }}">
+                <table class="data-table" id="dataTable">
+                  <thead>
+                    <tr>
+                      {% for column in table_data.columns %}
+                        <th data-col-index="{{ loop.index0 }}" data-sort="none">
+                          <span class="th-content">
+                            <span class="th-label">{{ column }}</span>
+                            <span class="sort-indicator"></span>
+                          </span>
+                        </th>
+                      {% endfor %}
+                    </tr>
+                  </thead>
+                  <tbody id="tableBody">
+                    {% for row in table_data.rows %}
+                      <tr>
+                        {% for cell in row %}
+                          <td data-col-index="{{ loop.index0 }}">{{ cell }}</td>
+                        {% endfor %}
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                <div class="table-loading" id="tableLoading" hidden>
+                  <span>Loading more rows...</span>
+                </div>
+              </div>
+            {% else %}
+              <p class="helper">No tabular data available.</p>
+            {% endif %}
+          {% else %}
+            {% if truncated %}
+              <p class="helper">Preview truncated to 1 MB.</p>
+            {% endif %}
+            <pre class="run-log">{{ content }}</pre>
+          {% endif %}
+        {% endif %}
+      </section>
+    </main>
+
+    {% from "_components.html" import glossary_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+    <script src="{{ url_for('static', filename='table_viewer.js') }}"></script>
+    <script>
+      const closeViewer = document.getElementById("closeViewer");
+      if (closeViewer) {
+        closeViewer.addEventListener("click", () => {
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.href = "/";
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

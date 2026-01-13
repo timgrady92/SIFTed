@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | Artifact Triage</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("tools") }}
+
+    <header class="hero compact">
+      <div class="hero-text">
+        <p class="eyebrow">Artifact Triage</p>
+        <h1>Choose Your Tool</h1>
+        <p class="lead">Build a timeline and triage host activity quickly.</p>
+        <p class="source-hint">Source artifact: disk image or a directory of collected artifacts.</p>
+      </div>
+    </header>
+
+    <main class="carving">
+      <section class="tool-grid">
+        <article class="tool-card primary">
+          <div class="tool-header">
+            <div>
+              <h2>Plaso Timeline</h2>
+              <p>Generate a timeline from forensic artifacts.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">
+            Runs log2timeline and psort to create a CSV timeline for quick review.
+          </p>
+          <div class="tool-actions">
+            <a class="action" href="/artifact-timeline">Open workflow</a>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    {% from "_components.html" import glossary_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+  </body>
+</html>

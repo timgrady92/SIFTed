@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | Volatility 3</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("tools") }}
+
+    <header class="hero compact">
+      <div class="hero-text">
+        <p class="eyebrow">Memory Analysis</p>
+        <h1>Volatility 3</h1>
+        <p class="lead">Start with a focused plugin set and clean outputs.</p>
+      </div>
+    </header>
+
+    <main class="foremost">
+      <section class="work-pane">
+        {% from "_components.html" import run_context %}
+        {{ run_context(
+          cases,
+          "/cases/<case-name>/volatility/<timestamp>",
+          "volatility",
+          true,
+          "Memory image",
+          "Memory image path",
+          "/cases/case-name/memory.raw",
+          "Source artifact: memory image (raw, crash dump, or LiME)."
+        ) }}
+        <input id="symbolPath" type="hidden" value="{{ symbol_path }}" />
+
+        <div class="card block volatility-settings">
+          <div class="settings-block">
+            <h2>Output format</h2>
+            <div class="toggle-row">
+              <label class="toggle">
+                <input id="jsonOutput" type="checkbox" checked />
+                JSON output
+              </label>
+              <label class="toggle">
+                <input id="tableOutput" type="checkbox" />
+                Render table
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card block volatility-plugins">
+          <div>
+            <h2>Plugin selection</h2>
+            <p class="helper">Choose an OS tab, apply a bundle, then refine with search and filters.</p>
+          </div>
+          <div class="tab-row" role="tablist" aria-label="Operating system tabs">
+            <button class="tab-button active" type="button" data-tab="windows" role="tab" aria-selected="true">
+              Windows
+            </button>
+            <button class="tab-button" type="button" data-tab="linux" role="tab" aria-selected="false">
+              Linux
+            </button>
+            <button class="tab-button" type="button" data-tab="mac" role="tab" aria-selected="false">
+              macOS
+            </button>
+          </div>
+          <div class="plugin-toolbar">
+            <label class="input-stack">
+              Search plugins
+              <input id="pluginSearch" type="text" placeholder="Find a plugin (pslist, netscan)" />
+            </label>
+            <div class="plugin-toggle">
+              <label class="toggle">
+                <input id="pluginSelectedOnly" type="checkbox" />
+                Selected only
+              </label>
+              <span class="helper" id="pluginCount"></span>
+            </div>
+          </div>
+
+          <div class="tab-panel volatility-panel" data-tab-panel="windows">
+            <div class="panel-section">
+              <h3 class="section-title">Windows triage bundles</h3>
+              <p class="helper">Apply a bundle, then fine-tune plugin selections below.</p>
+              <div class="bundle-grid">
+                {% for bundle in windows_bundles %}
+                  <button
+                    class="bundle-button ghost"
+                    type="button"
+                    data-bundle="{{ bundle.id }}"
+                    data-bundle-os="windows"
+                    data-bundle-plugins="{{ bundle.plugins | join(',') }}"
+                  >
+                    <span class="bundle-title">{{ bundle.label }}</span>
+                    <span class="bundle-desc">{{ bundle.description }}</span>
+                  </button>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="panel-section">
+              <h3 class="section-title">Windows plugins</h3>
+              {% if windows_plugins %}
+                <div class="plugin-grid" data-plugin-grid="windows">
+                  {% for plugin in windows_plugins %}
+                    <label class="chip">
+                      <input
+                        type="checkbox"
+                        data-plugin="{{ plugin }}"
+                        data-os="windows"
+                        {% if plugin in windows_defaults %}checked{% endif %}
+                      />
+                      {{ plugin }}
+                    </label>
+                  {% endfor %}
+                </div>
+                <p class="helper plugin-empty" data-plugin-empty hidden>
+                  No plugins match the current filters. Turn off "Selected only" to browse everything.
+                </p>
+              {% else %}
+                <p class="helper">No Windows plugins are configured.</p>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="tab-panel volatility-panel" data-tab-panel="linux" hidden>
+            <div class="panel-section">
+              <h3 class="section-title">Linux triage bundles</h3>
+              <p class="helper">Apply a bundle, then fine-tune plugin selections below.</p>
+              <div class="bundle-grid">
+                {% for bundle in linux_bundles %}
+                  <button
+                    class="bundle-button ghost"
+                    type="button"
+                    data-bundle="{{ bundle.id }}"
+                    data-bundle-os="linux"
+                    data-bundle-plugins="{{ bundle.plugins | join(',') }}"
+                  >
+                    <span class="bundle-title">{{ bundle.label }}</span>
+                    <span class="bundle-desc">{{ bundle.description }}</span>
+                  </button>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="panel-section">
+              <h3 class="section-title">Linux plugins</h3>
+              {% if linux_plugins %}
+                <div class="plugin-grid" data-plugin-grid="linux">
+                  {% for plugin in linux_plugins %}
+                    <label class="chip">
+                      <input type="checkbox" data-plugin="{{ plugin }}" data-os="linux" /> {{ plugin }}
+                    </label>
+                  {% endfor %}
+                </div>
+                <p class="helper plugin-empty" data-plugin-empty hidden>
+                  No plugins match the current filters. Turn off "Selected only" to browse everything.
+                </p>
+              {% else %}
+                <p class="helper">No Linux plugins are configured.</p>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="tab-panel volatility-panel" data-tab-panel="mac" hidden>
+            <div class="panel-section">
+              <h3 class="section-title">macOS plugins</h3>
+              <p class="helper">Select the macOS plugins to run.</p>
+              {% if mac_plugins %}
+                <div class="plugin-grid" data-plugin-grid="mac">
+                  {% for plugin in mac_plugins %}
+                    <label class="chip">
+                      <input type="checkbox" data-plugin="{{ plugin }}" data-os="mac" /> {{ plugin }}
+                    </label>
+                  {% endfor %}
+                </div>
+                <p class="helper plugin-empty" data-plugin-empty hidden>
+                  No plugins match the current filters. Turn off "Selected only" to browse everything.
+                </p>
+              {% else %}
+                <p class="helper">No macOS plugins are configured.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="results-pane">
+        <div class="panel block">
+          <div class="block-header">
+            <h2>Command</h2>
+            <button class="ghost" id="toggleCommandView" type="button">Show full list</button>
+          </div>
+          <p class="helper" id="commandSummary"></p>
+          <pre id="commandPreview" class="command scrollable"></pre>
+        </div>
+        <div class="panel block">
+          <h2>Status</h2>
+          <p class="run-status" id="runStatus">Ready to run.</p>
+          <div class="run-results" id="runResults" hidden>
+            <span class="run-results-label">Results</span>
+            <div class="run-results-links" id="runResultsLinks"></div>
+          </div>
+          <button class="ghost wide" id="openLog">View full log</button>
+          <button class="action wide" id="runVolatility">Run Volatility</button>
+        </div>
+      </aside>
+    </main>
+
+    {% from "_components.html" import browse_drawer %}
+    {{ browse_drawer() }}
+
+    <div class="log-drawer" id="logDrawer" aria-hidden="true">
+      <div class="drawer-surface">
+        <div class="drawer-header">
+          <h3>Full log</h3>
+          <button class="ghost" id="closeLog">Close</button>
+        </div>
+        <p class="drawer-status" id="logDrawerStatus"></p>
+        <pre class="run-log" id="logDrawerContent"></pre>
+      </div>
+    </div>
+    {% from "_components.html" import glossary_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+    <script src="{{ url_for('static', filename='volatility.js') }}"></script>
+  </body>
+</html>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | Foremost</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("tools") }}
+
+    <header class="hero compact">
+      <div class="hero-text">
+        <p class="eyebrow">File Carving</p>
+        <h1>Foremost</h1>
+        <p class="lead">Pick an image, choose what to carve, run.</p>
+      </div>
+    </header>
+
+    <main class="foremost">
+      <section class="work-pane">
+        {% from "_components.html" import run_context %}
+        {{ run_context(
+          cases,
+          "/cases/<case-name>/foremost/<timestamp>",
+          "foremost",
+          true,
+          "Image",
+          "Image path",
+          "/cases/case-name/evidence.dd",
+          "Source artifact: raw disk or partition image (dd, E01)."
+        ) }}
+
+        <div class="card block">
+          <h2>What to carve</h2>
+          <div class="chip-grid">
+            <label class="chip"><input type="checkbox" value="jpg" checked /> JPG</label>
+            <label class="chip"><input type="checkbox" value="png" /> PNG</label>
+            <label class="chip"><input type="checkbox" value="pdf" checked /> PDF</label>
+            <label class="chip"><input type="checkbox" value="doc" /> DOC</label>
+            <label class="chip"><input type="checkbox" value="zip" /> ZIP</label>
+            <label class="chip"><input type="checkbox" value="exe" /> EXE</label>
+          </div>
+        </div>
+
+        <div class="card block">
+          <h2>Run mode</h2>
+          <div class="toggle-row">
+            <label class="toggle">
+              <input id="quickFlag" type="checkbox" />
+              Quick scan
+            </label>
+            <label class="toggle">
+              <input id="verboseFlag" type="checkbox" checked />
+              Verbose log
+            </label>
+            <label class="toggle">
+              <input id="safeMode" type="checkbox" />
+              Safe mode (10s per type)
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <aside class="results-pane">
+        <div class="panel block">
+          <h2>Command</h2>
+          <pre id="commandPreview" class="command"></pre>
+        </div>
+        <div class="panel block">
+          <h2>Results</h2>
+          <div class="result-list">
+            <div class="result-item">
+              <span class="result-label">Recovered files</span>
+              <span class="result-value" id="resultCarved">carved/</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Audit log</span>
+              <span class="result-value" id="resultAudit">audit.txt</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Summary</span>
+              <span class="result-value" id="resultSummary">output.txt</span>
+            </div>
+          </div>
+          <div class="milestones">
+            <p class="milestone-title">Milestones</p>
+            <ul id="milestoneList"></ul>
+          </div>
+          <p class="run-status" id="runStatus"></p>
+          <button class="ghost wide" id="openLog">View full log</button>
+          <button class="action wide" id="runForemost">Run Foremost</button>
+        </div>
+      </aside>
+    </main>
+
+    <div class="log-drawer" id="logDrawer" aria-hidden="true">
+      <div class="drawer-surface">
+        <div class="drawer-header">
+          <h3>Full log</h3>
+          <button class="ghost" id="closeLog">Close</button>
+        </div>
+        <p class="drawer-status" id="logDrawerStatus"></p>
+        <pre class="run-log" id="logDrawerContent"></pre>
+      </div>
+    </div>
+
+    {% from "_components.html" import browse_drawer %}
+    {{ browse_drawer() }}
+
+    {% from "_components.html" import glossary_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+    <script src="{{ url_for('static', filename='foremost.js') }}"></script>
+  </body>
+</html>

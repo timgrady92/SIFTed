@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | Tools</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("tools") }}
+
+    <header class="hero compact">
+      <div class="hero-text">
+        <p class="eyebrow">Tools</p>
+        <h1>Choose a category</h1>
+        <p class="lead">Start with a focused workflow and build from there.</p>
+      </div>
+    </header>
+
+    <main class="carving">
+      <section class="tool-grid">
+        <article class="tool-card primary">
+          <div class="tool-header">
+            <div>
+              <h2>File Carving</h2>
+              <p>Recover files and triage evidence with guided carving tools.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">Foremost and Bulk Extractor workflows live here.</p>
+          <div class="tool-actions">
+            <a class="action" href="/file-carving">Open category</a>
+          </div>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-header">
+            <div>
+              <h2>Memory Analysis</h2>
+              <p>Analyze memory images with Volatility 3.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">Start with Volatility triage plugins.</p>
+          <div class="tool-actions">
+            <a class="action" href="/memory">Open category</a>
+          </div>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-header">
+            <div>
+              <h2>Artifact Triage</h2>
+              <p>Build timelines from host artifacts and triage faster.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">Plaso timeline workflows for novice-friendly triage.</p>
+          <div class="tool-actions">
+            <a class="action" href="/artifact-triage">Open category</a>
+          </div>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-header">
+            <div>
+              <h2>Eric Zimmerman Toolkit</h2>
+              <p>Parse Windows artifacts into analyst-ready CSV outputs.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">Curated parsers for Prefetch, LNK, Event Logs, and more.</p>
+          <div class="tool-actions">
+            <a class="action" href="/eric-zimmerman">Open category</a>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    {% from "_components.html" import glossary_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+  </body>
+</html>

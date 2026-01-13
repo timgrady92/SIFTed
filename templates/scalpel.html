@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | Scalpel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("tools") }}
+
+    <header class="hero compact">
+      <div class="hero-text">
+        <p class="eyebrow">File Carving</p>
+        <h1>Scalpel</h1>
+        <p class="lead">Targeted carving with a tight scope.</p>
+      </div>
+    </header>
+
+    <main class="foremost">
+      <section class="work-pane">
+        {% from "_components.html" import run_context %}
+        {{ run_context(
+          cases,
+          "/cases/<case-name>/scalpel/<timestamp>",
+          "scalpel",
+          true,
+          "Image",
+          "Image path",
+          "/cases/case-name/evidence.dd",
+          "Source artifact: raw disk or partition image (dd, E01)."
+        ) }}
+
+        <div class="card block">
+          <h2>Recovery focus</h2>
+          <p class="helper">Choose what to carve. Keep the scope tight for cleaner results.</p>
+          <div class="chip-grid focus-types">
+            <label class="chip">
+              <input type="checkbox" data-types="jpg,jpeg,png,gif,tif,bmp" checked />
+              Photos
+              <span class="chip-meta">jpg, png, gif, tif</span>
+            </label>
+            <label class="chip">
+              <input type="checkbox" data-types="pdf,doc" />
+              Documents
+              <span class="chip-meta">pdf, doc</span>
+            </label>
+            <label class="chip">
+              <input type="checkbox" data-types="zip" />
+              Archives
+              <span class="chip-meta">zip</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card block">
+          <h2>Output</h2>
+          <div class="toggle-row">
+            <label class="toggle">
+              <input id="organizeByType" type="checkbox" checked />
+              Group files by type
+            </label>
+          </div>
+          <p class="helper">Grouping keeps carved results tidy and easier to review.</p>
+        </div>
+      </section>
+
+      <aside class="results-pane">
+        <div class="panel block">
+          <h2>Command</h2>
+          <pre id="commandPreview" class="command"></pre>
+        </div>
+        <div class="panel block">
+          <h2>Status</h2>
+          <p class="run-status" id="runStatus"></p>
+          <button class="ghost wide" id="openLog">View full log</button>
+          <button class="action wide" id="runScalpel">Run Scalpel</button>
+        </div>
+      </aside>
+    </main>
+
+    {% from "_components.html" import browse_drawer %}
+    {{ browse_drawer() }}
+
+    <div class="log-drawer" id="logDrawer" aria-hidden="true">
+      <div class="drawer-surface">
+        <div class="drawer-header">
+          <h3>Full log</h3>
+          <button class="ghost" id="closeLog">Close</button>
+        </div>
+        <p class="drawer-status" id="logDrawerStatus"></p>
+        <pre class="run-log" id="logDrawerContent"></pre>
+      </div>
+    </div>
+
+    {% from "_components.html" import glossary_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+    <script src="{{ url_for('static', filename='scalpel.js') }}"></script>
+  </body>
+</html>

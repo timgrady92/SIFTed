@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body class="landing-page">
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("home") }}
+    <header class="hero landing">
+      <div class="hero-art subtle">
+        <span class="grid-glow"></span>
+        <span class="scanline"></span>
+      </div>
+      <div class="hero-text">
+        <p class="eyebrow">SIFT workstation workflows</p>
+        <h1>SIFTed</h1>
+        <p class="lead">Digital Forensics Simplified</p>
+        <div class="category-row">
+          <a class="category-pill" href="/cases">Cases</a>
+          <a class="category-pill" href="/tools">Tools</a>
+          <a class="category-pill" href="/guides">Guides</a>
+        </div>
+      </div>
+    </header>
+
+    {% from "_components.html" import glossary_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+  </body>
+</html>

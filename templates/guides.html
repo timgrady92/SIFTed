@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | Guides</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("guides") }}
+
+    <header class="hero compact">
+      <div class="hero-text">
+        <p class="eyebrow">Guides</p>
+        <h1>Workflow playbooks</h1>
+        <p class="lead">Start with a hypothesis, or start with the artifact.</p>
+      </div>
+    </header>
+
+    <div class="guides-layout">
+      <main class="guides-main">
+        <section class="card block guides-controls">
+          <div class="guides-controls-row">
+            <div class="guides-search">
+              <input
+                type="text"
+                id="guideSearch"
+                placeholder="Search guides..."
+                autocomplete="off"
+              />
+            </div>
+            <div class="tab-row" role="tablist" aria-label="Guide modes">
+              <button class="tab-button active" type="button" data-tab="hypothesis" role="tab" aria-selected="true">
+                Hypothesis driven
+              </button>
+              <button class="tab-button" type="button" data-tab="artifact" role="tab" aria-selected="false">
+                Artifact driven
+              </button>
+            </div>
+          </div>
+          <p class="helper">
+            Hypothesis-driven: prove or disprove a claim. Artifact-driven: learn what evidence suggests.
+          </p>
+          <div class="guides-controls-meta">
+            <span class="guides-count" id="guideCount">0 guides</span>
+            <div class="guides-actions">
+              <button class="ghost" id="clearGuideSearch" type="button" hidden>Clear search</button>
+            </div>
+          </div>
+        </section>
+
+        <p class="guides-empty" id="guideEmpty" hidden>No guides match that search. Try a different keyword.</p>
+
+        <section class="tool-grid tab-panel" data-tab-panel="hypothesis">
+          <article class="guide-card" data-category="execution" data-keywords="phishing email attachment macro office document initial access outlook">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="execution"></span>
+                <div>
+                  <h2>I think a phishing email led to compromise</h2>
+                  <p class="helper">Trace from email to payload execution.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Email and attachment delivery</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="browser">browser history</span> for webmail access or links clicked from the email.</li>
+                  <li>Look for Outlook attachment cache or temp files in the user profile.</li>
+                  <li>Search <span class="artifact-link" data-artifact="recentdocs">RecentDocs</span> and <span class="artifact-link" data-artifact="lnk">LNK files</span> for suspicious document names.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Payload execution</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for Office apps, wscript.exe, powershell.exe, or cmd.exe near the suspected time.</li>
+                  <li>Review <span class="artifact-link" data-artifact="powershell">PowerShell logs</span> for encoded commands or suspicious script blocks.</li>
+                  <li>Look for child processes spawned by Office applications in process creation logs.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="defender">Windows Defender</span> detections around the same timeframe.</li>
+                  <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> for process creation (4688) showing parent-child relationships.</li>
+                  <li><span class="artifact-link" data-artifact="jumplists">Jump Lists</span> for Office applications showing opened documents.</li>
+                </ul>
+              </div>
+              <p class="helper">The chain from email to attachment to execution is the key story to tell.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="exfil" data-keywords="data exfiltration staging theft usb cloud upload archive zip rar">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="exfil"></span>
+                <div>
+                  <h2>I think data was exfiltrated</h2>
+                  <p class="helper">Find staging, archiving, and transfer activity.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Staging and archiving</h3>
+                <ol class="guide-list">
+                  <li>Search <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for archiving tools (7z.exe, rar.exe, zip utilities).</li>
+                  <li>Check <span class="artifact-link" data-artifact="mft">$MFT</span> for recently created archive files, especially in temp or user folders.</li>
+                  <li>Look for unusual folder access patterns in <span class="artifact-link" data-artifact="shellbags">Shellbags</span> (sensitive directories browsed).</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Transfer mechanisms</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="usb">USB device history</span> for removable media connections.</li>
+                  <li>Review <span class="artifact-link" data-artifact="browser">browser history</span> for cloud storage uploads (Drive, Dropbox, WeTransfer).</li>
+                  <li>Examine <span class="artifact-link" data-artifact="srum">SRUM</span> for network usage spikes by specific applications.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="lnk">LNK files</span> pointing to archive files or staging folders.</li>
+                  <li><span class="artifact-link" data-artifact="recyclebin">Recycle Bin</span> for deleted archives or staging evidence.</li>
+                  <li>Network logs or proxy logs for large outbound transfers.</li>
+                </ul>
+              </div>
+              <p class="helper">Staging often precedes exfil. Look for the archive creation, then follow where it went.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="lateral" data-keywords="lateral movement rdp psexec wmi remote access pivot network">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="lateral"></span>
+                <div>
+                  <h2>I think there was lateral movement</h2>
+                  <p class="helper">Trace remote access between systems.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Inbound connections (this host was accessed)</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for Type 3 (network) and Type 10 (RDP) logons with source IPs.</li>
+                  <li>Look for service installations (Event ID 7045) or scheduled task creation from remote sources.</li>
+                  <li>Review <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for PsExec, WMIC, or remote admin tools.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Outbound connections (this host accessed others)</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="rdp">RDP artifacts</span> for outbound connection history in the registry.</li>
+                  <li>Look for <span class="artifact-link" data-artifact="shellbags">Shellbags</span> showing network share browsing (UNC paths).</li>
+                  <li>Review <span class="artifact-link" data-artifact="lnk">LNK files</span> for targets on remote systems.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="bam">BAM/DAM</span> for remote tool execution times.</li>
+                  <li><span class="artifact-link" data-artifact="wmi">WMI</span> for remote execution subscriptions.</li>
+                  <li>Firewall logs or network traffic for connections between internal hosts.</li>
+                </ul>
+              </div>
+              <p class="helper">Lateral movement leaves traces on both source and destination. Correlate timestamps across hosts.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="execution" data-keywords="malicious download drive-by browser exploit kit dropper initial access">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="execution"></span>
+                <div>
+                  <h2>I think the user downloaded something malicious</h2>
+                  <p class="helper">Trace from browser to disk to execution.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Download activity</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="browser">browser history</span> and download records for the source URL.</li>
+                  <li>Review <span class="artifact-link" data-artifact="mft">$MFT</span> for file creation in Downloads folder with Zone.Identifier ADS.</li>
+                  <li>Look for <span class="artifact-link" data-artifact="lnk">LNK files</span> created when the downloaded file was opened.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Execution chain</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for the downloaded executable and any child processes.</li>
+                  <li>Look for <span class="artifact-link" data-artifact="userassist">UserAssist</span> entries if the user double-clicked the file.</li>
+                  <li>Review <span class="artifact-link" data-artifact="defender">Windows Defender</span> for detections or quarantine actions.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="bits">BITS jobs</span> if the download used background transfer.</li>
+                  <li><span class="artifact-link" data-artifact="amcache">Amcache</span> for file hash and metadata.</li>
+                  <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> for SmartScreen or AppLocker decisions.</li>
+                </ul>
+              </div>
+              <p class="helper">Zone.Identifier in the ADS proves the file came from the internet (Mark of the Web).</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="persistence" data-keywords="credential theft mimikatz lsass dump password hash ntlm kerberos">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="persistence"></span>
+                <div>
+                  <h2>I think credentials were stolen</h2>
+                  <p class="helper">Look for credential dumping and reuse.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Credential dumping tools</h3>
+                <ol class="guide-list">
+                  <li>Search <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for known tools: mimikatz, procdump, comsvcs.dll, or renamed variants.</li>
+                  <li>Check <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for LSASS access (Sysmon Event ID 10) or suspicious process access.</li>
+                  <li>Look for <span class="artifact-link" data-artifact="powershell">PowerShell logs</span> containing credential-related commands.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence of credential use</h3>
+                <ol class="guide-list">
+                  <li>Review <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for pass-the-hash (NTLM Type 3 logons) or unusual Kerberos activity.</li>
+                  <li>Check for logons from unexpected source IPs or at unusual times.</li>
+                  <li>Look for lateral movement using stolen credentials (see lateral movement guide).</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="mft">$MFT</span> for .dmp files or suspicious files in temp directories.</li>
+                  <li><span class="artifact-link" data-artifact="defender">Windows Defender</span> detections for credential theft tools.</li>
+                  <li><span class="artifact-link" data-artifact="amcache">Amcache</span> entries for known-bad tool hashes.</li>
+                </ul>
+              </div>
+              <p class="helper">Credential theft often enables lateral movement. Follow stolen creds to their use.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="recovery" data-keywords="anti-forensics timestomping log clearing evidence destruction cover tracks">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="recovery"></span>
+                <div>
+                  <h2>I need to check for anti-forensics</h2>
+                  <p class="helper">Detect evidence tampering or destruction.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Log and artifact clearing</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for log clearing events (Security 1102, System 104).</li>
+                  <li>Look for gaps in normally continuous logs or suspiciously recent log start times.</li>
+                  <li>Search <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for wevtutil.exe, fsutil.exe, or cleanup tools.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Timestamp manipulation</h3>
+                <ol class="guide-list">
+                  <li>Compare <span class="artifact-link" data-artifact="mft">$MFT</span> $SI timestamps against $FN timestamps (timestomping detection).</li>
+                  <li>Look for files with creation dates before the OS install or with round timestamps.</li>
+                  <li>Check for timezone inconsistencies across related artifacts.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="vss">Volume Shadow Copies</span> may contain pre-tampering versions.</li>
+                  <li><span class="artifact-link" data-artifact="powershell">PowerShell logs</span> for Clear-EventLog or Remove-Item commands.</li>
+                  <li><span class="artifact-link" data-artifact="recyclebin">Recycle Bin</span> for deleted evidence or tools.</li>
+                </ul>
+              </div>
+              <p class="helper">Anti-forensics is evidence of intent. The attempt to hide is often more damning than what was hidden.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="timeline" data-keywords="initial access patient zero first compromise entry point">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="timeline"></span>
+                <div>
+                  <h2>I need to identify initial access</h2>
+                  <p class="helper">Find patient zero and the entry point.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Work backwards from known-bad</h3>
+                <ol class="guide-list">
+                  <li>Start with confirmed malicious activity and work backwards in the <span class="artifact-link" data-artifact="timeline">timeline</span>.</li>
+                  <li>Identify the first abnormal event and look for what preceded it.</li>
+                  <li>Check <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for the first suspicious logon or process.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Common initial access vectors</h3>
+                <ol class="guide-list">
+                  <li>Phishing: Check email artifacts, <span class="artifact-link" data-artifact="browser">browser history</span>, and Office execution.</li>
+                  <li>Exploit: Look for vulnerable service crashes or unexpected child processes.</li>
+                  <li>Valid accounts: Review <span class="artifact-link" data-artifact="rdp">RDP</span> and VPN logons for unusual access patterns.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="mft">$MFT</span> for the first malicious file creation.</li>
+                  <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> first execution timestamps.</li>
+                  <li>Network logs for the first external connection to a bad destination.</li>
+                </ul>
+              </div>
+              <p class="helper">Initial access sets the dwell time clock. Finding it anchors your entire timeline.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="recovery" data-keywords="ransomware encryption extortion ransom note crypto locker lockbit blackcat conti ryuk">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="recovery"></span>
+                <div>
+                  <h2>I think this is a ransomware attack</h2>
+                  <p class="helper">Trace the encryption, identify the variant, and find patient zero.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Identify the ransomware variant</h3>
+                <ol class="guide-list">
+                  <li>Collect ransom notes (README.txt, DECRYPT.html, etc.) and check ID Ransomware or No More Ransom.</li>
+                  <li>Note the encrypted file extension (.locked, .encrypted, random extensions) and research known variants.</li>
+                  <li>Check <span class="artifact-link" data-artifact="defender">Windows Defender</span> and AV logs for detection names that identify the family.</li>
+                  <li>Hash any ransomware executables found and search VirusTotal or malware databases.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Determine encryption scope and timeline</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="mft">$MFT</span> for files with recent modification times matching the encrypted extension.</li>
+                  <li>Review <span class="artifact-link" data-artifact="vss">Volume Shadow Copies</span> - ransomware often deletes these (look for vssadmin.exe in <span class="artifact-link" data-artifact="prefetch">Prefetch</span>).</li>
+                  <li>Examine <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for Event ID 7045 (service install) around encryption start time.</li>
+                  <li>Check network shares for lateral encryption spread via <span class="artifact-link" data-artifact="shellbags">Shellbags</span> and <span class="artifact-link" data-artifact="lnk">LNK files</span>.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Trace initial access and dwell time</h3>
+                <ol class="guide-list">
+                  <li>Work backwards from encryption timestamp to find initial compromise (often days or weeks earlier).</li>
+                  <li>Check for Cobalt Strike, PsExec, or RMM tool execution in <span class="artifact-link" data-artifact="prefetch">Prefetch</span>.</li>
+                  <li>Review <span class="artifact-link" data-artifact="rdp">RDP artifacts</span> for unauthorized remote access.</li>
+                  <li>Look for data staging before encryption (double extortion is common).</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> for encryption binary and tools like bcdedit.exe, wbadmin.exe, vssadmin.exe.</li>
+                  <li><span class="artifact-link" data-artifact="powershell">PowerShell logs</span> for encoded commands or disable-security scripts.</li>
+                  <li><span class="artifact-link" data-artifact="srum">SRUM</span> for network usage spikes indicating exfiltration before encryption.</li>
+                  <li><span class="artifact-link" data-artifact="amcache">Amcache</span> for ransomware executable metadata and hashes.</li>
+                </ul>
+              </div>
+              <p class="helper">Modern ransomware often involves data theft before encryption. Check for exfil evidence to understand full scope.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="lateral" data-keywords="command control c2 beacon callback implant cobalt strike metasploit covenant sliver">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="lateral"></span>
+                <div>
+                  <h2>I suspect command and control activity</h2>
+                  <p class="helper">Find beaconing, C2 infrastructure, and attacker communications.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Network-based indicators</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="srum">SRUM</span> for processes with sustained network activity, especially to unusual destinations.</li>
+                  <li>Review DNS cache and browser history for suspicious domains (DGA patterns, newly registered domains).</li>
+                  <li>Look for beaconing patterns in network logs - regular intervals suggest automated callbacks.</li>
+                  <li>Check for HTTP/HTTPS traffic to cloud services (GitHub, Pastebin, Discord) used as C2 channels.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Host-based indicators</h3>
+                <ol class="guide-list">
+                  <li>Search <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for known C2 frameworks (cobaltstrike, beacon, grunt, implant).</li>
+                  <li>Check for PowerShell with encoded commands or download cradles in <span class="artifact-link" data-artifact="powershell">PowerShell logs</span>.</li>
+                  <li>Look for unusual parent-child process relationships in <span class="artifact-link" data-artifact="eventlogs">Event logs</span> (4688).</li>
+                  <li>Review loaded DLLs and injected threads via memory analysis if available.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Common C2 hiding techniques</h3>
+                <ul class="guide-list">
+                  <li><strong>Domain fronting:</strong> Traffic appears to go to legitimate CDN domains.</li>
+                  <li><strong>DNS tunneling:</strong> Long, encoded DNS queries to attacker-controlled domains.</li>
+                  <li><strong>Living-off-the-land:</strong> Using built-in tools (certutil, bitsadmin, curl) for communications.</li>
+                  <li><strong>Cloud services:</strong> Using legitimate services (Slack, Teams, cloud storage) as C2 channels.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="bits">BITS jobs</span> for persistent download tasks.</li>
+                  <li><span class="artifact-link" data-artifact="mft">$MFT</span> for suspicious DLLs or executables in temp folders.</li>
+                  <li>Firewall and proxy logs for connection frequency and destination analysis.</li>
+                  <li>Memory dump analysis for in-memory implants that don't touch disk.</li>
+                </ul>
+              </div>
+              <p class="helper">C2 channels are the attacker's lifeline. Finding and blocking them cuts off their access.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="persistence" data-keywords="persistence backdoor autorun startup scheduled task service registry implant maintain access">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="persistence"></span>
+                <div>
+                  <h2>I think persistence was installed</h2>
+                  <p class="helper">Hunt for mechanisms allowing attackers to maintain access.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Registry-based persistence (Windows)</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="runkeys">Run/RunOnce keys</span> in HKLM and HKCU for suspicious entries.</li>
+                  <li>Review <span class="artifact-link" data-artifact="services">Services</span> in SYSTEM hive for newly created or modified services.</li>
+                  <li>Look for Image File Execution Options (IFEO) debugger hijacking.</li>
+                  <li>Check Winlogon keys (Shell, Userinit) and AppInit_DLLs for modifications.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Task and service-based persistence</h3>
+                <ol class="guide-list">
+                  <li>Review <span class="artifact-link" data-artifact="scheduledtasks">Scheduled Tasks</span> for suspicious entries, especially those running at boot or login.</li>
+                  <li>Check <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for Event ID 7045 (service install) and 4698 (task creation).</li>
+                  <li>Look for WMI event subscriptions using wmic or PowerShell.</li>
+                  <li>Review startup folders for all users and the default user profile.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>File-based and other persistence</h3>
+                <ol class="guide-list">
+                  <li>Check for DLL hijacking opportunities in application directories.</li>
+                  <li>Review <span class="artifact-link" data-artifact="mft">$MFT</span> for recently created executables in system directories.</li>
+                  <li>Look for Office add-ins, browser extensions, or COM object hijacking.</li>
+                  <li>Check for bootkit/rootkit indicators if you have raw disk access.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Linux persistence mechanisms</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="cron">Cron jobs</span> in /etc/cron.*, /var/spool/cron/, and user crontabs.</li>
+                  <li><span class="artifact-link" data-artifact="systemdunits">Systemd units</span> in /etc/systemd/system/ and user service directories.</li>
+                  <li><span class="artifact-link" data-artifact="sshkeys">SSH authorized_keys</span> for added public keys.</li>
+                  <li><span class="artifact-link" data-artifact="envfiles">Shell profiles</span> (.bashrc, .profile, /etc/profile.d/).</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> showing persistence mechanism execution at boot time.</li>
+                  <li><span class="artifact-link" data-artifact="amcache">Amcache</span> for metadata on persistence payloads.</li>
+                  <li><span class="artifact-link" data-artifact="shimcache">ShimCache</span> for evidence of backdoor file presence.</li>
+                  <li>Timeline analysis to correlate persistence installation with initial compromise.</li>
+                </ul>
+              </div>
+              <p class="helper">Attackers often install multiple persistence mechanisms. Don't stop at the first one you find.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="exfil" data-keywords="insider threat employee misconduct policy violation data theft sabotage fraud abuse">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="exfil"></span>
+                <div>
+                  <h2>I'm investigating insider threat</h2>
+                  <p class="helper">Investigate employee misconduct, data theft, or policy violations.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Establish user activity timeline</h3>
+                <ol class="guide-list">
+                  <li>Build a timeline of user logons from <span class="artifact-link" data-artifact="eventlogs">Event logs</span> (4624, 4647, 4634).</li>
+                  <li>Cross-reference with badge access or physical security logs if available.</li>
+                  <li>Review <span class="artifact-link" data-artifact="userassist">UserAssist</span> and <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for application usage patterns.</li>
+                  <li>Check for after-hours activity or activity during vacation/leave periods.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Data access and collection</h3>
+                <ol class="guide-list">
+                  <li>Review <span class="artifact-link" data-artifact="shellbags">Shellbags</span> and <span class="artifact-link" data-artifact="lnk">LNK files</span> for folders browsed, especially sensitive areas.</li>
+                  <li>Check <span class="artifact-link" data-artifact="recentdocs">RecentDocs</span> and <span class="artifact-link" data-artifact="jumplists">Jump Lists</span> for files accessed.</li>
+                  <li>Look for bulk file access patterns (many files opened in short timeframe).</li>
+                  <li>Review file server access logs if investigating network share access.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Data exfiltration methods</h3>
+                <ol class="guide-list">
+                  <li>Check <span class="artifact-link" data-artifact="usb">USB device history</span> for removable media connections.</li>
+                  <li>Review <span class="artifact-link" data-artifact="browser">browser history</span> for personal email, cloud storage, or file sharing sites.</li>
+                  <li>Look for print spooler activity if hardcopy exfiltration is suspected.</li>
+                  <li>Check <span class="artifact-link" data-artifact="srum">SRUM</span> for unusual network upload volumes by application.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence preservation considerations</h3>
+                <ul class="guide-list">
+                  <li>Document chain of custody meticulously for potential HR or legal proceedings.</li>
+                  <li>Preserve email mailbox if communication evidence is needed.</li>
+                  <li>Consider mobile device forensics if company devices were used.</li>
+                  <li>Work with HR and Legal before confronting the subject.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="mft">$MFT</span> for file copy operations (files created then quickly deleted).</li>
+                  <li><span class="artifact-link" data-artifact="recyclebin">Recycle Bin</span> for deleted evidence of staging.</li>
+                  <li>Email logs for forwarding rules or attachments sent externally.</li>
+                  <li>DLP (Data Loss Prevention) alerts if such systems are deployed.</li>
+                </ul>
+              </div>
+              <p class="helper">Insider investigations require different handling than external breaches. Coordinate with HR and Legal early.</p>
+            </div>
+          </article>
+        </section>
+
+        <section class="tool-grid tab-panel" data-tab-panel="artifact" hidden>
+          <article class="guide-card" data-category="memory" data-keywords="memory dump ram volatility processes network connections injection linux windows">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="memory"></span>
+                <div>
+                  <h2>I have a memory dump</h2>
+                  <p class="helper">Extract processes, network state, and injected code.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <div class="guide-header">
+                  <h3>Volatility analysis</h3>
+                  <a class="ghost" href="/volatility">Open Volatility</a>
+                </div>
+                <ol class="guide-list">
+                  <li>Identify the OS first using <code>banners.Banners</code> or by examining the dump source.</li>
+                  <li>Run the appropriate info plugin (<code>windows.info</code> or <code>linux.bash</code>) to validate.</li>
+                  <li>List processes and check for unusual parent-child relationships or hidden processes.</li>
+                  <li>Examine network connections for suspicious remote IPs or unexpected listeners.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Windows plugins</h3>
+                <ul class="guide-list">
+                  <li><code>windows.pslist</code> / <code>windows.pstree</code> - Process listing and hierarchy.</li>
+                  <li><code>windows.netscan</code> - Active and closed network connections.</li>
+                  <li><code>windows.malfind</code> - Detect injected or suspicious memory regions.</li>
+                  <li><code>windows.cmdline</code> - Process command line arguments.</li>
+                  <li><code>windows.dlllist</code> / <code>windows.handles</code> - Loaded modules and open handles.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Linux plugins</h3>
+                <ul class="guide-list">
+                  <li><code>linux.pslist</code> / <code>linux.pstree</code> - Process listing and hierarchy.</li>
+                  <li><code>linux.sockstat</code> - Open network sockets.</li>
+                  <li><code>linux.bash</code> - Bash command history from memory.</li>
+                  <li><code>linux.elfs</code> - Enumerate ELF binaries in process memory.</li>
+                  <li><code>linux.lsof</code> - Open files per process.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Key questions to answer</h3>
+                <ul class="guide-list">
+                  <li>Are there unexpected processes or unusual parent-child relationships?</li>
+                  <li>Do any processes have network connections to suspicious IPs?</li>
+                  <li>Are there injected code regions or hidden processes?</li>
+                  <li>What command lines or arguments were used to launch processes?</li>
+                </ul>
+              </div>
+              <p class="helper">Memory analysis captures running state. It complements but doesn't replace disk forensics.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="timeline" data-keywords="event logs evtx security system logon process creation">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="timeline"></span>
+                <div>
+                  <h2>I have Windows Event Logs</h2>
+                  <p class="helper">Extract logons, process execution, and service activity.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Critical Event IDs</h3>
+                <ul class="guide-list">
+                  <li><strong>Security 4624/4625</strong> - Successful/failed logons with type and source.</li>
+                  <li><strong>Security 4688</strong> - Process creation (if enabled) with command line.</li>
+                  <li><strong>Security 4672</strong> - Special privileges assigned (admin logon).</li>
+                  <li><strong>System 7045</strong> - New service installed.</li>
+                  <li><strong>Security 1102</strong> - Audit log cleared (anti-forensics indicator).</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Logon type reference</h3>
+                <ul class="guide-list">
+                  <li><strong>Type 2</strong> - Interactive (local keyboard).</li>
+                  <li><strong>Type 3</strong> - Network (file share, PsExec).</li>
+                  <li><strong>Type 4</strong> - Batch (scheduled task).</li>
+                  <li><strong>Type 5</strong> - Service.</li>
+                  <li><strong>Type 10</strong> - RemoteInteractive (RDP).</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Additional valuable logs</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="powershell">PowerShell/Operational</span> - Script block logging (4104).</li>
+                  <li>TerminalServices-LocalSessionManager - RDP session details.</li>
+                  <li>TaskScheduler/Operational - Scheduled task execution.</li>
+                  <li><span class="artifact-link" data-artifact="defender">Windows Defender/Operational</span> - Detections and actions.</li>
+                </ul>
+              </div>
+              <p class="helper">Filter by time window first, then pivot on user accounts or source IPs.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="execution" data-keywords="prefetch pf execution run count timestamp">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="execution"></span>
+                <div>
+                  <h2>I have Prefetch files</h2>
+                  <p class="helper">Confirm execution with timestamps and run counts.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>What <span class="artifact-link" data-artifact="prefetch">Prefetch</span> tells you</h3>
+                <ul class="guide-list">
+                  <li><strong>Executable name</strong> - The program that ran (first 29 characters).</li>
+                  <li><strong>Run count</strong> - How many times it executed.</li>
+                  <li><strong>Last run time</strong> - Most recent execution (up to 8 on Win10+).</li>
+                  <li><strong>Referenced files</strong> - DLLs and files loaded during first 10 seconds.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Investigative workflow</h3>
+                <ol class="guide-list">
+                  <li>Parse all .pf files and sort by last execution time.</li>
+                  <li>Look for suspicious executable names or tools (psexec, mimikatz variants).</li>
+                  <li>Check referenced files for paths indicating staging locations.</li>
+                  <li>Correlate timestamps with other artifacts for a complete picture.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Limitations to remember</h3>
+                <ul class="guide-list">
+                  <li>Prefetch may be disabled on SSDs or by policy.</li>
+                  <li>Maximum 1024 .pf files on Win10+; older entries are overwritten.</li>
+                  <li>Renamed executables create new Prefetch files.</li>
+                </ul>
+              </div>
+              <p class="helper">Prefetch is strong execution evidence, but absence doesn't prove non-execution.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="persistence" data-keywords="registry hive ntuser sam system software">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="persistence"></span>
+                <div>
+                  <h2>I have registry hives</h2>
+                  <p class="helper">Extract persistence, user activity, and system config.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>SYSTEM hive</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="services">Services</span> - Auto-start services and their binaries.</li>
+                  <li><span class="artifact-link" data-artifact="shimcache">AppCompatCache</span> - File execution/presence evidence.</li>
+                  <li><span class="artifact-link" data-artifact="bam">BAM/DAM</span> - Program execution with timestamps.</li>
+                  <li><span class="artifact-link" data-artifact="usb">USB devices</span> - Connected device history.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>NTUSER.DAT (per user)</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="userassist">UserAssist</span> - GUI program launches (ROT13 encoded).</li>
+                  <li><span class="artifact-link" data-artifact="recentdocs">RecentDocs</span> - Recently opened files by extension.</li>
+                  <li><span class="artifact-link" data-artifact="typedpaths">TypedPaths</span> - Manually typed Explorer paths.</li>
+                  <li><span class="artifact-link" data-artifact="runkeys">Run keys</span> - User-level persistence.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>SOFTWARE hive</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="runkeys">Run keys</span> - Machine-level persistence.</li>
+                  <li>Installed programs and uninstall entries.</li>
+                  <li>Network profiles and connection history.</li>
+                </ul>
+              </div>
+              <p class="helper">Registry analysis complements file system artifacts. Cross-reference timestamps.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="recovery" data-keywords="disk image dd e01 ewf raw full forensic linux windows">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="recovery"></span>
+                <div>
+                  <h2>I have a disk image</h2>
+                  <p class="helper">Full forensic analysis starting points.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Triage workflow</h3>
+                <ol class="guide-list">
+                  <li>Mount the image read-only and verify the hash if available.</li>
+                  <li>Identify the OS and filesystem type (NTFS, ext4, etc.).</li>
+                  <li>Run <a href="/bulk-extractor">Bulk Extractor</a> with triage preset for quick wins.</li>
+                  <li>Build a <span class="artifact-link" data-artifact="timeline">timeline</span> with Plaso to see overall activity.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Windows-specific artifacts</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="mft">$MFT</span> for file creation, modification, and deletion.</li>
+                  <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span>, <span class="artifact-link" data-artifact="eventlogs">Event Logs</span>, and Registry hives.</li>
+                  <li><span class="artifact-link" data-artifact="recyclebin">Recycle Bin</span> and <span class="artifact-link" data-artifact="vss">Volume Shadow Copies</span>.</li>
+                  <li><span class="artifact-link" data-artifact="lnk">LNK files</span>, <span class="artifact-link" data-artifact="jumplists">Jump Lists</span>, and <span class="artifact-link" data-artifact="shellbags">Shellbags</span>.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Linux-specific artifacts</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="authlogs">Auth logs</span>, <span class="artifact-link" data-artifact="syslog">syslog</span>, and <span class="artifact-link" data-artifact="journal">systemd journal</span>.</li>
+                  <li><span class="artifact-link" data-artifact="bashhistory">Bash history</span> and <span class="artifact-link" data-artifact="envfiles">environment files</span>.</li>
+                  <li><span class="artifact-link" data-artifact="cron">Cron jobs</span> and <span class="artifact-link" data-artifact="systemdunits">systemd units</span>.</li>
+                  <li><span class="artifact-link" data-artifact="passwdshadow">User accounts</span> and <span class="artifact-link" data-artifact="sshkeys">SSH keys</span>.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Cross-platform analysis</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="browser">Browser history</span> and downloads (similar paths on both OSes).</li>
+                  <li>Run <a href="/foremost">Foremost</a> or <a href="/scalpel">Scalpel</a> for file carving if needed.</li>
+                  <li>Check <span class="artifact-link" data-artifact="tmpshm">temp directories</span> for staged tools or payloads.</li>
+                </ul>
+              </div>
+              <p class="helper">Start with a hypothesis if you have one; otherwise use the timeline to find anomalies.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="execution" data-keywords="browser history chrome firefox edge sqlite downloads">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="execution"></span>
+                <div>
+                  <h2>I have browser artifacts</h2>
+                  <p class="helper">Reconstruct user browsing, downloads, and searches.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Key <span class="artifact-link" data-artifact="browser">browser</span> databases</h3>
+                <ul class="guide-list">
+                  <li><strong>History</strong> - URLs visited with timestamps and visit counts.</li>
+                  <li><strong>Downloads</strong> - Files downloaded with source URLs and paths.</li>
+                  <li><strong>Cache</strong> - Cached web content (images, scripts, pages).</li>
+                  <li><strong>Cookies</strong> - Session tokens and site preferences.</li>
+                  <li><strong>Autofill/Form data</strong> - Submitted form values.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Investigative focus areas</h3>
+                <ol class="guide-list">
+                  <li>Search history for reconnaissance or research related to the incident.</li>
+                  <li>Download history to trace malware delivery or tool acquisition.</li>
+                  <li>Webmail access indicating phishing or exfiltration via email.</li>
+                  <li>Cloud storage access for staging or exfiltration evidence.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Windows locations</h3>
+                <ul class="guide-list">
+                  <li><strong>Chrome:</strong> AppData\Local\Google\Chrome\User Data\Default\</li>
+                  <li><strong>Firefox:</strong> AppData\Roaming\Mozilla\Firefox\Profiles\</li>
+                  <li><strong>Edge:</strong> AppData\Local\Microsoft\Edge\User Data\Default\</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Linux locations</h3>
+                <ul class="guide-list">
+                  <li><strong>Chrome:</strong> ~/.config/google-chrome/Default/</li>
+                  <li><strong>Firefox:</strong> ~/.mozilla/firefox/*.default*/</li>
+                  <li><strong>Chromium:</strong> ~/.config/chromium/Default/</li>
+                </ul>
+              </div>
+              <p class="helper">Browser artifacts often show intent and are hard for users to fully clear.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="lateral" data-keywords="linux auth ssh sudo wtmp lastlog compromise">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="lateral"></span>
+                <div>
+                  <h2>I have Linux auth logs</h2>
+                  <p class="helper">Analyze logins, SSH access, and privilege escalation.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Key <span class="artifact-link" data-artifact="authlogs">auth log</span> events</h3>
+                <ul class="guide-list">
+                  <li><strong>sshd</strong> - SSH login attempts with source IPs and usernames.</li>
+                  <li><strong>sudo</strong> - Privilege escalation commands and outcomes.</li>
+                  <li><strong>su</strong> - User switching activity.</li>
+                  <li><strong>PAM</strong> - Authentication module events.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Investigative workflow</h3>
+                <ol class="guide-list">
+                  <li>Grep for "Accepted" to find successful SSH logins with source IPs.</li>
+                  <li>Check for "Failed password" patterns indicating brute force attempts.</li>
+                  <li>Review sudo commands to trace privilege escalation paths.</li>
+                  <li>Correlate with <span class="artifact-link" data-artifact="wtmp">wtmp/btmp</span> for session durations.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Corroborating artifacts</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="bashhistory">Bash history</span> for commands run after login.</li>
+                  <li><span class="artifact-link" data-artifact="sshkeys">SSH authorized_keys</span> for persistent access.</li>
+                  <li><span class="artifact-link" data-artifact="journal">systemd journal</span> for additional context.</li>
+                  <li><span class="artifact-link" data-artifact="passwdshadow">User accounts</span> for new or modified users.</li>
+                </ul>
+              </div>
+              <p class="helper">Log rotation may limit history. Check for rotated logs (.1, .gz) and journal persistence.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="persistence" data-keywords="linux persistence cron systemd bashrc profile backdoor">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="persistence"></span>
+                <div>
+                  <h2>I have a Linux system to analyze</h2>
+                  <p class="helper">Check persistence, user activity, and compromise indicators.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Persistence mechanisms</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="cron">Cron jobs</span> - /etc/crontab, /etc/cron.d/, user crontabs.</li>
+                  <li><span class="artifact-link" data-artifact="systemdunits">Systemd units</span> - Services and timers in /etc/systemd/ and user directories.</li>
+                  <li><span class="artifact-link" data-artifact="envfiles">Environment files</span> - .bashrc, .profile, /etc/profile.d/.</li>
+                  <li><span class="artifact-link" data-artifact="sshkeys">SSH keys</span> - Authorized keys for persistent access.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>User activity</h3>
+                <ol class="guide-list">
+                  <li>Review <span class="artifact-link" data-artifact="bashhistory">Bash history</span> for all users including root.</li>
+                  <li>Check <span class="artifact-link" data-artifact="authlogs">auth logs</span> for login patterns.</li>
+                  <li>Examine <span class="artifact-link" data-artifact="tmpshm">/tmp and /dev/shm</span> for staged tools or payloads.</li>
+                  <li>Review <span class="artifact-link" data-artifact="packages">package logs</span> for suspicious installs.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Quick wins for compromise detection</h3>
+                <ul class="guide-list">
+                  <li>New users in <span class="artifact-link" data-artifact="passwdshadow">/etc/passwd</span> or UID 0 accounts.</li>
+                  <li><span class="artifact-link" data-artifact="etchosts">/etc/hosts</span> modifications for DNS hijacking.</li>
+                  <li><span class="artifact-link" data-artifact="webserverlogs">Web server logs</span> if web-facing.</li>
+                  <li><span class="artifact-link" data-artifact="auditd">Audit logs</span> if auditd was enabled.</li>
+                </ul>
+              </div>
+              <p class="helper">Attackers often use multiple persistence mechanisms. Check them all.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="exfil" data-keywords="usb removable media thumb drive flash external storage device history setupapi">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="exfil"></span>
+                <div>
+                  <h2>I have USB/removable media artifacts</h2>
+                  <p class="helper">Track device connections, file transfers, and user activity.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Windows USB device history sources</h3>
+                <ul class="guide-list">
+                  <li><strong>SYSTEM\CurrentControlSet\Enum\USBSTOR</strong> - Device class ID, vendor, product, serial number.</li>
+                  <li><strong>SYSTEM\CurrentControlSet\Enum\USB</strong> - VID/PID pairs for device identification.</li>
+                  <li><strong>SYSTEM\MountedDevices</strong> - Drive letter assignments to device signatures.</li>
+                  <li><strong>SOFTWARE\Microsoft\Windows Portable Devices</strong> - Friendly names assigned to devices.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Connection timeline reconstruction</h3>
+                <ol class="guide-list">
+                  <li>Check <strong>setupapi.dev.log</strong> (Win7) or <strong>setupapi.dev.log</strong> (Win10+) for first and last connection times.</li>
+                  <li>Review <span class="artifact-link" data-artifact="eventlogs">Event logs</span> System log for Event IDs 20001, 20003 (device install).</li>
+                  <li>Cross-reference with <span class="artifact-link" data-artifact="lnk">LNK files</span> pointing to removable drive letters.</li>
+                  <li>Check user registry (NTUSER.DAT\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2) for user-specific connections.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>What was transferred?</h3>
+                <ol class="guide-list">
+                  <li>Look for <span class="artifact-link" data-artifact="lnk">LNK files</span> with target paths on removable drives (E:\, F:\, etc.).</li>
+                  <li>Check <span class="artifact-link" data-artifact="shellbags">Shellbags</span> for folder browsing activity on the device.</li>
+                  <li>Review <span class="artifact-link" data-artifact="jumplists">Jump Lists</span> for recently accessed files on removable media.</li>
+                  <li>Examine <span class="artifact-link" data-artifact="mft">$MFT</span> for file copy operations (look for Zone.Identifier removal patterns).</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Linux USB tracking</h3>
+                <ul class="guide-list">
+                  <li><strong>/var/log/syslog</strong> or <strong>journal</strong> - USB device connection/disconnection events.</li>
+                  <li><strong>dmesg</strong> - Kernel messages about device attachments.</li>
+                  <li><strong>/var/log/auth.log</strong> - If USB storage triggers mount operations.</li>
+                  <li><strong>/media/</strong> or <strong>/mnt/</strong> - Check for artifacts from mounted devices.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> for file copy tools used during the transfer window.</li>
+                  <li><span class="artifact-link" data-artifact="srum">SRUM</span> won't show USB directly but may show apps used during connection.</li>
+                  <li>Physical security logs for device removal from secure areas.</li>
+                  <li>If the device is recovered, forensically image it for complete file history.</li>
+                </ul>
+              </div>
+              <p class="helper">USB artifacts persist even after the device is removed. The registry remembers every device ever connected.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="persistence" data-keywords="scheduled tasks task scheduler at schtasks xml persistence automation">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="persistence"></span>
+                <div>
+                  <h2>I have scheduled tasks to analyze</h2>
+                  <p class="helper">Investigate task-based persistence and automated execution.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>Windows scheduled task locations</h3>
+                <ul class="guide-list">
+                  <li><strong>C:\Windows\System32\Tasks\</strong> - XML task definition files (primary location).</li>
+                  <li><strong>C:\Windows\Tasks\</strong> - Legacy .job files (older systems).</li>
+                  <li><strong>SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache</strong> - Registry cache of tasks.</li>
+                  <li><strong>SECURITY log Event ID 4698</strong> - Task creation audit events.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Suspicious task indicators</h3>
+                <ul class="guide-list">
+                  <li>Tasks with triggers at boot, logon, or idle (common persistence triggers).</li>
+                  <li>Tasks running executables from temp folders, user directories, or unusual paths.</li>
+                  <li>Tasks with encoded PowerShell commands or cmd.exe /c chains.</li>
+                  <li>Tasks running as SYSTEM or with elevated privileges.</li>
+                  <li>Recently created tasks (check registration date in XML).</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Task XML analysis</h3>
+                <ol class="guide-list">
+                  <li>Parse the <strong>RegistrationInfo</strong> section for creation date and author.</li>
+                  <li>Check <strong>Triggers</strong> for activation conditions (boot, logon, time-based).</li>
+                  <li>Examine <strong>Actions</strong> for the command line and arguments.</li>
+                  <li>Review <strong>Principals</strong> for the security context (user/SYSTEM).</li>
+                  <li>Look for hidden tasks (Hidden element set to true).</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Event log correlation</h3>
+                <ul class="guide-list">
+                  <li><strong>Security 4698</strong> - Scheduled task created (includes full XML).</li>
+                  <li><strong>Security 4699</strong> - Scheduled task deleted.</li>
+                  <li><strong>Security 4700/4701</strong> - Scheduled task enabled/disabled.</li>
+                  <li><strong>Security 4702</strong> - Scheduled task updated.</li>
+                  <li><strong>TaskScheduler/Operational</strong> - Detailed execution history.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> for the executable the task runs.</li>
+                  <li><span class="artifact-link" data-artifact="amcache">Amcache</span> for metadata on task payloads.</li>
+                  <li><span class="artifact-link" data-artifact="mft">$MFT</span> for task file creation timestamp.</li>
+                  <li>Correlate task creation time with initial compromise timeline.</li>
+                </ul>
+              </div>
+              <p class="helper">Scheduled tasks are a favorite persistence mechanism. Check both the Tasks folder and registry cache.</p>
+            </div>
+          </article>
+
+          <article class="guide-card" data-category="timeline" data-keywords="srum system resource usage monitor network application history bandwidth">
+            <button class="guide-toggle" type="button" aria-haspopup="dialog">
+              <div class="guide-toggle-content">
+                <span class="guide-icon" data-category="timeline"></span>
+                <div>
+                  <h2>I have SRUM data</h2>
+                  <p class="helper">Analyze historical application and network usage patterns.</p>
+                </div>
+              </div>
+              <span class="toggle-icon chevron">&gt;</span>
+            </button>
+            <div class="guide-body">
+              <div class="guide-section">
+                <h3>What is <span class="artifact-link" data-artifact="srum">SRUM</span>?</h3>
+                <ul class="guide-list">
+                  <li>System Resource Usage Monitor - Windows 8+ artifact tracking resource consumption.</li>
+                  <li>Location: <strong>C:\Windows\System32\sru\SRUDB.dat</strong> (ESE database).</li>
+                  <li>Retains data for 30-60 days depending on system activity.</li>
+                  <li>Survives application uninstallation - records persist after software removal.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Key SRUM tables</h3>
+                <ul class="guide-list">
+                  <li><strong>Network Data Usage</strong> - Bytes sent/received per application with interface info.</li>
+                  <li><strong>Network Connectivity</strong> - Network profiles connected and duration.</li>
+                  <li><strong>Application Resource Usage</strong> - CPU time, foreground/background cycles per app.</li>
+                  <li><strong>Push Notifications</strong> - WNS notification activity per application.</li>
+                  <li><strong>Energy Usage</strong> - Battery and power consumption data.</li>
+                </ul>
+              </div>
+              <div class="guide-section">
+                <h3>Investigative applications</h3>
+                <ol class="guide-list">
+                  <li><strong>Exfiltration detection:</strong> Look for applications with high bytes-sent during suspect timeframes.</li>
+                  <li><strong>Malware activity:</strong> Identify unknown executables with network activity.</li>
+                  <li><strong>Deleted evidence:</strong> Find traces of uninstalled malware or tools.</li>
+                  <li><strong>Timeline reconstruction:</strong> Correlate app usage with other artifact timestamps.</li>
+                  <li><strong>Lateral movement:</strong> Identify remote admin tool usage and network connections.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Analysis workflow</h3>
+                <ol class="guide-list">
+                  <li>Copy SRUDB.dat (may need to stop the DiagTrack service or copy from image).</li>
+                  <li>Parse with tools like SRUM-DUMP, NirSoft SrumECmd, or ESEDatabaseView.</li>
+                  <li>Cross-reference application SIDs with user accounts.</li>
+                  <li>Sort by bytes sent to find potential exfiltration applications.</li>
+                  <li>Look for executables running from temp folders or unusual paths.</li>
+                </ol>
+              </div>
+              <div class="guide-section">
+                <h3>Evidence to corroborate</h3>
+                <ul class="guide-list">
+                  <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> to confirm application execution.</li>
+                  <li><span class="artifact-link" data-artifact="amcache">Amcache</span> for application metadata and hashes.</li>
+                  <li>Network logs or firewall data to validate connection destinations.</li>
+                  <li><span class="artifact-link" data-artifact="mft">$MFT</span> to find the actual executable files.</li>
+                </ul>
+              </div>
+              <p class="helper">SRUM is a goldmine for historical activity. Even deleted malware leaves traces here.</p>
+            </div>
+          </article>
+        </section>
+      </main>
+
+    </div>
+
+    <div class="guide-modal" id="guideModal" aria-hidden="true" role="dialog" aria-modal="true">
+      <div class="guide-modal-backdrop" data-guide-close></div>
+      <div class="guide-modal-surface" role="document">
+        <div class="guide-modal-header">
+          <div class="guide-modal-title">
+            <span class="guide-pill" id="guideModalCategory" data-category="info">Guide</span>
+            <h2 id="guideModalTitle"></h2>
+            <p class="helper" id="guideModalSummary"></p>
+          </div>
+          <button class="ghost" id="guideModalClose" type="button">Close</button>
+        </div>
+        <div class="guide-modal-body" id="guideModalBody"></div>
+      </div>
+    </div>
+
+    {% from "_components.html" import glossary_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+    <script src="{{ url_for('static', filename='guides.js') }}"></script>
+  </body>
+</html>
