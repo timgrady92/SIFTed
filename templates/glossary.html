@@ -20,36 +20,54 @@
       >
         <div class="glossary-page-toolbar">
           <div class="glossary-page-intro">
-            <h2>Browse artifacts</h2>
-            <p class="helper">Select a tile to review context, corroboration, and locations.</p>
+            <h2>Forensic Reference</h2>
+            <p class="helper">Artifacts, registry keys, persistence locations, and event codes.</p>
+          </div>
+          <div class="section-tabs" data-section-tabs>
+            <button class="section-tab active" type="button" data-section-tab="artifacts">
+              <span class="section-tab-label">Artifacts</span>
+              <span class="section-tab-count">0</span>
+            </button>
+            <button class="section-tab" type="button" data-section-tab="registry">
+              <span class="section-tab-label">Registry</span>
+              <span class="section-tab-count">0</span>
+            </button>
+            <button class="section-tab" type="button" data-section-tab="persistence">
+              <span class="section-tab-label">Persistence</span>
+              <span class="section-tab-count">0</span>
+            </button>
+            <button class="section-tab" type="button" data-section-tab="events">
+              <span class="section-tab-label">Windows Events</span>
+              <span class="section-tab-count">0</span>
+            </button>
           </div>
           <div class="glossary-page-controls">
             <div class="glossary-search">
               <input
                 type="text"
                 data-glossary-search
-                placeholder="Filter artifacts..."
+                placeholder="Search all sections..."
                 autocomplete="off"
               />
             </div>
             <div class="glossary-filters">
-              <span class="filter-label">Operating system</span>
+              <span class="filter-label">Filter by OS</span>
               <div class="filter-row" data-glossary-filter-group="os">
                 <button class="filter-chip active" type="button" data-glossary-filter-value="all">All</button>
                 <button class="filter-chip" type="button" data-glossary-filter-value="windows">Windows</button>
                 <button class="filter-chip" type="button" data-glossary-filter-value="macos">macOS</button>
                 <button class="filter-chip" type="button" data-glossary-filter-value="linux">Linux</button>
-                <button class="filter-chip" type="button" data-glossary-filter-value="cross">Cross-platform</button>
+                <button class="filter-chip" type="button" data-glossary-filter-value="cross">Cross</button>
               </div>
             </div>
             <div class="glossary-meta">
               <span data-glossary-count></span>
-              <span class="glossary-meta-note">Click a tile to load details.</span>
+              <span class="glossary-meta-kbd">Press 1-4 to switch sections</span>
             </div>
           </div>
         </div>
 
-        <div class="glossary-page-body">
+        <div class="glossary-page-body" data-section-content>
           <div class="glossary-grid" data-glossary-grid>
             {{ glossary_tiles() }}
           </div>
@@ -57,6 +75,7 @@
             <button class="glossary-back" data-glossary-back type="button">&larr; All artifacts</button>
             <div class="glossary-detail-content" data-glossary-detail-content></div>
           </div>
+          <div class="ref-content" style="display: none;"></div>
         </div>
       </section>
     </main>

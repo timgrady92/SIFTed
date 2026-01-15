@@ -194,7 +194,7 @@ const toggleDrawer = (isOpen) => {
   browserDrawer.setAttribute("aria-hidden", String(!isOpen));
 };
 
-const setActiveTab = (tabId) => {
+const setActiveTab = (tabId, persist = true) => {
   tabButtons.forEach((button) => {
     const isActive = button.dataset.tab === tabId;
     button.classList.toggle("active", isActive);
@@ -204,6 +204,9 @@ const setActiveTab = (tabId) => {
     const isActive = panel.dataset.tabPanel === tabId;
     panel.hidden = !isActive;
   });
+  if (persist) {
+    localStorage.setItem("sifted.volatility.tab", tabId);
+  }
   filterPlugins();
 };
 
@@ -459,10 +462,13 @@ if (tabButtons.length) {
       }
     });
   });
-  const initialTab = tabButtons.find((button) =>
-    button.classList.contains("active"),
-  );
-  setActiveTab(initialTab?.dataset.tab || tabButtons[0].dataset.tab);
+  // Restore saved tab or use default
+  const savedTab = localStorage.getItem("sifted.volatility.tab");
+  const validTabs = tabButtons.map((b) => b.dataset.tab);
+  const initialTab = savedTab && validTabs.includes(savedTab)
+    ? savedTab
+    : tabButtons[0].dataset.tab;
+  setActiveTab(initialTab, false);
 }
 
 if (bundleButtons.length) {

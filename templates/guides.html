@@ -89,7 +89,7 @@
                   <ul class="guide-detail-list">
                     <li><span class="artifact-link" data-artifact="browser">Browser history</span> may show webmail access or clicked links from the email.</li>
                     <li><span class="artifact-link" data-artifact="recentdocs">RecentDocs</span> and <span class="artifact-link" data-artifact="lnk">LNK files</span> may reveal recently opened suspicious documents.</li>
-                    <li>Outlook attachment cache or temp files in the user profile may contain the payload.</li>
+                    <li><span class="artifact-link" data-artifact="outlook">Outlook attachment cache</span> or temp files in the user profile may contain the payload.</li>
                   </ul>
                 </div>
                 <div class="guide-detail-section">
@@ -443,7 +443,7 @@
                 <div class="guide-detail-section">
                   <div class="guide-detail-label">Process and memory access</div>
                   <ul class="guide-detail-list">
-                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> Sysmon Event ID 10 may show LSASS access by unexpected processes.</li>
+                    <li><span class="artifact-link" data-artifact="sysmon">Sysmon</span> Event ID 10 may show LSASS access by unexpected processes.</li>
                     <li><span class="artifact-link" data-artifact="powershell">PowerShell logs</span> may reveal credential-related cmdlets or encoded commands.</li>
                     <li>Process creation logs (4688) may show dumping tools or suspicious parent-child relationships.</li>
                   </ul>
@@ -487,7 +487,7 @@
                   <div class="guide-detail-label warning">Limitations</div>
                   <ul class="guide-detail-list">
                     <li>Credential theft from memory may leave no file artifacts.</li>
-                    <li>Without Sysmon or enhanced logging, LSASS access may not be recorded.</li>
+                    <li>Without <span class="artifact-link" data-artifact="sysmon">Sysmon</span> or enhanced logging, LSASS access may not be recorded.</li>
                     <li>Successful authentication does not prove the credential was stolen.</li>
                   </ul>
                 </div>
