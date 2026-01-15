@@ -857,6 +857,37 @@ const buildDetailMarkup = (data) => `
   </div>
 `;
 
+const getGlossaryIconLabel = (name, artifactId) => {
+  if (name) {
+    const cleaned = name.replace(/\([^)]*\)/g, " ");
+    const words = cleaned.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+    if (words.length === 1) {
+      const word = words[0];
+      return (word.slice(0, 2) || word).toUpperCase();
+    }
+    if (words.length > 1) {
+      const initials = words.map((word) => word[0]).join("");
+      return (initials.slice(0, 2) || initials).toUpperCase();
+    }
+  }
+  if (artifactId) {
+    return artifactId.replace(/[^a-zA-Z0-9]+/g, "").slice(0, 2).toUpperCase();
+  }
+  return "??";
+};
+
+const applyGlossaryIconLabels = () => {
+  const icons = Array.from(document.querySelectorAll(".glossary-tile-icon"));
+  icons.forEach((icon) => {
+    const tile = icon.closest("[data-glossary-tile]");
+    const artifactId = tile?.dataset.artifact || icon.dataset.artifact;
+    const name = artifactId ? artifactData[artifactId]?.name : "";
+    const label = getGlossaryIconLabel(name, artifactId);
+    icon.textContent = label;
+    icon.classList.add("glossary-tile-icon--label");
+  });
+};
+
 const initGlossarySurface = (surface) => {
   const mode = surface.dataset.glossaryMode || "stack";
   const grid = surface.querySelector("[data-glossary-grid]");
@@ -1040,6 +1071,8 @@ glossarySurfaces.forEach((surface, index) => {
     surfaceApis[key] = api;
   }
 });
+
+applyGlossaryIconLabels();
 
 const sidebar = document.querySelector('[data-glossary-surface="sidebar"]');
 const layout = document.querySelector(".guides-layout");

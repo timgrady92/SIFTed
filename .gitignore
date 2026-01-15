@@ -19,5 +19,3 @@ coverage.xml
 .idea/
 .vscode/
 .DS_Store
-
-volatility3/
