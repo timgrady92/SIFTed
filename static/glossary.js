@@ -2317,10 +2317,13 @@ const initSidebarSections = () => {
   const detailPane = sidebar.querySelector("[data-glossary-detail]");
   const detailContent = sidebar.querySelector("[data-glossary-detail-content]");
   const backButton = sidebar.querySelector("[data-glossary-back]");
+  const viewToggle = sidebar.querySelector("[data-sidebar-view-toggle]");
+  const viewModeButtons = viewToggle ? Array.from(viewToggle.querySelectorAll("[data-view-mode]")) : [];
 
   if (!tabContainer || !tabs.length) return;
 
   let activeSidebarSection = "artifacts";
+  let sidebarViewMode = localStorage.getItem("sifted.sidebar.viewMode") || "categorized";
 
   // Get counts for sidebar tabs
   const getSidebarCounts = () => {
@@ -2492,6 +2495,154 @@ const initSidebarSections = () => {
     return html || '<p class="ref-empty">No matching events.</p>';
   };
 
+  // Build alphabetical artifact list for sidebar
+  const buildSidebarArtifactsAlphabetical = (query = "") => {
+    const lowerQuery = query.toLowerCase();
+
+    const matchingArtifacts = Object.entries(artifactData)
+      .filter(([id, data]) => {
+        if (!data) return false;
+        if (!query) return true;
+        const text = `${data.name} ${data.what} ${data.takeaway} ${id}`.toLowerCase();
+        return text.includes(lowerQuery);
+      })
+      .sort((a, b) => a[1].name.localeCompare(b[1].name));
+
+    if (matchingArtifacts.length === 0) {
+      return '<p class="ref-empty">No matching artifacts.</p>';
+    }
+
+    return `
+      <div class="ref-list ref-list-alphabetical artifact-list">
+        ${matchingArtifacts.map(([id, data]) => {
+          const icon = getGlossaryIconLabel(data.name, id);
+          return `
+          <button class="artifact-row" type="button" data-artifact="${id}">
+            <span class="artifact-row-icon">${icon}</span>
+            <span class="artifact-row-name">${escapeHtml(data.name)}</span>
+            <span class="artifact-row-hint">${escapeHtml(data.takeaway)}</span>
+          </button>`;
+        }).join("")}
+      </div>
+    `;
+  };
+
+  // Build alphabetical registry list for sidebar
+  const buildSidebarRegistryAlphabetical = (query = "") => {
+    const lowerQuery = query.toLowerCase();
+    const allItems = [];
+
+    Object.values(registryData).forEach((group) => {
+      group.items.forEach((item) => {
+        if (!query) {
+          allItems.push(item);
+          return;
+        }
+        if (item.key.toLowerCase().includes(lowerQuery) ||
+            item.purpose.toLowerCase().includes(lowerQuery)) {
+          allItems.push(item);
+        }
+      });
+    });
+
+    allItems.sort((a, b) => a.key.localeCompare(b.key));
+
+    if (allItems.length === 0) {
+      return '<p class="ref-empty">No matching registry keys.</p>';
+    }
+
+    return `
+      <div class="ref-list ref-list-alphabetical">
+        ${allItems.map((item) => `
+          <div class="ref-row">
+            <code class="ref-key">${escapeHtml(item.key)}</code>
+            <span class="ref-desc">${escapeHtml(item.purpose)}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  };
+
+  // Build alphabetical persistence list for sidebar
+  const buildSidebarPersistenceAlphabetical = (query = "") => {
+    const lowerQuery = query.toLowerCase();
+    const allItems = [];
+
+    Object.values(persistenceData).forEach((group) => {
+      group.items.forEach((item) => {
+        if (!query) {
+          allItems.push(item);
+          return;
+        }
+        if (item.path.toLowerCase().includes(lowerQuery) ||
+            item.notes.toLowerCase().includes(lowerQuery)) {
+          allItems.push(item);
+        }
+      });
+    });
+
+    allItems.sort((a, b) => a.path.localeCompare(b.path));
+
+    if (allItems.length === 0) {
+      return '<p class="ref-empty">No matching persistence locations.</p>';
+    }
+
+    return `
+      <div class="ref-list ref-list-alphabetical">
+        ${allItems.map((item) => `
+          <div class="ref-row">
+            <code class="ref-key">${escapeHtml(item.path)}</code>
+            <span class="ref-desc">${escapeHtml(item.notes)}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  };
+
+  // Build alphabetical events list for sidebar
+  const buildSidebarEventsAlphabetical = (query = "") => {
+    const lowerQuery = query.toLowerCase();
+    const allItems = [];
+
+    Object.values(eventData).forEach((group) => {
+      group.items.forEach((item) => {
+        if (!query) {
+          allItems.push(item);
+          return;
+        }
+        if (item.id.toLowerCase().includes(lowerQuery) ||
+            item.name.toLowerCase().includes(lowerQuery) ||
+            item.log.toLowerCase().includes(lowerQuery)) {
+          allItems.push(item);
+        }
+      });
+    });
+
+    // Sort by event ID numerically
+    allItems.sort((a, b) => {
+      const aNum = parseInt(a.id, 10);
+      const bNum = parseInt(b.id, 10);
+      if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+      return a.id.localeCompare(b.id);
+    });
+
+    if (allItems.length === 0) {
+      return '<p class="ref-empty">No matching events.</p>';
+    }
+
+    return `
+      <div class="ref-list ref-list-alphabetical event-grid">
+        ${allItems.map((item) => `
+          <div class="event-row">
+            <code class="event-id">${escapeHtml(item.id)}</code>
+            <span class="event-name">${escapeHtml(item.name)}</span>
+            <span class="event-desc">${escapeHtml(item.lookFor)}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  };
+
   // Show artifact detail in sidebar
   const showSidebarDetail = (artifactId) => {
     const data = artifactData[artifactId];
@@ -2519,13 +2670,21 @@ const initSidebarSections = () => {
 
     let html = "";
     if (section === "artifacts") {
-      html = buildSidebarArtifacts(query);
+      html = sidebarViewMode === "alphabetical"
+        ? buildSidebarArtifactsAlphabetical(query)
+        : buildSidebarArtifacts(query);
     } else if (section === "registry") {
-      html = buildSidebarRegistry(query);
+      html = sidebarViewMode === "alphabetical"
+        ? buildSidebarRegistryAlphabetical(query)
+        : buildSidebarRegistry(query);
     } else if (section === "persistence") {
-      html = buildSidebarPersistence(query);
+      html = sidebarViewMode === "alphabetical"
+        ? buildSidebarPersistenceAlphabetical(query)
+        : buildSidebarPersistence(query);
     } else if (section === "events") {
-      html = buildSidebarEvents(query);
+      html = sidebarViewMode === "alphabetical"
+        ? buildSidebarEventsAlphabetical(query)
+        : buildSidebarEvents(query);
     }
 
     if (refContent) {
@@ -2580,6 +2739,30 @@ const initSidebarSections = () => {
   // Back button handler
   if (backButton) {
     backButton.addEventListener("click", hideSidebarDetail);
+  }
+
+  // View mode toggle handler
+  if (viewModeButtons.length) {
+    viewModeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const newMode = btn.dataset.viewMode;
+        if (newMode === sidebarViewMode) return;
+
+        sidebarViewMode = newMode;
+        localStorage.setItem("sifted.sidebar.viewMode", newMode);
+
+        // Update button active states
+        viewModeButtons.forEach((b) => b.classList.toggle("active", b.dataset.viewMode === newMode));
+
+        // Re-render section
+        renderSidebarSection(activeSidebarSection, searchInput?.value || "");
+      });
+    });
+
+    // Restore view mode button state on init
+    viewModeButtons.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.viewMode === sidebarViewMode);
+    });
   }
 
   // Initialize
@@ -2879,6 +3062,180 @@ const buildPersistenceList = (query = "", osFilter = null) => {
   return { html, count: totalVisible };
 };
 
+// Build alphabetical artifact list (flat, no categories)
+const buildArtifactListAlphabetical = (query = "", osFilter = "all") => {
+  const lowerQuery = query.toLowerCase();
+
+  // Collect all matching artifacts
+  const matchingArtifacts = Object.entries(artifactData)
+    .filter(([artifactId, data]) => {
+      if (!data) return false;
+      if (osFilter && osFilter !== "all") {
+        if (!(data.os || []).includes(osFilter)) return false;
+      }
+      if (!query) return true;
+      const searchText = `${data.name} ${data.what} ${data.why} ${data.question} ${data.takeaway || ""} ${artifactId}`.toLowerCase();
+      return searchText.includes(lowerQuery);
+    })
+    .sort((a, b) => a[1].name.localeCompare(b[1].name));
+
+  if (matchingArtifacts.length === 0) {
+    return { html: '<p class="ref-empty">No matching artifacts found.</p>', count: 0 };
+  }
+
+  const html = `
+    <div class="ref-list ref-list-alphabetical artifact-list">
+      ${matchingArtifacts
+        .map(([artifactId, data]) => {
+          const iconLabel = getGlossaryIconLabel(data.name, artifactId);
+          return `
+          <button class="artifact-row" type="button" data-artifact="${artifactId}">
+            <span class="artifact-row-icon">${iconLabel}</span>
+            <span class="artifact-row-name">${escapeHtml(data.name)}</span>
+            <span class="artifact-row-hint">${escapeHtml(data.takeaway)}</span>
+          </button>
+        `;
+        })
+        .join("")}
+    </div>
+  `;
+
+  return { html, count: matchingArtifacts.length };
+};
+
+// Build alphabetical registry list (flat, no categories)
+const buildRegistryListAlphabetical = (query = "") => {
+  const lowerQuery = query.toLowerCase();
+
+  const allItems = [];
+  Object.values(registryData).forEach((group) => {
+    group.items.forEach((item) => {
+      if (!query) {
+        allItems.push(item);
+        return;
+      }
+      const searchText = `${item.key} ${item.purpose} ${item.lookFor || ""}`.toLowerCase();
+      if (searchText.includes(lowerQuery)) allItems.push(item);
+    });
+  });
+
+  allItems.sort((a, b) => a.key.localeCompare(b.key));
+
+  if (allItems.length === 0) {
+    return { html: '<p class="ref-empty">No matching registry keys found.</p>', count: 0 };
+  }
+
+  const html = `
+    <div class="ref-list ref-list-alphabetical">
+      ${allItems
+        .map((item) => `
+          <div class="ref-row">
+            <code class="ref-key">${escapeHtml(item.key)}</code>
+            <span class="ref-desc">${escapeHtml(item.purpose)}</span>
+          </div>
+        `)
+        .join("")}
+    </div>
+  `;
+
+  return { html, count: allItems.length };
+};
+
+// Build alphabetical persistence list (flat, no categories)
+const buildPersistenceListAlphabetical = (query = "", osFilter = null) => {
+  const lowerQuery = query.toLowerCase();
+
+  const categoryOs = {
+    registry: "windows",
+    filesystem: "windows",
+    wmi: "windows",
+    scheduled: "windows",
+    linux: "linux",
+    macos: "macos"
+  };
+
+  const allItems = [];
+  Object.entries(persistenceData).forEach(([groupId, group]) => {
+    const groupOs = categoryOs[groupId];
+    if (osFilter && osFilter !== "all" && groupOs !== osFilter) return;
+
+    group.items.forEach((item) => {
+      if (!query) {
+        allItems.push(item);
+        return;
+      }
+      const searchText = `${item.path} ${item.notes} ${item.trigger}`.toLowerCase();
+      if (searchText.includes(lowerQuery)) allItems.push(item);
+    });
+  });
+
+  allItems.sort((a, b) => a.path.localeCompare(b.path));
+
+  if (allItems.length === 0) {
+    return { html: '<p class="ref-empty">No matching persistence locations found.</p>', count: 0 };
+  }
+
+  const html = `
+    <div class="ref-list ref-list-alphabetical">
+      ${allItems
+        .map((item) => `
+          <div class="ref-row">
+            <code class="ref-key">${escapeHtml(item.path)}</code>
+            <span class="ref-desc">${escapeHtml(item.notes)}</span>
+          </div>
+        `)
+        .join("")}
+    </div>
+  `;
+
+  return { html, count: allItems.length };
+};
+
+// Build alphabetical event list (flat, no categories)
+const buildEventListAlphabetical = (query = "") => {
+  const lowerQuery = query.toLowerCase();
+
+  const allItems = [];
+  Object.values(eventData).forEach((group) => {
+    group.items.forEach((item) => {
+      if (!query) {
+        allItems.push(item);
+        return;
+      }
+      const searchText = `${item.id} ${item.name} ${item.log} ${item.lookFor}`.toLowerCase();
+      if (searchText.includes(lowerQuery)) allItems.push(item);
+    });
+  });
+
+  // Sort by event ID numerically where possible
+  allItems.sort((a, b) => {
+    const aNum = parseInt(a.id, 10);
+    const bNum = parseInt(b.id, 10);
+    if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+    return a.id.localeCompare(b.id);
+  });
+
+  if (allItems.length === 0) {
+    return { html: '<p class="ref-empty">No matching events found.</p>', count: 0 };
+  }
+
+  const html = `
+    <div class="ref-list ref-list-alphabetical">
+      ${allItems
+        .map((item) => `
+          <div class="ref-row ref-row-event">
+            <span class="ref-id">${escapeHtml(item.id)}</span>
+            <span class="ref-name">${escapeHtml(item.name)}</span>
+            <span class="ref-log">${escapeHtml(item.log)}</span>
+          </div>
+        `)
+        .join("")}
+    </div>
+  `;
+
+  return { html, count: allItems.length };
+};
+
 // Build event reference list HTML
 const buildEventList = (query = "") => {
   const lowerQuery = query.toLowerCase();
@@ -2946,9 +3303,15 @@ const initReferenceSections = () => {
   // Restore persisted state from localStorage
   const savedSection = localStorage.getItem("sifted.glossary.section");
   const savedOsFilter = localStorage.getItem("sifted.glossary.osFilter");
+  const savedViewMode = localStorage.getItem("sifted.glossary.viewMode");
 
   let activeSection = savedSection || "artifacts";
   let currentOsFilter = savedOsFilter || "all";
+  let currentViewMode = savedViewMode || "categorized";
+
+  // View toggle elements
+  const viewToggle = pagePanel.querySelector("[data-view-toggle]");
+  const viewModeButtons = viewToggle ? Array.from(viewToggle.querySelectorAll("[data-view-mode]")) : [];
 
   // Count items for each section
   const getCounts = (query = "") => {
@@ -3057,8 +3420,10 @@ const initReferenceSections = () => {
       }
       if (osFilterGroup) osFilterGroup.style.display = "";
 
-      // Build and render categorized artifacts
-      const result = buildArtifactList(query, currentOsFilter);
+      // Build and render artifacts (categorized or alphabetical)
+      const result = currentViewMode === "alphabetical"
+        ? buildArtifactListAlphabetical(query, currentOsFilter)
+        : buildArtifactList(query, currentOsFilter);
       refContent.innerHTML = result.html || '<p class="ref-empty">No matching artifacts found.</p>';
 
       // Attach category expand/collapse handlers
@@ -3118,11 +3483,17 @@ const initReferenceSections = () => {
 
       let result;
       if (section === "registry") {
-        result = buildRegistryList(query);
+        result = currentViewMode === "alphabetical"
+          ? buildRegistryListAlphabetical(query)
+          : buildRegistryList(query);
       } else if (section === "persistence") {
-        result = buildPersistenceList(query, currentOsFilter);
+        result = currentViewMode === "alphabetical"
+          ? buildPersistenceListAlphabetical(query, currentOsFilter)
+          : buildPersistenceList(query, currentOsFilter);
       } else if (section === "events") {
-        result = buildEventList(query);
+        result = currentViewMode === "alphabetical"
+          ? buildEventListAlphabetical(query)
+          : buildEventList(query);
       }
 
       if (result) {
@@ -3192,6 +3563,25 @@ const initReferenceSections = () => {
     });
   }
 
+  // Handle view mode toggle (Categorized / A-Z)
+  if (viewModeButtons.length) {
+    viewModeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const newMode = btn.dataset.viewMode;
+        if (newMode === currentViewMode) return;
+
+        currentViewMode = newMode;
+        localStorage.setItem("sifted.glossary.viewMode", newMode);
+
+        // Update button active states
+        viewModeButtons.forEach((b) => b.classList.toggle("active", b.dataset.viewMode === newMode));
+
+        // Re-render section
+        renderSection(activeSection, searchInput?.value || "");
+      });
+    });
+  }
+
   // Keyboard shortcuts for section switching (1-4 keys)
   document.addEventListener("keydown", (event) => {
     // Only trigger if not typing in an input
@@ -3225,6 +3615,13 @@ const initReferenceSections = () => {
       const filterButtons = osFilterGroup.querySelectorAll("[data-glossary-filter-value]");
       filterButtons.forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.glossaryFilterValue === currentOsFilter);
+      });
+    }
+
+    // Restore view mode button state
+    if (viewModeButtons.length) {
+      viewModeButtons.forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.viewMode === currentViewMode);
       });
     }
 

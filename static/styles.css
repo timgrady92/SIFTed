@@ -4281,6 +4281,59 @@ body.modal-open {
   font-size: 0.85rem;
 }
 
+/* Sidebar controls row */
+.sidebar-controls {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px;
+  align-items: center;
+  border-bottom: 1px solid rgba(56, 242, 255, 0.1);
+}
+
+.sidebar-controls .glossary-search {
+  flex: 1;
+  padding: 0;
+}
+
+.sidebar-view-toggle {
+  display: flex;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all var(--duration-fast) var(--ease-out-expo);
+}
+
+.view-toggle-btn:hover {
+  background: rgba(56, 242, 255, 0.1);
+  color: var(--text-main);
+}
+
+.view-toggle-btn.active {
+  background: rgba(56, 242, 255, 0.15);
+  color: var(--neon-teal);
+}
+
+/* Main page view toggle */
+.glossary-view-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .glossary-search {
   padding: 16px 20px;
 }
@@ -5193,6 +5246,24 @@ body.glossary-open .glossary-toggle {
   color: var(--text-muted);
   padding: 40px 20px;
   font-size: 0.9rem;
+}
+
+/* Alphabetical view - flat list without categories */
+.ref-list-alphabetical {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 0;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.ref-list-alphabetical .ref-row {
+  padding: 8px 14px;
+}
+
+.ref-list-alphabetical .artifact-row {
+  padding: 10px 14px;
 }
 
 /* Artifact rows in categorized view */

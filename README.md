@@ -31,12 +31,6 @@ SIFTed is a web UI for SANS SIFT workstation workflows. It provides guided, offl
 - Info mode for faster surveys of large evidence sets.
 - Histograms enabled by default for quick triage.
 
-### Volatility 3 (Memory Analysis)
-- OS tabs for Windows, Linux, and macOS plugins.
-- Linux triage bundles plus full manual plugin selection.
-- Output rendered to JSON or table formats.
-- Bundled, offline symbol usage (no network access required).
-
 ### Artifact Triage (Timeline)
 - Plaso-based timeline creation with log2timeline and psort.
 - Outputs include a `.plaso` storage file and CSV timeline for review.
@@ -45,7 +39,6 @@ SIFTed is a web UI for SANS SIFT workstation workflows. It provides guided, offl
 
 - Python 3.11+ recommended.
 - Local install of the tool binaries you intend to use (Foremost, Scalpel, Bulk Extractor).
-- Volatility 3 is already included in this repository at `volatility3/`.
 
 ## Production Configuration
 
@@ -87,7 +80,6 @@ gunicorn --bind 0.0.0.0:5000 wsgi:app
 
 - Use the file browser to select evidence paths from `/cases` or other mounted locations.
 - Keep outputs under `/cases` for consistent result tracking.
-- For offline use, ensure required symbol sets are available in the bundled Volatility cache.
 
 ## Outputs and Logs
 
