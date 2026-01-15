@@ -18,7 +18,7 @@
   --text-muted: #a7acd9;
   --text-dim: #6b70a0;
   --border-glow: rgba(56, 242, 255, 0.4);
-  --glossary-width: 420px;
+  --glossary-width: 520px;
 
   /* Spacing scale */
   --space-xs: 4px;
@@ -4021,6 +4021,264 @@ body.modal-open {
 .glossary-close:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+/* Sidebar section tabs */
+.sidebar-section-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(56, 242, 255, 0.1);
+}
+
+.sidebar-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out-expo);
+  font-family: inherit;
+}
+
+.sidebar-tab:hover {
+  background: rgba(56, 242, 255, 0.06);
+}
+
+.sidebar-tab.active {
+  background: rgba(56, 242, 255, 0.1);
+  border-color: rgba(56, 242, 255, 0.25);
+}
+
+.sidebar-tab-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  transition: color var(--duration-fast) var(--ease-out-expo);
+}
+
+.sidebar-tab.active .sidebar-tab-label {
+  color: var(--neon-teal);
+}
+
+.sidebar-tab-count {
+  font-size: 0.65rem;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--text-muted);
+  background: rgba(56, 242, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.sidebar-tab.active .sidebar-tab-count {
+  background: rgba(56, 242, 255, 0.2);
+  color: var(--neon-teal);
+}
+
+/* Sidebar content area */
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sidebar-ref-content {
+  display: none;
+  padding: 12px 16px;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sidebar-ref-content.active {
+  display: flex;
+}
+
+/* Sidebar reference categories */
+.sidebar-ref-content .ref-category {
+  border: 1px solid rgba(56, 242, 255, 0.12);
+  border-radius: 8px;
+}
+
+.sidebar-ref-content .ref-category-header {
+  padding: 10px 14px;
+  font-size: 0.72rem;
+}
+
+.sidebar-ref-content .ref-category-count {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+}
+
+.sidebar-ref-content .ref-list {
+  padding: 10px 14px;
+}
+
+.sidebar-ref-content .ref-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(56, 242, 255, 0.06);
+}
+
+.sidebar-ref-content .ref-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.sidebar-ref-content .ref-key {
+  font-size: 0.75rem;
+  word-break: break-all;
+  line-height: 1.4;
+  color: var(--neon-teal);
+  background: rgba(7, 8, 16, 0.6);
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+.sidebar-ref-content .ref-desc {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  padding-left: 2px;
+}
+
+/* Sidebar artifact rows */
+.sidebar-ref-content .artifact-list {
+  padding: 6px 0;
+}
+
+.sidebar-ref-content .artifact-row {
+  padding: 10px 12px;
+  grid-template-columns: 32px 1fr;
+  gap: 10px;
+}
+
+.sidebar-ref-content .artifact-row-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 0.65rem;
+}
+
+.sidebar-ref-content .artifact-row-name {
+  font-size: 0.85rem;
+}
+
+.sidebar-ref-content .artifact-row-hint {
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+/* Sidebar event rows */
+.sidebar-ref-content .event-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+}
+
+.sidebar-ref-content .event-row {
+  display: grid;
+  grid-template-columns: 55px 1fr;
+  gap: 3px 12px;
+  padding: 10px 12px;
+  background: rgba(7, 8, 16, 0.5);
+  border-radius: 6px;
+}
+
+.sidebar-ref-content .event-id {
+  grid-row: 1 / 3;
+  font-size: 0.8rem;
+  font-family: "JetBrains Mono", monospace;
+  background: rgba(255, 79, 216, 0.12);
+  color: var(--neon-pink);
+  padding: 6px 8px;
+  border-radius: 4px;
+  text-align: center;
+  align-self: start;
+  font-weight: 600;
+}
+
+.sidebar-ref-content .event-name {
+  font-size: 0.82rem;
+  color: var(--text-main);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.sidebar-ref-content .event-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.sidebar-ref-content .ref-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* Hide original grid when using categorized view in sidebar */
+.glossary-sidebar .glossary-grid {
+  display: none;
+}
+
+/* Sidebar detail pane adjustments */
+.glossary-sidebar .glossary-detail {
+  padding: 0;
+}
+
+.glossary-sidebar .glossary-detail-content {
+  padding: 20px;
+}
+
+.glossary-sidebar .glossary-detail-content h3 {
+  font-size: 1.1rem;
+  margin-bottom: 16px;
+}
+
+.glossary-sidebar .glossary-detail-content .detail-section {
+  margin-bottom: 18px;
+}
+
+.glossary-sidebar .glossary-detail-content .detail-label {
+  font-size: 0.7rem;
+  margin-bottom: 8px;
+}
+
+.glossary-sidebar .glossary-detail-content .detail-text {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.glossary-sidebar .glossary-detail-content .detail-list {
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.glossary-sidebar .glossary-detail-content .detail-list li {
+  margin-bottom: 6px;
+}
+
+.glossary-sidebar .glossary-detail-content code {
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
+.glossary-sidebar .glossary-back {
+  padding: 12px 20px;
+  font-size: 0.85rem;
 }
 
 .glossary-search {

@@ -2305,6 +2305,290 @@ const closeSidebar = () => {
   layout?.classList.remove("sidebar-open");
 };
 
+// Sidebar section handling
+const initSidebarSections = () => {
+  if (!sidebar) return;
+
+  const tabContainer = sidebar.querySelector("[data-sidebar-tabs]");
+  const tabs = Array.from(sidebar.querySelectorAll("[data-sidebar-tab]"));
+  const glossaryGrid = sidebar.querySelector("[data-glossary-grid]");
+  const refContent = sidebar.querySelector("[data-sidebar-ref-content]");
+  const searchInput = sidebar.querySelector("[data-glossary-search]");
+  const detailPane = sidebar.querySelector("[data-glossary-detail]");
+  const detailContent = sidebar.querySelector("[data-glossary-detail-content]");
+  const backButton = sidebar.querySelector("[data-glossary-back]");
+
+  if (!tabContainer || !tabs.length) return;
+
+  let activeSidebarSection = "artifacts";
+
+  // Get counts for sidebar tabs
+  const getSidebarCounts = () => {
+    return {
+      artifacts: Object.keys(artifactData).length,
+      registry: Object.values(registryData).reduce((sum, g) => sum + g.items.length, 0),
+      persistence: Object.values(persistenceData).reduce((sum, g) => sum + g.items.length, 0),
+      events: Object.values(eventData).reduce((sum, g) => sum + g.items.length, 0)
+    };
+  };
+
+  // Update sidebar tab counts
+  const updateSidebarCounts = () => {
+    const counts = getSidebarCounts();
+    tabs.forEach((tab) => {
+      const section = tab.dataset.sidebarTab;
+      const countEl = tab.querySelector("[data-sidebar-count]");
+      if (countEl && counts[section] !== undefined) {
+        countEl.textContent = counts[section];
+      }
+    });
+  };
+
+  // Build sidebar artifact list
+  const buildSidebarArtifacts = (query = "") => {
+    const lowerQuery = query.toLowerCase();
+    let html = "";
+
+    Object.entries(artifactCategories).forEach(([catId, category]) => {
+      const filtered = category.artifacts.filter((id) => {
+        const data = artifactData[id];
+        if (!data) return false;
+        if (!query) return true;
+        const text = `${data.name} ${data.what} ${data.takeaway} ${id}`.toLowerCase();
+        return text.includes(lowerQuery);
+      });
+
+      if (filtered.length === 0) return;
+
+      const isExpanded = query ? true : false;
+      html += `
+        <div class="ref-category ${isExpanded ? "expanded" : ""}" data-category="${catId}">
+          <button class="ref-category-header" type="button">
+            <span class="ref-category-title">${escapeHtml(category.name)}</span>
+            <span class="ref-category-count">${filtered.length}</span>
+          </button>
+          <div class="ref-list artifact-list">
+            ${filtered.map((id) => {
+              const data = artifactData[id];
+              const icon = getGlossaryIconLabel(data.name, id);
+              return `
+              <button class="artifact-row" type="button" data-artifact="${id}">
+                <span class="artifact-row-icon">${icon}</span>
+                <span class="artifact-row-name">${escapeHtml(data.name)}</span>
+                <span class="artifact-row-hint">${escapeHtml(data.takeaway)}</span>
+              </button>`;
+            }).join("")}
+          </div>
+        </div>`;
+    });
+
+    return html || '<p class="ref-empty">No matching artifacts.</p>';
+  };
+
+  // Build sidebar registry list
+  const buildSidebarRegistry = (query = "") => {
+    const lowerQuery = query.toLowerCase();
+    let html = "";
+
+    Object.entries(registryData).forEach(([groupId, group]) => {
+      const filtered = group.items.filter((item) => {
+        if (!query) return true;
+        return item.key.toLowerCase().includes(lowerQuery) ||
+               item.purpose.toLowerCase().includes(lowerQuery);
+      });
+
+      if (filtered.length === 0) return;
+
+      const isExpanded = query ? true : false;
+      html += `
+        <div class="ref-category ${isExpanded ? "expanded" : ""}" data-category="${groupId}">
+          <button class="ref-category-header" type="button">
+            <span class="ref-category-title">${escapeHtml(group.category)}</span>
+            <span class="ref-category-count">${filtered.length}</span>
+          </button>
+          <div class="ref-list">
+            ${filtered.map((item) => `
+              <div class="ref-row">
+                <code class="ref-key">${escapeHtml(item.key)}</code>
+                <span class="ref-desc">${escapeHtml(item.purpose)}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>`;
+    });
+
+    return html || '<p class="ref-empty">No matching registry keys.</p>';
+  };
+
+  // Build sidebar persistence list
+  const buildSidebarPersistence = (query = "") => {
+    const lowerQuery = query.toLowerCase();
+    let html = "";
+
+    Object.entries(persistenceData).forEach(([groupId, group]) => {
+      const filtered = group.items.filter((item) => {
+        if (!query) return true;
+        return item.path.toLowerCase().includes(lowerQuery) ||
+               item.notes.toLowerCase().includes(lowerQuery);
+      });
+
+      if (filtered.length === 0) return;
+
+      const isExpanded = query ? true : false;
+      html += `
+        <div class="ref-category ${isExpanded ? "expanded" : ""}" data-category="${groupId}">
+          <button class="ref-category-header" type="button">
+            <span class="ref-category-title">${escapeHtml(group.category)}</span>
+            <span class="ref-category-count">${filtered.length}</span>
+          </button>
+          <div class="ref-list">
+            ${filtered.map((item) => `
+              <div class="ref-row">
+                <code class="ref-key">${escapeHtml(item.path)}</code>
+                <span class="ref-desc">${escapeHtml(item.notes)}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>`;
+    });
+
+    return html || '<p class="ref-empty">No matching persistence locations.</p>';
+  };
+
+  // Build sidebar events list
+  const buildSidebarEvents = (query = "") => {
+    const lowerQuery = query.toLowerCase();
+    let html = "";
+
+    Object.entries(eventData).forEach(([groupId, group]) => {
+      const filtered = group.items.filter((item) => {
+        if (!query) return true;
+        return item.id.toLowerCase().includes(lowerQuery) ||
+               item.name.toLowerCase().includes(lowerQuery) ||
+               item.log.toLowerCase().includes(lowerQuery);
+      });
+
+      if (filtered.length === 0) return;
+
+      const isExpanded = query ? true : false;
+      html += `
+        <div class="ref-category ${isExpanded ? "expanded" : ""}" data-category="${groupId}">
+          <button class="ref-category-header" type="button">
+            <span class="ref-category-title">${escapeHtml(group.category)}</span>
+            <span class="ref-category-count">${filtered.length}</span>
+          </button>
+          <div class="ref-list event-grid">
+            ${filtered.map((item) => `
+              <div class="event-row">
+                <code class="event-id">${escapeHtml(item.id)}</code>
+                <span class="event-name">${escapeHtml(item.name)}</span>
+                <span class="event-desc">${escapeHtml(item.lookFor)}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>`;
+    });
+
+    return html || '<p class="ref-empty">No matching events.</p>';
+  };
+
+  // Show artifact detail in sidebar
+  const showSidebarDetail = (artifactId) => {
+    const data = artifactData[artifactId];
+    if (!data || !detailPane || !detailContent) return;
+
+    detailContent.innerHTML = buildDetailMarkup(data);
+    detailPane.hidden = false;
+    if (glossaryGrid) glossaryGrid.style.display = "none";
+    if (refContent) refContent.style.display = "none";
+  };
+
+  // Hide artifact detail in sidebar
+  const hideSidebarDetail = () => {
+    if (detailPane) detailPane.hidden = true;
+    renderSidebarSection(activeSidebarSection, searchInput?.value || "");
+  };
+
+  // Render the active sidebar section
+  const renderSidebarSection = (section, query = "") => {
+    if (glossaryGrid) glossaryGrid.style.display = "none";
+    if (refContent) {
+      refContent.style.display = "flex";
+      refContent.classList.add("active");
+    }
+
+    let html = "";
+    if (section === "artifacts") {
+      html = buildSidebarArtifacts(query);
+    } else if (section === "registry") {
+      html = buildSidebarRegistry(query);
+    } else if (section === "persistence") {
+      html = buildSidebarPersistence(query);
+    } else if (section === "events") {
+      html = buildSidebarEvents(query);
+    }
+
+    if (refContent) {
+      refContent.innerHTML = html;
+
+      // Attach category expand/collapse handlers
+      refContent.querySelectorAll(".ref-category-header").forEach((header) => {
+        header.addEventListener("click", () => {
+          header.closest(".ref-category").classList.toggle("expanded");
+        });
+      });
+
+      // Attach artifact click handlers for artifact section
+      if (section === "artifacts") {
+        refContent.querySelectorAll(".artifact-row").forEach((row) => {
+          row.addEventListener("click", () => {
+            const artifactId = row.dataset.artifact;
+            if (artifactId) showSidebarDetail(artifactId);
+          });
+        });
+      }
+    }
+  };
+
+  // Tab click handlers
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const section = tab.dataset.sidebarTab;
+      if (section === activeSidebarSection) return;
+
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      activeSidebarSection = section;
+
+      // Hide detail pane when switching sections
+      if (detailPane) detailPane.hidden = true;
+
+      renderSidebarSection(section, searchInput?.value || "");
+    });
+  });
+
+  // Search input handler
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      if (detailPane && !detailPane.hidden) {
+        hideSidebarDetail();
+      }
+      renderSidebarSection(activeSidebarSection, searchInput.value);
+    });
+  }
+
+  // Back button handler
+  if (backButton) {
+    backButton.addEventListener("click", hideSidebarDetail);
+  }
+
+  // Initialize
+  updateSidebarCounts();
+  renderSidebarSection("artifacts", "");
+};
+
+initSidebarSections();
+
 if (toggleButtons.length) {
   toggleButtons.forEach((button) => {
     button.addEventListener("click", openSidebar);

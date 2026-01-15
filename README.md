@@ -8,7 +8,6 @@ SIFTed is a web UI for SANS SIFT workstation workflows. It provides guided, offl
 - Guided inputs with validated paths and auto-filled defaults.
 - Command previews so analysts can see exactly what will run before execution.
 - Saved runs per case with re-openable outputs and logs.
-- Offline execution using local tools and bundled Volatility 3 symbols.
 
 ## Key Workflows
 

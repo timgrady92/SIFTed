@@ -453,38 +453,59 @@
   >
     <div class="glossary-header">
       <div>
-        <h2>Artifact Glossary</h2>
-        <p class="glossary-subtitle">Quick reference for common host artifacts.</p>
+        <h2>Glossary</h2>
+        <p class="glossary-subtitle">Forensic reference at your fingertips.</p>
       </div>
       <div class="glossary-actions">
         <a class="ghost glossary-link" href="/glossary">Full view</a>
         <button class="glossary-close" data-glossary-close type="button" aria-label="Close glossary">&times;</button>
       </div>
     </div>
+
+    <div class="sidebar-section-tabs" data-sidebar-tabs>
+      <button class="sidebar-tab active" type="button" data-sidebar-tab="artifacts">
+        <span class="sidebar-tab-label">Artifacts</span>
+        <span class="sidebar-tab-count" data-sidebar-count="artifacts">0</span>
+      </button>
+      <button class="sidebar-tab" type="button" data-sidebar-tab="registry">
+        <span class="sidebar-tab-label">Registry</span>
+        <span class="sidebar-tab-count" data-sidebar-count="registry">0</span>
+      </button>
+      <button class="sidebar-tab" type="button" data-sidebar-tab="persistence">
+        <span class="sidebar-tab-label">Persistence</span>
+        <span class="sidebar-tab-count" data-sidebar-count="persistence">0</span>
+      </button>
+      <button class="sidebar-tab" type="button" data-sidebar-tab="events">
+        <span class="sidebar-tab-label">Win Events</span>
+        <span class="sidebar-tab-count" data-sidebar-count="events">0</span>
+      </button>
+    </div>
+
     <div class="glossary-search">
       <input
         type="text"
         data-glossary-search
-        placeholder="Filter artifacts..."
+        placeholder="Search glossary..."
         autocomplete="off"
       />
     </div>
-    <div class="glossary-meta">
-      <span data-glossary-count></span>
-    </div>
-    <div class="glossary-grid" data-glossary-grid>
-      {{ glossary_tiles() }}
+
+    <div class="sidebar-content" data-sidebar-content>
+      <div class="glossary-grid" data-glossary-grid>
+        {{ glossary_tiles() }}
+      </div>
+      <div class="sidebar-ref-content" data-sidebar-ref-content></div>
     </div>
 
     <div class="glossary-detail" data-glossary-detail hidden>
-      <button class="glossary-back" data-glossary-back type="button">&larr; All artifacts</button>
+      <button class="glossary-back" data-glossary-back type="button">&larr; Back</button>
       <div class="glossary-detail-content" data-glossary-detail-content></div>
     </div>
   </aside>
 
-  <button class="glossary-toggle" data-glossary-toggle="sidebar" type="button" aria-label="Open artifact glossary">
+  <button class="glossary-toggle" data-glossary-toggle="sidebar" type="button" aria-label="Open glossary">
     <span class="glossary-toggle-icon"></span>
-    <span class="glossary-toggle-label">Artifacts</span>
+    <span class="glossary-toggle-label">Glossary</span>
   </button>
 
   <div class="artifact-tooltip" id="artifactTooltip" hidden>
