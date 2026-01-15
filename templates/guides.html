@@ -54,203 +54,448 @@
         <p class="guides-empty" id="guideEmpty" hidden>No guides match that search. Try a different keyword.</p>
 
         <section class="tool-grid tab-panel" data-tab-panel="hypothesis">
-          <article class="guide-card" data-category="execution" data-keywords="phishing email attachment macro office document initial access outlook">
+          <article class="guide-card" data-category="execution" data-keywords="phishing email attachment macro office document initial access outlook spam malicious link">
             <button class="guide-toggle" type="button" aria-haspopup="dialog">
               <div class="guide-toggle-content">
                 <span class="guide-icon" data-category="execution"></span>
                 <div>
                   <h2>I think a phishing email led to compromise</h2>
-                  <p class="helper">Trace from email to payload execution.</p>
+                  <p class="helper">Trace the chain from email delivery to payload execution.</p>
                 </div>
               </div>
               <span class="toggle-icon chevron">&gt;</span>
             </button>
             <div class="guide-body">
-              <div class="guide-section">
-                <h3>Email and attachment delivery</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="browser">browser history</span> for webmail access or links clicked from the email.</li>
-                  <li>Look for Outlook attachment cache or temp files in the user profile.</li>
-                  <li>Search <span class="artifact-link" data-artifact="recentdocs">RecentDocs</span> and <span class="artifact-link" data-artifact="lnk">LNK files</span> for suspicious document names.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Framing</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">The hypothesis</div>
+                  <p class="guide-detail-text">A user may have received a phishing email and interacted with a malicious attachment or link, leading to code execution. Your goal is to establish the chain from email delivery through user interaction to payload execution.</p>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Key questions</div>
+                  <ul class="guide-detail-list">
+                    <li>Did the user open a suspicious attachment or click a link near the suspected timeframe?</li>
+                    <li>Was code execution triggered by the interaction (macro, script, executable)?</li>
+                    <li>What is the timeline from email arrival to first signs of compromise?</li>
+                    <li>Could this be a legitimate document or a false positive from security tooling?</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Payload execution</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for Office apps, wscript.exe, powershell.exe, or cmd.exe near the suspected time.</li>
-                  <li>Review <span class="artifact-link" data-artifact="powershell">PowerShell logs</span> for encoded commands or suspicious script blocks.</li>
-                  <li>Look for child processes spawned by Office applications in process creation logs.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Evidence</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Email and delivery artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="browser">Browser history</span> may show webmail access or clicked links from the email.</li>
+                    <li><span class="artifact-link" data-artifact="recentdocs">RecentDocs</span> and <span class="artifact-link" data-artifact="lnk">LNK files</span> may reveal recently opened suspicious documents.</li>
+                    <li>Outlook attachment cache or temp files in the user profile may contain the payload.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Execution artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> may show Office apps, wscript.exe, powershell.exe, or cmd.exe execution times.</li>
+                    <li><span class="artifact-link" data-artifact="powershell">PowerShell logs</span> may contain encoded commands or suspicious script blocks.</li>
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> (4688) may reveal child processes spawned by Office applications.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">File artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="ads">Zone.Identifier</span> may prove the file was downloaded from the internet.</li>
+                    <li><span class="artifact-link" data-artifact="mft">$MFT</span> may show document creation time and location.</li>
+                    <li><span class="artifact-link" data-artifact="jumplists">Jump Lists</span> for Office apps may show the opened document.</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Evidence to corroborate</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="defender">Windows Defender</span> detections around the same timeframe.</li>
-                  <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> for process creation (4688) showing parent-child relationships.</li>
-                  <li><span class="artifact-link" data-artifact="jumplists">Jump Lists</span> for Office applications showing opened documents.</li>
-                </ul>
+              <div class="guide-group">
+                <div class="guide-group-header">Analysis</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Corroboration</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="defender">Windows Defender</span> detections around the same timeframe.</li>
+                    <li>Parent-child process relationships linking Office to script interpreters.</li>
+                    <li>Network connections initiated shortly after document open.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Pitfalls</div>
+                  <ul class="guide-detail-list">
+                    <li>The email itself may be deleted—focus on artifacts of interaction, not the email.</li>
+                    <li>Macro-enabled documents are not inherently malicious; many are legitimate.</li>
+                    <li>Timestamp gaps between email tools can create misleading timelines.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Limitations</div>
+                  <ul class="guide-detail-list">
+                    <li>Email content and headers may not be available without mail server access.</li>
+                    <li>Opening a document does not prove a payload executed successfully.</li>
+                    <li>Webmail-based phishing may leave fewer local artifacts than desktop clients.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">When to stop</div>
+                  <p class="guide-detail-text">If the chain from email to execution is established, pivot to post-exploitation analysis. If the user opened the document but no execution occurred, the attack may have failed. If no interaction artifacts exist, reconsider the delivery vector.</p>
+                </div>
               </div>
-              <p class="helper">The chain from email to attachment to execution is the key story to tell.</p>
             </div>
           </article>
 
-          <article class="guide-card" data-category="exfil" data-keywords="data exfiltration staging theft usb cloud upload archive zip rar">
+          <article class="guide-card" data-category="exfil" data-keywords="data exfiltration staging theft usb cloud upload archive zip rar compression transfer leak">
             <button class="guide-toggle" type="button" aria-haspopup="dialog">
               <div class="guide-toggle-content">
                 <span class="guide-icon" data-category="exfil"></span>
                 <div>
                   <h2>I think data was exfiltrated</h2>
-                  <p class="helper">Find staging, archiving, and transfer activity.</p>
+                  <p class="helper">Investigate staging, archiving, and data transfer activity.</p>
                 </div>
               </div>
               <span class="toggle-icon chevron">&gt;</span>
             </button>
             <div class="guide-body">
-              <div class="guide-section">
-                <h3>Staging and archiving</h3>
-                <ol class="guide-list">
-                  <li>Search <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for archiving tools (7z.exe, rar.exe, zip utilities).</li>
-                  <li>Check <span class="artifact-link" data-artifact="mft">$MFT</span> for recently created archive files, especially in temp or user folders.</li>
-                  <li>Look for unusual folder access patterns in <span class="artifact-link" data-artifact="shellbags">Shellbags</span> (sensitive directories browsed).</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Framing</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">The hypothesis</div>
+                  <p class="guide-detail-text">Sensitive data may have been collected, staged, and transferred out of the environment. Your goal is to identify evidence of data collection, staging or archiving activity, and the transfer mechanism used.</p>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Key questions</div>
+                  <ul class="guide-detail-list">
+                    <li>Was data collected or staged in unusual locations or archive files?</li>
+                    <li>What transfer mechanism was used—USB, cloud storage, network, or email?</li>
+                    <li>Does the volume or type of data suggest targeted collection or bulk theft?</li>
+                    <li>Could this be legitimate backup, file sharing, or work-from-home activity?</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Transfer mechanisms</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="usb">USB device history</span> for removable media connections.</li>
-                  <li>Review <span class="artifact-link" data-artifact="browser">browser history</span> for cloud storage uploads (Drive, Dropbox, WeTransfer).</li>
-                  <li>Examine <span class="artifact-link" data-artifact="srum">SRUM</span> for network usage spikes by specific applications.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Evidence</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Staging and archiving artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> may show execution of archiving tools (7z.exe, rar.exe, zip utilities).</li>
+                    <li><span class="artifact-link" data-artifact="mft">$MFT</span> may reveal recently created archives in temp or user folders.</li>
+                    <li><span class="artifact-link" data-artifact="shellbags">Shellbags</span> may indicate browsing of sensitive directories.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Transfer artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="usb">USB device history</span> may show removable media connections near the timeframe.</li>
+                    <li><span class="artifact-link" data-artifact="browser">Browser history</span> may reveal cloud storage uploads (Drive, Dropbox, WeTransfer).</li>
+                    <li><span class="artifact-link" data-artifact="srum">SRUM</span> may show network usage spikes by specific applications.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">File and access artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="lnk">LNK files</span> may point to archive files or staging folders.</li>
+                    <li><span class="artifact-link" data-artifact="recyclebin">Recycle Bin</span> may contain deleted archives or staging evidence.</li>
+                    <li><span class="artifact-link" data-artifact="recentdocs">RecentDocs</span> may show access to sensitive files before staging.</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Evidence to corroborate</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="lnk">LNK files</span> pointing to archive files or staging folders.</li>
-                  <li><span class="artifact-link" data-artifact="recyclebin">Recycle Bin</span> for deleted archives or staging evidence.</li>
-                  <li>Network logs or proxy logs for large outbound transfers.</li>
-                </ul>
+              <div class="guide-group">
+                <div class="guide-group-header">Analysis</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Corroboration</div>
+                  <ul class="guide-detail-list">
+                    <li>Timeline alignment between file access, archive creation, and transfer activity.</li>
+                    <li>Network or proxy logs showing large outbound transfers.</li>
+                    <li>DLP alerts or email gateway logs for the same timeframe.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Pitfalls</div>
+                  <ul class="guide-detail-list">
+                    <li>Archive creation is routine—focus on what was archived and where it went.</li>
+                    <li>Cloud sync tools create continuous uploads that may mask exfiltration.</li>
+                    <li>USB insertion does not prove data was copied to it.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Limitations</div>
+                  <ul class="guide-detail-list">
+                    <li>Deleted staging artifacts may only be recoverable from Volume Shadow Copies.</li>
+                    <li>Encrypted archives hide their contents from forensic review.</li>
+                    <li>Network-based exfiltration may leave no endpoint artifacts.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">When to stop</div>
+                  <p class="guide-detail-text">If staging and transfer are confirmed, document the timeline and data involved. If staging exists but no transfer is found, the exfiltration may have been interrupted or used a channel not examined. If no staging evidence exists, reconsider whether data loss occurred through a different method.</p>
+                </div>
               </div>
-              <p class="helper">Staging often precedes exfil. Look for the archive creation, then follow where it went.</p>
             </div>
           </article>
 
-          <article class="guide-card" data-category="lateral" data-keywords="lateral movement rdp psexec wmi remote access pivot network">
+          <article class="guide-card" data-category="lateral" data-keywords="lateral movement rdp psexec wmi remote access pivot network smb admin share">
             <button class="guide-toggle" type="button" aria-haspopup="dialog">
               <div class="guide-toggle-content">
                 <span class="guide-icon" data-category="lateral"></span>
                 <div>
                   <h2>I think there was lateral movement</h2>
-                  <p class="helper">Trace remote access between systems.</p>
+                  <p class="helper">Investigate remote access between systems.</p>
                 </div>
               </div>
               <span class="toggle-icon chevron">&gt;</span>
             </button>
             <div class="guide-body">
-              <div class="guide-section">
-                <h3>Inbound connections (this host was accessed)</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for Type 3 (network) and Type 10 (RDP) logons with source IPs.</li>
-                  <li>Look for service installations (Event ID 7045) or scheduled task creation from remote sources.</li>
-                  <li>Review <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for PsExec, WMIC, or remote admin tools.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Framing</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">The hypothesis</div>
+                  <p class="guide-detail-text">An attacker may have moved from one system to another within the environment using remote access techniques. Your goal is to identify evidence of inbound or outbound remote connections and determine whether they were authorized.</p>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Key questions</div>
+                  <ul class="guide-detail-list">
+                    <li>Was this host accessed remotely from another internal system?</li>
+                    <li>Did this host initiate connections to other internal systems?</li>
+                    <li>What technique was used—RDP, PsExec, WMI, SMB, or other?</li>
+                    <li>Could this be legitimate administrative activity or IT operations?</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Outbound connections (this host accessed others)</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="rdp">RDP artifacts</span> for outbound connection history in the registry.</li>
-                  <li>Look for <span class="artifact-link" data-artifact="shellbags">Shellbags</span> showing network share browsing (UNC paths).</li>
-                  <li>Review <span class="artifact-link" data-artifact="lnk">LNK files</span> for targets on remote systems.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Evidence</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Inbound access (this host was targeted)</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> 4624 Type 3 (network) and Type 10 (RDP) may show source IPs and accounts.</li>
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> 7045 (service install) or 4698 (task creation) may indicate remote execution.</li>
+                    <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> may show PsExec, WMIC, or remote admin tool execution.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Outbound access (this host was the source)</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="rdp">RDP artifacts</span> in the registry may show outbound connection history.</li>
+                    <li><span class="artifact-link" data-artifact="shellbags">Shellbags</span> may reveal network share browsing via UNC paths.</li>
+                    <li><span class="artifact-link" data-artifact="lnk">LNK files</span> may point to files on remote systems.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Execution artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="bam">BAM/DAM</span> may show remote tool execution times.</li>
+                    <li><span class="artifact-link" data-artifact="wmi">WMI subscriptions</span> may indicate remote execution persistence.</li>
+                    <li><span class="artifact-link" data-artifact="powershell">PowerShell logs</span> may contain remote execution commands (Invoke-Command, Enter-PSSession).</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Evidence to corroborate</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="bam">BAM/DAM</span> for remote tool execution times.</li>
-                  <li><span class="artifact-link" data-artifact="wmi">WMI</span> for remote execution subscriptions.</li>
-                  <li>Firewall logs or network traffic for connections between internal hosts.</li>
-                </ul>
+              <div class="guide-group">
+                <div class="guide-group-header">Analysis</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Corroboration</div>
+                  <ul class="guide-detail-list">
+                    <li>Matching timestamps on source and destination systems for the same connection.</li>
+                    <li>Firewall or network logs showing connections between internal hosts.</li>
+                    <li>Credential theft artifacts preceding the lateral movement activity.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Pitfalls</div>
+                  <ul class="guide-detail-list">
+                    <li>Type 3 logons are extremely common—filter by source IP and account context.</li>
+                    <li>IT tools like SCCM and monitoring agents generate legitimate remote connections.</li>
+                    <li>Single-host analysis misses half the story—correlate across source and destination.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Limitations</div>
+                  <ul class="guide-detail-list">
+                    <li>Network logons may not identify the technique used (RDP vs SMB vs WMI).</li>
+                    <li>Outbound connection artifacts require the source host to be analyzed.</li>
+                    <li>Pass-the-hash and token manipulation leave fewer artifacts than password-based access.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">When to stop</div>
+                  <p class="guide-detail-text">If lateral movement is confirmed, map the full path across systems and identify the technique. If only one direction is visible, obtain artifacts from the other host. If no remote access evidence exists, reconsider whether movement occurred via a different method or time window.</p>
+                </div>
               </div>
-              <p class="helper">Lateral movement leaves traces on both source and destination. Correlate timestamps across hosts.</p>
             </div>
           </article>
 
-          <article class="guide-card" data-category="execution" data-keywords="malicious download drive-by browser exploit kit dropper initial access">
+          <article class="guide-card" data-category="execution" data-keywords="malicious download drive-by browser exploit kit dropper initial access download zone identifier motw">
             <button class="guide-toggle" type="button" aria-haspopup="dialog">
               <div class="guide-toggle-content">
                 <span class="guide-icon" data-category="execution"></span>
                 <div>
                   <h2>I think the user downloaded something malicious</h2>
-                  <p class="helper">Trace from browser to disk to execution.</p>
+                  <p class="helper">Trace from download source to disk to execution.</p>
                 </div>
               </div>
               <span class="toggle-icon chevron">&gt;</span>
             </button>
             <div class="guide-body">
-              <div class="guide-section">
-                <h3>Download activity</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="browser">browser history</span> and download records for the source URL.</li>
-                  <li>Review <span class="artifact-link" data-artifact="mft">$MFT</span> for file creation in Downloads folder with Zone.Identifier ADS.</li>
-                  <li>Look for <span class="artifact-link" data-artifact="lnk">LNK files</span> created when the downloaded file was opened.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Framing</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">The hypothesis</div>
+                  <p class="guide-detail-text">A user may have downloaded a malicious file from the internet and executed it. Your goal is to establish the chain from download source through file creation to execution and any subsequent activity.</p>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Key questions</div>
+                  <ul class="guide-detail-list">
+                    <li>What was the source URL and how did the user reach it?</li>
+                    <li>Was the downloaded file executed, and by what method (user action or automatic)?</li>
+                    <li>Did security controls (Defender, SmartScreen) intervene or alert?</li>
+                    <li>Could this be a legitimate download that triggered a false positive?</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Execution chain</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for the downloaded executable and any child processes.</li>
-                  <li>Look for <span class="artifact-link" data-artifact="userassist">UserAssist</span> entries if the user double-clicked the file.</li>
-                  <li>Review <span class="artifact-link" data-artifact="defender">Windows Defender</span> for detections or quarantine actions.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Evidence</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Download artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="browser">Browser history</span> and download records may reveal the source URL.</li>
+                    <li><span class="artifact-link" data-artifact="ads">Zone.Identifier</span> ADS proves the file originated from the internet (Mark of the Web).</li>
+                    <li><span class="artifact-link" data-artifact="mft">$MFT</span> may show file creation time and location in Downloads or temp folders.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Execution artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> may show the downloaded file and any child processes it spawned.</li>
+                    <li><span class="artifact-link" data-artifact="userassist">UserAssist</span> may indicate the user double-clicked the file.</li>
+                    <li><span class="artifact-link" data-artifact="lnk">LNK files</span> may be created when the downloaded file was opened.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Security artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="defender">Windows Defender</span> may show detections or quarantine actions.</li>
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> may contain SmartScreen or AppLocker decisions.</li>
+                    <li><span class="artifact-link" data-artifact="amcache">Amcache</span> may provide file hash for threat intelligence lookup.</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Evidence to corroborate</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="bits">BITS jobs</span> if the download used background transfer.</li>
-                  <li><span class="artifact-link" data-artifact="amcache">Amcache</span> for file hash and metadata.</li>
-                  <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> for SmartScreen or AppLocker decisions.</li>
-                </ul>
+              <div class="guide-group">
+                <div class="guide-group-header">Analysis</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Corroboration</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="bits">BITS jobs</span> if the download used background transfer.</li>
+                    <li>Timeline alignment between browser activity, file creation, and execution.</li>
+                    <li>Network connections initiated by the downloaded file after execution.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Pitfalls</div>
+                  <ul class="guide-detail-list">
+                    <li>Zone.Identifier can be removed manually or by certain extraction tools.</li>
+                    <li>Browser history may be cleared or use private browsing mode.</li>
+                    <li>File may have been renamed or moved after download.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Limitations</div>
+                  <ul class="guide-detail-list">
+                    <li>Download via non-browser methods (curl, PowerShell) may not appear in browser history.</li>
+                    <li>File presence does not prove execution occurred.</li>
+                    <li>Defender quarantine may have removed the file before execution.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">When to stop</div>
+                  <p class="guide-detail-text">If download and execution are confirmed, pivot to post-exploitation analysis. If the file was downloaded but not executed, the threat may have been blocked or the user did not interact. If no download artifacts exist, consider alternative delivery methods.</p>
+                </div>
               </div>
-              <p class="helper">Zone.Identifier in the ADS proves the file came from the internet (Mark of the Web).</p>
             </div>
           </article>
 
-          <article class="guide-card" data-category="persistence" data-keywords="credential theft mimikatz lsass dump password hash ntlm kerberos">
+          <article class="guide-card" data-category="lateral" data-keywords="credential theft mimikatz lsass dump password hash ntlm kerberos pass-the-hash secretsdump">
             <button class="guide-toggle" type="button" aria-haspopup="dialog">
               <div class="guide-toggle-content">
-                <span class="guide-icon" data-category="persistence"></span>
+                <span class="guide-icon" data-category="lateral"></span>
                 <div>
                   <h2>I think credentials were stolen</h2>
-                  <p class="helper">Look for credential dumping and reuse.</p>
+                  <p class="helper">Investigate whether credentials were extracted and reused.</p>
                 </div>
               </div>
               <span class="toggle-icon chevron">&gt;</span>
             </button>
             <div class="guide-body">
-              <div class="guide-section">
-                <h3>Credential dumping tools</h3>
-                <ol class="guide-list">
-                  <li>Search <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for known tools: mimikatz, procdump, comsvcs.dll, or renamed variants.</li>
-                  <li>Check <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for LSASS access (Sysmon Event ID 10) or suspicious process access.</li>
-                  <li>Look for <span class="artifact-link" data-artifact="powershell">PowerShell logs</span> containing credential-related commands.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Framing</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">The hypothesis</div>
+                  <p class="guide-detail-text">Credentials may have been extracted from memory, storage, or network traffic. Your goal is to determine whether credential access occurred and whether those credentials were subsequently used for unauthorized activity.</p>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Key questions</div>
+                  <ul class="guide-detail-list">
+                    <li>Was LSASS or another credential store accessed by an unexpected process?</li>
+                    <li>Are there artifacts of known credential dumping tools or techniques?</li>
+                    <li>Do authentication logs show credential use from unexpected sources or times?</li>
+                    <li>Could this be legitimate administrative activity or authorized security testing?</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Evidence of credential use</h3>
-                <ol class="guide-list">
-                  <li>Review <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for pass-the-hash (NTLM Type 3 logons) or unusual Kerberos activity.</li>
-                  <li>Check for logons from unexpected source IPs or at unusual times.</li>
-                  <li>Look for lateral movement using stolen credentials (see lateral movement guide).</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Evidence</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Process and memory access</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> Sysmon Event ID 10 may show LSASS access by unexpected processes.</li>
+                    <li><span class="artifact-link" data-artifact="powershell">PowerShell logs</span> may reveal credential-related cmdlets or encoded commands.</li>
+                    <li>Process creation logs (4688) may show dumping tools or suspicious parent-child relationships.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Tool artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> may show execution of mimikatz, procdump, comsvcs.dll, or renamed variants.</li>
+                    <li><span class="artifact-link" data-artifact="amcache">Amcache</span> may contain metadata or hashes matching known credential tools.</li>
+                    <li><span class="artifact-link" data-artifact="mft">$MFT</span> may reveal .dmp files or suspicious executables in temp directories.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Authentication artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> 4624/4625 may show pass-the-hash (NTLM Type 3) or anomalous Kerberos activity.</li>
+                    <li>Logon events from unexpected source IPs, workstations, or at unusual times.</li>
+                    <li>Kerberos ticket requests (4768/4769) for sensitive accounts from unexpected hosts.</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Evidence to corroborate</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="mft">$MFT</span> for .dmp files or suspicious files in temp directories.</li>
-                  <li><span class="artifact-link" data-artifact="defender">Windows Defender</span> detections for credential theft tools.</li>
-                  <li><span class="artifact-link" data-artifact="amcache">Amcache</span> entries for known-bad tool hashes.</li>
-                </ul>
+              <div class="guide-group">
+                <div class="guide-group-header">Analysis</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Corroboration</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="defender">Windows Defender</span> detections for credential theft tools or behaviors.</li>
+                    <li>Timeline alignment between LSASS access and subsequent lateral movement.</li>
+                    <li>Multiple failed logons followed by success from the same source.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Pitfalls</div>
+                  <ul class="guide-detail-list">
+                    <li>LSASS access alone is not malicious—many legitimate tools interact with LSASS.</li>
+                    <li>Renamed tools evade filename-based detection; focus on behavior and hashes.</li>
+                    <li>Pass-the-hash leaves fewer artifacts than password-based authentication.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Limitations</div>
+                  <ul class="guide-detail-list">
+                    <li>Credential theft from memory may leave no file artifacts.</li>
+                    <li>Without Sysmon or enhanced logging, LSASS access may not be recorded.</li>
+                    <li>Successful authentication does not prove the credential was stolen.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">When to stop</div>
+                  <p class="guide-detail-text">If credential access is confirmed, pivot to lateral movement analysis. If tool artifacts exist but no credential use is found, the attack may have been interrupted. If no evidence emerges across process, tool, and authentication artifacts, reassess the hypothesis.</p>
+                </div>
               </div>
-              <p class="helper">Credential theft often enables lateral movement. Follow stolen creds to their use.</p>
             </div>
           </article>
 
@@ -260,37 +505,86 @@
                 <span class="guide-icon" data-category="recovery"></span>
                 <div>
                   <h2>I need to check for anti-forensics</h2>
-                  <p class="helper">Detect evidence tampering or destruction.</p>
+                  <p class="helper">Investigate evidence tampering or destruction.</p>
                 </div>
               </div>
               <span class="toggle-icon chevron">&gt;</span>
             </button>
             <div class="guide-body">
-              <div class="guide-section">
-                <h3>Log and artifact clearing</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for log clearing events (Security 1102, System 104).</li>
-                  <li>Look for gaps in normally continuous logs or suspiciously recent log start times.</li>
-                  <li>Search <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for wevtutil.exe, fsutil.exe, or cleanup tools.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Framing</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">The hypothesis</div>
+                  <p class="guide-detail-text">Evidence may have been intentionally tampered with, deleted, or manipulated to hide activity. Your goal is to identify signs of anti-forensic techniques and recover or work around the gaps they created.</p>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Key questions</div>
+                  <ul class="guide-detail-list">
+                    <li>Are there unexplained gaps in logs or artifacts that should be continuous?</li>
+                    <li>Do timestamp patterns suggest manipulation (round numbers, impossible dates)?</li>
+                    <li>Were cleanup tools or commands executed?</li>
+                    <li>Could gaps be explained by normal log rotation, retention policies, or system issues?</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Timestamp manipulation</h3>
-                <ol class="guide-list">
-                  <li>Compare <span class="artifact-link" data-artifact="mft">$MFT</span> $SI timestamps against $FN timestamps (timestomping detection).</li>
-                  <li>Look for files with creation dates before the OS install or with round timestamps.</li>
-                  <li>Check for timezone inconsistencies across related artifacts.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Evidence</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Log clearing artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> 1102 (Security) and 104 (System) indicate explicit log clearing.</li>
+                    <li>Gaps in normally continuous logs or suspiciously recent log start times may indicate clearing.</li>
+                    <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> may show wevtutil.exe, fsutil.exe, or known cleanup tools.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Timestamp manipulation</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="mft">$MFT</span> $SI vs $FN timestamp mismatches may indicate timestomping.</li>
+                    <li>Files with creation dates before OS install or perfectly round timestamps suggest manipulation.</li>
+                    <li>Timezone inconsistencies across related artifacts may reveal editing.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Deletion artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="recyclebin">Recycle Bin</span> may contain deleted tools or evidence.</li>
+                    <li><span class="artifact-link" data-artifact="mft">$MFT</span> may show deleted file entries with recoverable metadata.</li>
+                    <li><span class="artifact-link" data-artifact="powershell">PowerShell logs</span> may contain Clear-EventLog or Remove-Item commands.</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Evidence to corroborate</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="vss">Volume Shadow Copies</span> may contain pre-tampering versions.</li>
-                  <li><span class="artifact-link" data-artifact="powershell">PowerShell logs</span> for Clear-EventLog or Remove-Item commands.</li>
-                  <li><span class="artifact-link" data-artifact="recyclebin">Recycle Bin</span> for deleted evidence or tools.</li>
-                </ul>
+              <div class="guide-group">
+                <div class="guide-group-header">Analysis</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Corroboration</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="vss">Volume Shadow Copies</span> may contain pre-tampering versions of artifacts.</li>
+                    <li>Timeline gaps that align with known malicious activity windows.</li>
+                    <li>Multiple anti-forensic indicators pointing to the same timeframe.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Pitfalls</div>
+                  <ul class="guide-detail-list">
+                    <li>Log gaps can result from retention policies, not malice—check normal rotation schedules.</li>
+                    <li>$FN timestamps are not always reliable for timestomping detection on all Windows versions.</li>
+                    <li>System reinstalls or repairs can create legitimate timestamp anomalies.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Limitations</div>
+                  <ul class="guide-detail-list">
+                    <li>Effective anti-forensics may leave no detectable traces.</li>
+                    <li>Secure deletion tools can make file recovery impossible.</li>
+                    <li>Proving intent to destroy evidence requires corroborating context.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">When to stop</div>
+                  <p class="guide-detail-text">If anti-forensics is confirmed, document the technique and attempt recovery via shadow copies or alternate sources. If gaps exist but no tampering evidence is found, attribute to normal system behavior. Anti-forensics itself is evidence of intent—the attempt to hide may be as significant as what was hidden.</p>
+                </div>
               </div>
-              <p class="helper">Anti-forensics is evidence of intent. The attempt to hide is often more damning than what was hidden.</p>
             </div>
           </article>
 
@@ -306,31 +600,80 @@
               <span class="toggle-icon chevron">&gt;</span>
             </button>
             <div class="guide-body">
-              <div class="guide-section">
-                <h3>Work backwards from known-bad</h3>
-                <ol class="guide-list">
-                  <li>Start with confirmed malicious activity and work backwards in the <span class="artifact-link" data-artifact="timeline">timeline</span>.</li>
-                  <li>Identify the first abnormal event and look for what preceded it.</li>
-                  <li>Check <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for the first suspicious logon or process.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Framing</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">The hypothesis</div>
+                  <p class="guide-detail-text">The attacker entered the environment through a specific vector at a specific time. Your goal is to identify patient zero, the entry point technique, and the timestamp that anchors the beginning of the intrusion.</p>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Key questions</div>
+                  <ul class="guide-detail-list">
+                    <li>What is the earliest confirmed malicious activity, and what immediately preceded it?</li>
+                    <li>Which system was compromised first, and how did access spread from there?</li>
+                    <li>What vector was used—phishing, exploit, valid credentials, or supply chain?</li>
+                    <li>Could the earliest known activity actually be secondary, with initial access occurring earlier?</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Common initial access vectors</h3>
-                <ol class="guide-list">
-                  <li>Phishing: Check email artifacts, <span class="artifact-link" data-artifact="browser">browser history</span>, and Office execution.</li>
-                  <li>Exploit: Look for vulnerable service crashes or unexpected child processes.</li>
-                  <li>Valid accounts: Review <span class="artifact-link" data-artifact="rdp">RDP</span> and VPN logons for unusual access patterns.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Evidence</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Timeline analysis</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="timeline">Timeline</span> analysis working backwards from confirmed malicious activity.</li>
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> for the first suspicious logon, process, or service installation.</li>
+                    <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> first execution timestamps for malicious binaries.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Common access vectors</div>
+                  <ul class="guide-detail-list">
+                    <li>Phishing: Email artifacts, <span class="artifact-link" data-artifact="browser">browser history</span>, Office macro execution.</li>
+                    <li>Exploitation: Vulnerable service crashes, unexpected child processes, web shell creation.</li>
+                    <li>Valid accounts: <span class="artifact-link" data-artifact="rdp">RDP</span>/VPN logons from unusual IPs, times, or geolocations.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">File and network artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="mft">$MFT</span> for the first malicious file creation timestamp.</li>
+                    <li><span class="artifact-link" data-artifact="ads">Zone.Identifier</span> to identify files downloaded from external sources.</li>
+                    <li>Network or proxy logs for the first connection to known-bad infrastructure.</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Evidence to corroborate</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="mft">$MFT</span> for the first malicious file creation.</li>
-                  <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> first execution timestamps.</li>
-                  <li>Network logs for the first external connection to a bad destination.</li>
-                </ul>
+              <div class="guide-group">
+                <div class="guide-group-header">Analysis</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Corroboration</div>
+                  <ul class="guide-detail-list">
+                    <li>Multiple artifact types pointing to the same initial timestamp.</li>
+                    <li>Logical progression from initial access to subsequent attacker actions.</li>
+                    <li>External threat intelligence matching the observed vector or infrastructure.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Pitfalls</div>
+                  <ul class="guide-detail-list">
+                    <li>The first detected activity may not be the actual initial access.</li>
+                    <li>Attackers may stage dormant access before beginning active operations.</li>
+                    <li>Focusing on one host may miss initial access that occurred on another system.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Limitations</div>
+                  <ul class="guide-detail-list">
+                    <li>Log retention may not extend back to actual initial access.</li>
+                    <li>Supply chain or trusted relationship compromises may leave minimal artifacts.</li>
+                    <li>Anti-forensics may have targeted earliest evidence specifically.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">When to stop</div>
+                  <p class="guide-detail-text">If initial access is identified with corroborating evidence, document the vector, timestamp, and patient zero system. If the earliest evidence feels incomplete, look for earlier dormant access. Initial access sets the dwell time clock—finding it anchors your entire timeline.</p>
+                </div>
               </div>
-              <p class="helper">Initial access sets the dwell time clock. Finding it anchors your entire timeline.</p>
             </div>
           </article>
 
@@ -340,49 +683,86 @@
                 <span class="guide-icon" data-category="recovery"></span>
                 <div>
                   <h2>I think this is a ransomware attack</h2>
-                  <p class="helper">Trace the encryption, identify the variant, and find patient zero.</p>
+                  <p class="helper">Identify the variant, trace encryption scope, and find initial access.</p>
                 </div>
               </div>
               <span class="toggle-icon chevron">&gt;</span>
             </button>
             <div class="guide-body">
-              <div class="guide-section">
-                <h3>Identify the ransomware variant</h3>
-                <ol class="guide-list">
-                  <li>Collect ransom notes (README.txt, DECRYPT.html, etc.) and check ID Ransomware or No More Ransom.</li>
-                  <li>Note the encrypted file extension (.locked, .encrypted, random extensions) and research known variants.</li>
-                  <li>Check <span class="artifact-link" data-artifact="defender">Windows Defender</span> and AV logs for detection names that identify the family.</li>
-                  <li>Hash any ransomware executables found and search VirusTotal or malware databases.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Framing</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">The hypothesis</div>
+                  <p class="guide-detail-text">Ransomware may have encrypted data on one or more systems. Your goal is to identify the ransomware variant, determine the scope of encryption, trace initial access, and identify any data exfiltration that preceded encryption.</p>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Key questions</div>
+                  <ul class="guide-detail-list">
+                    <li>What ransomware variant is this, and are decryption options available?</li>
+                    <li>When did encryption begin, and how many systems were affected?</li>
+                    <li>How did the attacker gain initial access, and how long was the dwell time?</li>
+                    <li>Was data exfiltrated before encryption (double extortion)?</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Determine encryption scope and timeline</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="mft">$MFT</span> for files with recent modification times matching the encrypted extension.</li>
-                  <li>Review <span class="artifact-link" data-artifact="vss">Volume Shadow Copies</span> - ransomware often deletes these (look for vssadmin.exe in <span class="artifact-link" data-artifact="prefetch">Prefetch</span>).</li>
-                  <li>Examine <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for Event ID 7045 (service install) around encryption start time.</li>
-                  <li>Check network shares for lateral encryption spread via <span class="artifact-link" data-artifact="shellbags">Shellbags</span> and <span class="artifact-link" data-artifact="lnk">LNK files</span>.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Evidence</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Variant identification</div>
+                  <ul class="guide-detail-list">
+                    <li>Ransom notes (README.txt, DECRYPT.html) can be checked against ID Ransomware or No More Ransom.</li>
+                    <li><span class="artifact-link" data-artifact="defender">Windows Defender</span> detection names may identify the ransomware family.</li>
+                    <li><span class="artifact-link" data-artifact="amcache">Amcache</span> may provide hashes for threat intelligence lookup.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Encryption scope and timeline</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="mft">$MFT</span> modification times on encrypted files establish the encryption window.</li>
+                    <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> may show vssadmin.exe, bcdedit.exe, wbadmin.exe used to delete recovery options.</li>
+                    <li><span class="artifact-link" data-artifact="shellbags">Shellbags</span> and <span class="artifact-link" data-artifact="lnk">LNK files</span> may show network share access for lateral encryption.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Initial access and dwell time</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> may show Cobalt Strike, PsExec, or RMM tools days or weeks before encryption.</li>
+                    <li><span class="artifact-link" data-artifact="rdp">RDP artifacts</span> may reveal unauthorized remote access.</li>
+                    <li><span class="artifact-link" data-artifact="srum">SRUM</span> network spikes before encryption may indicate data staging and exfiltration.</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Trace initial access and dwell time</h3>
-                <ol class="guide-list">
-                  <li>Work backwards from encryption timestamp to find initial compromise (often days or weeks earlier).</li>
-                  <li>Check for Cobalt Strike, PsExec, or RMM tool execution in <span class="artifact-link" data-artifact="prefetch">Prefetch</span>.</li>
-                  <li>Review <span class="artifact-link" data-artifact="rdp">RDP artifacts</span> for unauthorized remote access.</li>
-                  <li>Look for data staging before encryption (double extortion is common).</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Analysis</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Corroboration</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> 7045 (service install) around encryption start time.</li>
+                    <li><span class="artifact-link" data-artifact="powershell">PowerShell logs</span> for encoded commands or security-disabling scripts.</li>
+                    <li><span class="artifact-link" data-artifact="vss">Volume Shadow Copy</span> deletion timing aligning with encryption.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Pitfalls</div>
+                  <ul class="guide-detail-list">
+                    <li>Encryption timestamp is not initial access—attackers often dwell for days or weeks first.</li>
+                    <li>Focusing only on encryption misses pre-encryption reconnaissance and exfiltration.</li>
+                    <li>Multiple ransomware variants exist; encrypted extension alone may not identify the family.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Limitations</div>
+                  <ul class="guide-detail-list">
+                    <li>Ransomware often deletes its own binary after encryption completes.</li>
+                    <li>Volume Shadow Copies are typically deleted, limiting recovery options.</li>
+                    <li>Double extortion (data theft) may have occurred even if not immediately apparent.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">When to stop</div>
+                  <p class="guide-detail-text">Once variant, scope, initial access, and exfiltration status are determined, the investigation can inform recovery and negotiation decisions. Modern ransomware often involves data theft—always check for exfiltration evidence to understand the full scope of the incident.</p>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Evidence to corroborate</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> for encryption binary and tools like bcdedit.exe, wbadmin.exe, vssadmin.exe.</li>
-                  <li><span class="artifact-link" data-artifact="powershell">PowerShell logs</span> for encoded commands or disable-security scripts.</li>
-                  <li><span class="artifact-link" data-artifact="srum">SRUM</span> for network usage spikes indicating exfiltration before encryption.</li>
-                  <li><span class="artifact-link" data-artifact="amcache">Amcache</span> for ransomware executable metadata and hashes.</li>
-                </ul>
-              </div>
-              <p class="helper">Modern ransomware often involves data theft before encryption. Check for exfil evidence to understand full scope.</p>
             </div>
           </article>
 
@@ -392,49 +772,87 @@
                 <span class="guide-icon" data-category="lateral"></span>
                 <div>
                   <h2>I suspect command and control activity</h2>
-                  <p class="helper">Find beaconing, C2 infrastructure, and attacker communications.</p>
+                  <p class="helper">Investigate beaconing, C2 infrastructure, and attacker communications.</p>
                 </div>
               </div>
               <span class="toggle-icon chevron">&gt;</span>
             </button>
             <div class="guide-body">
-              <div class="guide-section">
-                <h3>Network-based indicators</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="srum">SRUM</span> for processes with sustained network activity, especially to unusual destinations.</li>
-                  <li>Review DNS cache and browser history for suspicious domains (DGA patterns, newly registered domains).</li>
-                  <li>Look for beaconing patterns in network logs - regular intervals suggest automated callbacks.</li>
-                  <li>Check for HTTP/HTTPS traffic to cloud services (GitHub, Pastebin, Discord) used as C2 channels.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Framing</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">The hypothesis</div>
+                  <p class="guide-detail-text">A compromised system may be communicating with attacker-controlled infrastructure. Your goal is to identify C2 channels, understand the communication patterns, and determine what capabilities the attacker has maintained.</p>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Key questions</div>
+                  <ul class="guide-detail-list">
+                    <li>What process or mechanism is generating the C2 traffic?</li>
+                    <li>What infrastructure is the implant communicating with?</li>
+                    <li>Is the beaconing pattern regular (automated) or irregular (interactive)?</li>
+                    <li>Could this traffic be legitimate software phoning home or updating?</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Host-based indicators</h3>
-                <ol class="guide-list">
-                  <li>Search <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for known C2 frameworks (cobaltstrike, beacon, grunt, implant).</li>
-                  <li>Check for PowerShell with encoded commands or download cradles in <span class="artifact-link" data-artifact="powershell">PowerShell logs</span>.</li>
-                  <li>Look for unusual parent-child process relationships in <span class="artifact-link" data-artifact="eventlogs">Event logs</span> (4688).</li>
-                  <li>Review loaded DLLs and injected threads via memory analysis if available.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Evidence</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Network artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="srum">SRUM</span> may show processes with sustained network activity to unusual destinations.</li>
+                    <li><span class="artifact-link" data-artifact="browser">Browser history</span> and DNS cache may reveal suspicious domains (DGA patterns, newly registered).</li>
+                    <li>Network logs with regular interval connections suggest automated beaconing.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Host artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> may show known C2 frameworks or renamed variants.</li>
+                    <li><span class="artifact-link" data-artifact="powershell">PowerShell logs</span> may contain encoded commands, download cradles, or Invoke-Expression.</li>
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> (4688) may reveal unusual parent-child process relationships.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Evasion techniques to consider</div>
+                  <ul class="guide-detail-list">
+                    <li>Domain fronting: Traffic appears to go to legitimate CDN domains.</li>
+                    <li>DNS tunneling: Long, encoded DNS queries to attacker-controlled domains.</li>
+                    <li>Living-off-the-land: Built-in tools (certutil, bitsadmin) used for communications.</li>
+                    <li>Cloud C2: Legitimate services (Slack, Teams, GitHub, cloud storage) as channels.</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Common C2 hiding techniques</h3>
-                <ul class="guide-list">
-                  <li><strong>Domain fronting:</strong> Traffic appears to go to legitimate CDN domains.</li>
-                  <li><strong>DNS tunneling:</strong> Long, encoded DNS queries to attacker-controlled domains.</li>
-                  <li><strong>Living-off-the-land:</strong> Using built-in tools (certutil, bitsadmin, curl) for communications.</li>
-                  <li><strong>Cloud services:</strong> Using legitimate services (Slack, Teams, cloud storage) as C2 channels.</li>
-                </ul>
+              <div class="guide-group">
+                <div class="guide-group-header">Analysis</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Corroboration</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="bits">BITS jobs</span> for persistent download or communication tasks.</li>
+                    <li><span class="artifact-link" data-artifact="mft">$MFT</span> for suspicious DLLs or executables in temp folders.</li>
+                    <li>Memory analysis for in-memory implants that don't touch disk.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Pitfalls</div>
+                  <ul class="guide-detail-list">
+                    <li>Legitimate software beacons regularly (updates, telemetry)—verify the process.</li>
+                    <li>C2 over HTTPS to cloud providers looks like normal traffic without decryption.</li>
+                    <li>In-memory implants may leave no file artifacts—process memory is key evidence.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Limitations</div>
+                  <ul class="guide-detail-list">
+                    <li>Encrypted C2 traffic content is not visible without TLS interception.</li>
+                    <li>Domain fronting and CDN abuse make blocking difficult without breaking legitimate services.</li>
+                    <li>Fileless malware may only be detectable through memory analysis.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">When to stop</div>
+                  <p class="guide-detail-text">If C2 is confirmed, identify all affected hosts and block the infrastructure. If beaconing stops after containment, the channel is cut. C2 is the attacker's lifeline—finding and blocking it removes their access and forces them to re-establish presence.</p>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Evidence to corroborate</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="bits">BITS jobs</span> for persistent download tasks.</li>
-                  <li><span class="artifact-link" data-artifact="mft">$MFT</span> for suspicious DLLs or executables in temp folders.</li>
-                  <li>Firewall and proxy logs for connection frequency and destination analysis.</li>
-                  <li>Memory dump analysis for in-memory implants that don't touch disk.</li>
-                </ul>
-              </div>
-              <p class="helper">C2 channels are the attacker's lifeline. Finding and blocking them cuts off their access.</p>
             </div>
           </article>
 
@@ -444,58 +862,90 @@
                 <span class="guide-icon" data-category="persistence"></span>
                 <div>
                   <h2>I think persistence was installed</h2>
-                  <p class="helper">Hunt for mechanisms allowing attackers to maintain access.</p>
+                  <p class="helper">Investigate whether unauthorized auto-start entries were added.</p>
                 </div>
               </div>
               <span class="toggle-icon chevron">&gt;</span>
             </button>
             <div class="guide-body">
-              <div class="guide-section">
-                <h3>Registry-based persistence (Windows)</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="runkeys">Run/RunOnce keys</span> in HKLM and HKCU for suspicious entries.</li>
-                  <li>Review <span class="artifact-link" data-artifact="services">Services</span> in SYSTEM hive for newly created or modified services.</li>
-                  <li>Look for Image File Execution Options (IFEO) debugger hijacking.</li>
-                  <li>Check Winlogon keys (Shell, Userinit) and AppInit_DLLs for modifications.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Framing</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">The hypothesis</div>
+                  <p class="guide-detail-text">Something may have configured itself to survive reboot. Your goal is to identify unexpected auto-start entries and determine whether they correlate with unauthorized activity—or can be explained by legitimate software.</p>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Key questions</div>
+                  <ul class="guide-detail-list">
+                    <li>When was this entry created, and does that timing align with other suspicious activity?</li>
+                    <li>Is the referenced executable present, and can its purpose be explained?</li>
+                    <li>Could this be legitimate software, IT policy, or user configuration?</li>
+                    <li>What corroborating evidence would I expect if this is malicious?</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Task and service-based persistence</h3>
-                <ol class="guide-list">
-                  <li>Review <span class="artifact-link" data-artifact="scheduledtasks">Scheduled Tasks</span> for suspicious entries, especially those running at boot or login.</li>
-                  <li>Check <span class="artifact-link" data-artifact="eventlogs">Event logs</span> for Event ID 7045 (service install) and 4698 (task creation).</li>
-                  <li>Look for WMI event subscriptions using wmic or PowerShell.</li>
-                  <li>Review startup folders for all users and the default user profile.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Evidence</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Registry artifacts (Windows)</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="runkeys">Run/RunOnce keys</span> in HKLM and HKCU may indicate auto-start configuration.</li>
+                    <li><span class="artifact-link" data-artifact="services">Services</span> in SYSTEM hive may reveal unexpected service installations.</li>
+                    <li>IFEO debugger entries, Winlogon keys, and AppInit_DLLs may indicate hijacking.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Task and service artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="scheduledtasks">Scheduled Tasks</span> configured for boot, login, or idle triggers.</li>
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> 7045 (service install) and 4698 (task creation) may show when entries were added.</li>
+                    <li>WMI subscriptions and startup folders for additional auto-start vectors.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">File and application artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="mft">$MFT</span> may show recently created executables in system paths.</li>
+                    <li>DLL search-order hijacking, Office add-ins, browser extensions, COM objects.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Linux artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="cron">Cron</span>, <span class="artifact-link" data-artifact="systemdunits">systemd units</span>, <span class="artifact-link" data-artifact="sshkeys">authorized_keys</span>, <span class="artifact-link" data-artifact="envfiles">shell profiles</span>.</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>File-based and other persistence</h3>
-                <ol class="guide-list">
-                  <li>Check for DLL hijacking opportunities in application directories.</li>
-                  <li>Review <span class="artifact-link" data-artifact="mft">$MFT</span> for recently created executables in system directories.</li>
-                  <li>Look for Office add-ins, browser extensions, or COM object hijacking.</li>
-                  <li>Check for bootkit/rootkit indicators if you have raw disk access.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Analysis</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Corroboration</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> showing payload execution at boot.</li>
+                    <li><span class="artifact-link" data-artifact="amcache">Amcache</span>/<span class="artifact-link" data-artifact="shimcache">ShimCache</span> for file metadata and presence.</li>
+                    <li>Timeline alignment with initial access or lateral movement.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Pitfalls</div>
+                  <ul class="guide-detail-list">
+                    <li>Unfamiliar does not mean malicious—research before concluding.</li>
+                    <li>One mechanism found does not mean others don't exist.</li>
+                    <li>Registry key presence does not prove execution.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Limitations</div>
+                  <ul class="guide-detail-list">
+                    <li>Legitimate software uses identical persistence mechanisms.</li>
+                    <li>Absence of artifacts does not mean persistence was never present.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">When to stop</div>
+                  <p class="guide-detail-text">If flagged entries can be explained, document and move on. If corroborated, expand scope. If nothing found, revisit the hypothesis.</p>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Linux persistence mechanisms</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="cron">Cron jobs</span> in /etc/cron.*, /var/spool/cron/, and user crontabs.</li>
-                  <li><span class="artifact-link" data-artifact="systemdunits">Systemd units</span> in /etc/systemd/system/ and user service directories.</li>
-                  <li><span class="artifact-link" data-artifact="sshkeys">SSH authorized_keys</span> for added public keys.</li>
-                  <li><span class="artifact-link" data-artifact="envfiles">Shell profiles</span> (.bashrc, .profile, /etc/profile.d/).</li>
-                </ul>
-              </div>
-              <div class="guide-section">
-                <h3>Evidence to corroborate</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="prefetch">Prefetch</span> showing persistence mechanism execution at boot time.</li>
-                  <li><span class="artifact-link" data-artifact="amcache">Amcache</span> for metadata on persistence payloads.</li>
-                  <li><span class="artifact-link" data-artifact="shimcache">ShimCache</span> for evidence of backdoor file presence.</li>
-                  <li>Timeline analysis to correlate persistence installation with initial compromise.</li>
-                </ul>
-              </div>
-              <p class="helper">Attackers often install multiple persistence mechanisms. Don't stop at the first one you find.</p>
             </div>
           </article>
 
@@ -511,52 +961,81 @@
               <span class="toggle-icon chevron">&gt;</span>
             </button>
             <div class="guide-body">
-              <div class="guide-section">
-                <h3>Establish user activity timeline</h3>
-                <ol class="guide-list">
-                  <li>Build a timeline of user logons from <span class="artifact-link" data-artifact="eventlogs">Event logs</span> (4624, 4647, 4634).</li>
-                  <li>Cross-reference with badge access or physical security logs if available.</li>
-                  <li>Review <span class="artifact-link" data-artifact="userassist">UserAssist</span> and <span class="artifact-link" data-artifact="prefetch">Prefetch</span> for application usage patterns.</li>
-                  <li>Check for after-hours activity or activity during vacation/leave periods.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Framing</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">The hypothesis</div>
+                  <p class="guide-detail-text">An employee or contractor may have misused their access for data theft, policy violation, or other misconduct. Your goal is to establish what the user accessed, what actions they took, and whether data was exfiltrated—while preserving evidence for potential HR or legal action.</p>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Key questions</div>
+                  <ul class="guide-detail-list">
+                    <li>What data or systems did the user access beyond their normal role?</li>
+                    <li>Was data collected, staged, or transferred outside the organization?</li>
+                    <li>Does the activity timeline correlate with resignation notice or other red flags?</li>
+                    <li>Could this activity be explained by legitimate job duties or a misunderstanding?</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Data access and collection</h3>
-                <ol class="guide-list">
-                  <li>Review <span class="artifact-link" data-artifact="shellbags">Shellbags</span> and <span class="artifact-link" data-artifact="lnk">LNK files</span> for folders browsed, especially sensitive areas.</li>
-                  <li>Check <span class="artifact-link" data-artifact="recentdocs">RecentDocs</span> and <span class="artifact-link" data-artifact="jumplists">Jump Lists</span> for files accessed.</li>
-                  <li>Look for bulk file access patterns (many files opened in short timeframe).</li>
-                  <li>Review file server access logs if investigating network share access.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Evidence</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">User activity timeline</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="eventlogs">Event logs</span> (4624, 4634, 4647) establish logon sessions and times.</li>
+                    <li><span class="artifact-link" data-artifact="userassist">UserAssist</span> and <span class="artifact-link" data-artifact="prefetch">Prefetch</span> reveal application usage patterns.</li>
+                    <li>After-hours activity or activity during leave periods may indicate intent.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Data access artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="shellbags">Shellbags</span> and <span class="artifact-link" data-artifact="lnk">LNK files</span> reveal folders browsed, especially sensitive areas.</li>
+                    <li><span class="artifact-link" data-artifact="recentdocs">RecentDocs</span> and <span class="artifact-link" data-artifact="jumplists">Jump Lists</span> show files accessed.</li>
+                    <li>Bulk file access patterns (many files in short timeframe) suggest collection activity.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Exfiltration artifacts</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="usb">USB device history</span> for removable media connections.</li>
+                    <li><span class="artifact-link" data-artifact="browser">Browser history</span> for personal email, cloud storage, or file sharing sites.</li>
+                    <li><span class="artifact-link" data-artifact="srum">SRUM</span> for unusual network upload volumes by application.</li>
+                  </ul>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Data exfiltration methods</h3>
-                <ol class="guide-list">
-                  <li>Check <span class="artifact-link" data-artifact="usb">USB device history</span> for removable media connections.</li>
-                  <li>Review <span class="artifact-link" data-artifact="browser">browser history</span> for personal email, cloud storage, or file sharing sites.</li>
-                  <li>Look for print spooler activity if hardcopy exfiltration is suspected.</li>
-                  <li>Check <span class="artifact-link" data-artifact="srum">SRUM</span> for unusual network upload volumes by application.</li>
-                </ol>
+              <div class="guide-group">
+                <div class="guide-group-header">Analysis</div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">Corroboration</div>
+                  <ul class="guide-detail-list">
+                    <li><span class="artifact-link" data-artifact="mft">$MFT</span> for file copy operations (files created then quickly deleted).</li>
+                    <li><span class="artifact-link" data-artifact="recyclebin">Recycle Bin</span> for deleted staging evidence.</li>
+                    <li>Email logs for forwarding rules or attachments sent externally.</li>
+                    <li>DLP alerts if such systems are deployed.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Pitfalls</div>
+                  <ul class="guide-detail-list">
+                    <li>Accessing files is not proof of exfiltration—establish the transfer mechanism.</li>
+                    <li>USB insertion does not prove data was copied—look for file copy artifacts.</li>
+                    <li>Activity outside normal hours may have legitimate explanations.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label warning">Limitations</div>
+                  <ul class="guide-detail-list">
+                    <li>Personal devices used for exfiltration may not leave endpoint artifacts.</li>
+                    <li>Cloud sync to personal accounts may bypass DLP and leave minimal traces.</li>
+                    <li>Proving intent requires context beyond technical artifacts alone.</li>
+                  </ul>
+                </div>
+                <div class="guide-detail-section">
+                  <div class="guide-detail-label">When to stop</div>
+                  <p class="guide-detail-text">If misconduct is established, preserve evidence with documented chain of custody. Coordinate with HR and Legal before any confrontation. Insider investigations require different handling than external breaches—premature action can compromise both the investigation and legal options.</p>
+                </div>
               </div>
-              <div class="guide-section">
-                <h3>Evidence preservation considerations</h3>
-                <ul class="guide-list">
-                  <li>Document chain of custody meticulously for potential HR or legal proceedings.</li>
-                  <li>Preserve email mailbox if communication evidence is needed.</li>
-                  <li>Consider mobile device forensics if company devices were used.</li>
-                  <li>Work with HR and Legal before confronting the subject.</li>
-                </ul>
-              </div>
-              <div class="guide-section">
-                <h3>Evidence to corroborate</h3>
-                <ul class="guide-list">
-                  <li><span class="artifact-link" data-artifact="mft">$MFT</span> for file copy operations (files created then quickly deleted).</li>
-                  <li><span class="artifact-link" data-artifact="recyclebin">Recycle Bin</span> for deleted evidence of staging.</li>
-                  <li>Email logs for forwarding rules or attachments sent externally.</li>
-                  <li>DLP (Data Loss Prevention) alerts if such systems are deployed.</li>
-                </ul>
-              </div>
-              <p class="helper">Insider investigations require different handling than external breaches. Coordinate with HR and Legal early.</p>
             </div>
           </article>
         </section>

@@ -2053,6 +2053,69 @@ main {
   gap: 6px;
 }
 
+/* Flat guide layout (glossary-style) */
+.guide-group {
+  background: rgba(7, 8, 16, 0.5);
+  border: 1px solid rgba(56, 242, 255, 0.1);
+  border-radius: 12px;
+  padding: 14px 18px 4px;
+  margin-bottom: 12px;
+}
+
+.guide-group:last-child {
+  margin-bottom: 0;
+}
+
+.guide-group-header {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(56, 242, 255, 0.08);
+}
+
+.guide-detail-section {
+  margin-bottom: 14px;
+}
+
+.guide-detail-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--neon-pink);
+  margin-bottom: 6px;
+}
+
+.guide-detail-label.warning {
+  color: var(--neon-amber);
+}
+
+.guide-detail-text {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.guide-detail-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.guide-detail-list li {
+  margin-bottom: 4px;
+}
+
+.guide-detail-list code {
+  color: var(--neon-green);
+  font-size: 0.85em;
+}
+
 .drawer-status {
   margin: 0;
   color: var(--text-muted);
