@@ -121,22 +121,6 @@ Open `http://127.0.0.1:5000` in your browser.
 - SIFT Workstation (or equivalent tool installations)
 - Local binaries: Foremost, Scalpel, Bulk Extractor, Volatility 3, log2timeline/psort, Eric Zimmermann tools
 
-## Configuration
-
-Set environment variables for production deployment:
-
-```bash
-export SIFTED_SECRET_KEY="your-secret-key"
-export SIFTED_ALLOWED_PATHS="/cases,/mnt/evidence"
-export SIFTED_OUTPUT_ROOTS="/cases"
-```
-
-For production, run via WSGI:
-
-```bash
-gunicorn --bind 0.0.0.0:5000 wsgi:app
-```
-
 ## License
 
 MIT
