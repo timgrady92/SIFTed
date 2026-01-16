@@ -222,12 +222,14 @@
         <pre class="run-log" id="logDrawerContent"></pre>
       </div>
     </div>
-    {% from "_components.html" import glossary_sidebar, active_jobs_drawer %}
+    {% from "_components.html" import glossary_sidebar, guides_sidebar, active_jobs_drawer %}
     {{ glossary_sidebar() }}
+    {{ guides_sidebar() }}
     {{ active_jobs_drawer() }}
     <footer></footer>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
     <script src="{{ url_for('static', filename='glossary.js') }}"></script>
     <script src="{{ url_for('static', filename='volatility.js') }}"></script>
+    <script src="{{ url_for('static', filename='guides-sidebar.js') }}"></script>
   </body>
 </html>

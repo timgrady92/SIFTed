@@ -532,6 +532,61 @@
   </div>
 {% endmacro %}
 
+{% macro guides_sidebar() %}
+  <aside
+    class="guides-sidebar"
+    data-guides-surface="sidebar"
+    aria-hidden="true"
+  >
+    <div class="guides-sidebar-header">
+      <div>
+        <h2>Guides</h2>
+        <p class="guides-sidebar-subtitle">Workflow playbooks for investigations.</p>
+      </div>
+      <div class="guides-sidebar-actions">
+        <a class="ghost guides-sidebar-link" href="/guides">Full view</a>
+        <button class="guides-sidebar-close" data-guides-close type="button" aria-label="Close guides">&times;</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section-tabs" data-guides-tabs>
+      <button class="sidebar-tab active" type="button" data-guides-tab="hypothesis">
+        <span class="sidebar-tab-label">Hypothesis</span>
+        <span class="sidebar-tab-count" data-guides-count="hypothesis">0</span>
+      </button>
+      <button class="sidebar-tab" type="button" data-guides-tab="artifact">
+        <span class="sidebar-tab-label">Artifact</span>
+        <span class="sidebar-tab-count" data-guides-count="artifact">0</span>
+      </button>
+    </div>
+
+    <div class="sidebar-controls">
+      <div class="guides-sidebar-search">
+        <input
+          type="text"
+          data-guides-search
+          placeholder="Search guides..."
+          autocomplete="off"
+        />
+      </div>
+    </div>
+
+    <div class="sidebar-content" data-guides-content>
+      <div class="guides-sidebar-list" data-guides-list></div>
+    </div>
+
+    <div class="guides-sidebar-detail" data-guides-detail hidden>
+      <button class="guides-sidebar-back" data-guides-back type="button">&larr; Back</button>
+      <div class="guides-sidebar-detail-content" data-guides-detail-content></div>
+    </div>
+  </aside>
+
+  <button class="guides-toggle" data-guides-toggle="sidebar" type="button" aria-label="Open guides">
+    <span class="guides-toggle-icon"></span>
+    <span class="guides-toggle-label">Guides</span>
+  </button>
+{% endmacro %}
+
 {% macro browse_drawer() %}
   <div class="browser-drawer" id="browserDrawer" aria-hidden="true">
     <div class="drawer-surface">
