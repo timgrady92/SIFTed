@@ -12,12 +12,13 @@ SIFTed is a guided interface for SANS SIFT workstation workflows. It lets junior
 
 1. Download and deploy a [SIFT Workstation Virtual Machine](https://www.sans.org/tools/sift-workstation). Note: You will need to create and log in to a SANS account to download the virtual machine.
 
-2. Log in to the SIFT Workstation machine, update the packages, and install the python3 virtual environment package. Open a terminal and execute the following commands:
+2. Log in to the SIFT Workstation machine. The default password is **forensics**.
+
+3. Update the packages and install the python3 virtual environment package. Open a terminal and execute the following commands:
 
 ```bash
 sudo apt-get update && sudo apt-get upgrade -y
-bash
-sudo apt-get install python3.12-venv
+sudo apt-get install python3.12-venv -y
 ```
 
 4. Clone the SIFTed repository, create a virtual environment, and install dependencies. Execute the following commands:
@@ -25,19 +26,19 @@ sudo apt-get install python3.12-venv
 ```bash
 git clone https://www.github.com/timgrady92/SIFTed
 cd SIFTed
-python -m venv .venv
+python -m venv venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-5. Begin the server. Run the following commands from the SIFTed directory:
+5. Begin the server. You must be operating within your virtual environment each time you start SIFTed. To enter the virtual environment and start the server, run the following commands from the SIFTed directory:
 
 ```bash
-source .venv/bin/activate
+source venv/bin/activate
 python app.py
 ```
 
-6. Open `http://127.0.0.1:5000` in your browser! This will bring you to the SIFTed home page.
+6. Open `http://127.0.0.1:5000` in your browser. This will bring you to the SIFTed home page! Note: SIFTed will only be reachable from the SIFT Workstation VM browser.
 
 
 ## Philosophy
