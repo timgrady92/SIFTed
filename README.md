@@ -2,6 +2,8 @@
 
 > **Note**: Tool integration is currently in development. Workflows are being introduced slowly and methodically after rigorous testing. Existing workflows should be treated as experimental at best.
 
+> **Regarding Volatility 3**: Volatility 3 is currently compatible with SIFTed, but not prepared out of the box. Install Volatility 3 using the same virtual environment you use for SIFTed to use it.
+
 **Training wheels for forensic analysts.**
 
 SIFTed is a guided interface for SANS SIFT workstation workflows. It lets junior analysts contribute meaningful work on day one while building the knowledge to outgrow it.
