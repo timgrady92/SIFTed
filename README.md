@@ -106,6 +106,7 @@ When an analyst can run the underlying tools directly, explain what each one doe
 ## Quick Start
 
 ```bash
+git clone https://www.github.com/timgrady92/SIFTed
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
