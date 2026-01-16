@@ -2,6 +2,18 @@
 
 > **Note**: Tool integration is currently in development. Workflows are being introduced slowly and methodically after rigorous testing. Existing workflows should be treated as experimental at best.
 
+## Quick Start
+
+```bash
+git clone https://www.github.com/timgrady92/SIFTed
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+Open `http://127.0.0.1:5000` in your browser.
+
 **Training wheels for forensic analysts.**
 
 SIFTed is a guided interface for SANS SIFT workstation workflows. It lets junior analysts contribute meaningful work on day one while building the knowledge to outgrow it.
@@ -102,18 +114,6 @@ When an analyst can run the underlying tools directly, explain what each one doe
 | Feature Extraction | Bulk Extractor | Scan large datasets for emails, URLs, credit cards, EXIF data |
 | Timeline Creation | Plaso (log2timeline) | Build unified timelines from filesystem and artifact timestamps |
 | Artifact Parsing | Eric Zimmermann tools | Parse Windows artifacts: Prefetch, Amcache, LNK files, Jump Lists, Event Logs, MFT |
-
-## Quick Start
-
-```bash
-git clone https://www.github.com/timgrady92/SIFTed
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python app.py
-```
-
-Open `http://127.0.0.1:5000` in your browser.
 
 ## Requirements
 
