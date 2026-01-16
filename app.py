@@ -5,6 +5,7 @@ import os
 import queue
 import re
 import secrets
+import shlex
 import shutil
 import subprocess
 import sys
@@ -33,12 +34,43 @@ VOLATILITY_PLUGINS_PATH = os.path.join(DATA_DIR, "volatility_plugins.json")
 RUN_STATE = {}
 RUN_STATE_LOCK = threading.Lock()
 DATA_LOCK = threading.Lock()
+RUN_STATE_TTL_SECONDS = int(os.environ.get("SIFTED_RUN_STATE_TTL_SECONDS", "600"))
 
 SECRET_KEY = os.environ.get("SIFTED_SECRET_KEY")
 if not SECRET_KEY:
     SECRET_KEY = secrets.token_urlsafe(32)
     logger.warning("SIFTED_SECRET_KEY not set; using an ephemeral key.")
 app.config["SECRET_KEY"] = SECRET_KEY
+
+
+def schedule_run_state_cleanup(run_id):
+    if RUN_STATE_TTL_SECONDS <= 0:
+        return
+
+    def cleanup():
+        with RUN_STATE_LOCK:
+            state = RUN_STATE.get(run_id)
+            if not state or not state.get("done"):
+                return
+            RUN_STATE.pop(run_id, None)
+
+    timer = threading.Timer(RUN_STATE_TTL_SECONDS, cleanup)
+    timer.daemon = True
+    timer.start()
+
+
+def mark_run_done(run_id):
+    schedule = False
+    with RUN_STATE_LOCK:
+        state = RUN_STATE.get(run_id)
+        if not state:
+            return
+        state["done"] = True
+        if not state.get("cleanup_scheduled"):
+            state["cleanup_scheduled"] = True
+            schedule = True
+    if schedule:
+        schedule_run_state_cleanup(run_id)
 
 
 def normalize_path(path):
@@ -63,6 +95,15 @@ def parse_path_list(raw_value, default):
 
 ALLOWED_PATHS = parse_path_list(os.environ.get("SIFTED_ALLOWED_PATHS"), ["/cases"])
 OUTPUT_ROOTS = parse_path_list(os.environ.get("SIFTED_OUTPUT_ROOTS"), ["/cases"])
+INPUT_ROOTS = parse_path_list(os.environ.get("SIFTED_INPUT_ROOTS"), [])
+SYMBOL_ROOTS = parse_path_list(os.environ.get("SIFTED_SYMBOL_ROOTS"), [])
+
+
+def shell_join(command):
+    try:
+        return shlex.join(command)
+    except AttributeError:
+        return " ".join(shlex.quote(part) for part in command)
 
 
 def is_path_allowed(path, allowed_roots):
@@ -82,6 +123,17 @@ def normalize_output_path(output_path):
     normalized = normalize_path(output_path)
     if not is_path_allowed(normalized, OUTPUT_ROOTS):
         return "", "Output path is outside the allowed roots."
+    return normalized, ""
+
+
+def validate_input_path(raw_path, label, allowed_roots):
+    if not raw_path:
+        return "", f"{label} path is required."
+    normalized = normalize_path(raw_path)
+    if allowed_roots and not is_path_allowed(normalized, allowed_roots):
+        return "", f"{label} path is outside the allowed roots."
+    if not os.path.exists(normalized):
+        return "", f"{label} path not found."
     return normalized, ""
 
 EZ_TOOL_ORDER = [
@@ -663,6 +715,57 @@ def default_output_path(case_slug, tool):
     return os.path.join("/cases", case_slug, tool, timestamp)
 
 
+def resolve_case_slug(case_id):
+    if not case_id:
+        return ""
+    for case in load_cases():
+        if case.get("id") == case_id:
+            return case.get("slug", case_id)
+    return case_id
+
+
+def resolve_output_path(output_path, case_id, tool):
+    if case_id and not output_path:
+        case_slug = resolve_case_slug(case_id)
+        output_path = default_output_path(case_slug, tool)
+    if not output_path:
+        return "", "Output folder is required."
+    normalized, output_error = normalize_output_path(output_path)
+    if output_error:
+        return "", output_error
+    return normalized, ""
+
+
+def create_run_record(tool, case_id, image_path, output_path, command_text, extra=None):
+    run_id = uuid.uuid4().hex
+    log_path = f"{output_path}.log"
+    try:
+        with open(log_path, "a", encoding="utf-8"):
+            pass
+    except OSError:
+        return None, "Unable to create log file."
+
+    run = {
+        "id": run_id,
+        "tool": tool,
+        "case_id": case_id,
+        "image_path": image_path,
+        "output_path": output_path,
+        "command": command_text,
+        "log_path": log_path,
+        "status": "running",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if extra:
+        run.update(extra)
+
+    runs = load_runs()
+    runs.append(run)
+    save_runs(runs)
+
+    return run, ""
+
+
 def write_json_atomic(path, payload):
     directory = os.path.dirname(path)
     os.makedirs(directory, exist_ok=True)
@@ -1125,10 +1228,7 @@ def start_foremost_run(run_id, command, log_path, output_path, config_path=None)
         emit("status", "Run completed." if status == "success" else "Run completed with errors.")
         emit("done", str(exit_code))
 
-        with RUN_STATE_LOCK:
-            state = RUN_STATE.get(run_id)
-            if state:
-                state["done"] = True
+        mark_run_done(run_id)
 
         runs = load_runs()
         for run in runs:
@@ -1258,10 +1358,7 @@ def start_foremost_safe_run(
         emit("status", "Run completed." if status == "success" else "Run completed with errors.")
         emit("done", "1" if had_errors else "0")
 
-        with RUN_STATE_LOCK:
-            state = RUN_STATE.get(run_id)
-            if state:
-                state["done"] = True
+        mark_run_done(run_id)
 
         runs = load_runs()
         for run in runs:
@@ -1326,10 +1423,7 @@ def start_generic_run(run_id, command, log_path, post_process=None):
         emit("status", "Run completed." if status == "success" else "Run completed with errors.")
         emit("done", str(exit_code))
 
-        with RUN_STATE_LOCK:
-            state = RUN_STATE.get(run_id)
-            if state:
-                state["done"] = True
+        mark_run_done(run_id)
 
         runs = load_runs()
         for run in runs:
@@ -1405,10 +1499,7 @@ def start_volatility_run(run_id, commands, log_path, plugins, output_path, rende
         emit("status", "Run completed." if status == "success" else "Run completed with errors.")
         emit("done", str(exit_code))
 
-        with RUN_STATE_LOCK:
-            state = RUN_STATE.get(run_id)
-            if state:
-                state["done"] = True
+        mark_run_done(run_id)
 
         runs = load_runs()
         for run in runs:
@@ -1492,10 +1583,7 @@ def start_artifact_timeline_run(
         emit("status", "Run completed." if status == "success" else "Run completed with errors.")
         emit("done", str(exit_code))
 
-        with RUN_STATE_LOCK:
-            state = RUN_STATE.get(run_id)
-            if state:
-                state["done"] = True
+        mark_run_done(run_id)
 
         runs = load_runs()
         for run in runs:
@@ -1701,11 +1789,7 @@ def log_run():
     case_id = payload.get("case_id") or None
     output_path = payload.get("output_path", "").strip()
     if case_id and not output_path:
-        case_slug = case_id
-        for case in load_cases():
-            if case.get("id") == case_id:
-                case_slug = case.get("slug", case_id)
-                break
+        case_slug = resolve_case_slug(case_id)
         output_path = default_output_path(case_slug, payload.get("tool", "unknown"))
     run = {
         "id": uuid.uuid4().hex,
@@ -1733,23 +1817,11 @@ def run_foremost():
     verbose = bool(payload.get("verbose"))
     safe_mode = bool(payload.get("safe_mode"))
 
-    if not image_path:
-        return jsonify({"error": "Image path is required."}), 400
-    image_path = normalize_path(image_path)
-    if not os.path.exists(image_path):
-        return jsonify({"error": "Image path not found."}), 400
+    image_path, image_error = validate_input_path(image_path, "Image", INPUT_ROOTS)
+    if image_error:
+        return jsonify({"error": image_error}), 400
 
-    if case_id and not output_path:
-        case_slug = case_id
-        for case in load_cases():
-            if case.get("id") == case_id:
-                case_slug = case.get("slug", case_id)
-                break
-        output_path = default_output_path(case_slug, "foremost")
-
-    if not output_path:
-        return jsonify({"error": "Output folder is required."}), 400
-    output_path, output_error = normalize_output_path(output_path)
+    output_path, output_error = resolve_output_path(output_path, case_id, "foremost")
     if output_error:
         return jsonify({"error": output_error}), 400
     if os.path.exists(output_path) and not os.path.isdir(output_path):
@@ -1775,7 +1847,7 @@ def run_foremost():
         command = build_foremost_command(
             image_path, output_path, types, quick, verbose, config_path
         )
-        command_text = " ".join(command)
+        command_text = shell_join(command)
     else:
         mode_flags = []
         if quick:
@@ -1783,64 +1855,75 @@ def run_foremost():
         if verbose:
             mode_flags.append("-v")
         command_text = (
-            f"foremost -i {image_path} -o {output_path} -t <type> -T "
-            + " ".join(mode_flags)
-            + " (safe mode, 10s per type)"
-        ).strip()
+            f"foremost -i {shlex.quote(image_path)} -o {shlex.quote(output_path)} -t <type> -T"
+        )
+        if mode_flags:
+            command_text = f"{command_text} {' '.join(mode_flags)}"
+        command_text = f"{command_text} (safe mode, 10s per type)"
 
-    runs = load_runs()
-    run_id = uuid.uuid4().hex
-    log_path = f"{output_path}.log"
-
-    try:
-        with open(log_path, "a", encoding="utf-8"):
-            pass
-    except OSError:
-        return jsonify({"error": "Unable to create log file."}), 400
-    run = {
-        "id": run_id,
-        "tool": "foremost",
-        "case_id": case_id,
-        "image_path": image_path,
-        "output_path": output_path,
-        "command": command_text,
-        "log_path": log_path,
-        "status": "running",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    runs.append(run)
-    save_runs(runs)
+    run, run_error = create_run_record(
+        "foremost",
+        case_id,
+        image_path,
+        output_path,
+        command_text,
+    )
+    if run_error:
+        return jsonify({"error": run_error}), 400
 
     if safe_mode:
         start_foremost_safe_run(
-            run_id,
+            run["id"],
             image_path,
             output_path,
             types,
             quick,
             verbose,
-            log_path,
+            run["log_path"],
             timeout_seconds=10,
         )
     else:
-        start_foremost_run(run_id, command, log_path, output_path, config_path=config_path)
+        start_foremost_run(
+            run["id"],
+            command,
+            run["log_path"],
+            output_path,
+            config_path=config_path,
+        )
 
     return jsonify(
         {
             "status": "running",
             "command": command_text,
             "output_path": output_path,
-            "run_id": run_id,
+            "run_id": run["id"],
         }
     )
 
 
 @app.route("/api/run/<run_id>/events")
 def run_events(run_id):
+    def get_run_record():
+        for run in load_runs():
+            if run.get("id") == run_id:
+                return run
+        return None
+
+    def emit_done(run):
+        exit_code = run.get("exit_code")
+        if exit_code is None:
+            exit_code = 0
+        payload = json.dumps({"type": "done", "message": str(exit_code)})
+        return f"event: done\ndata: {payload}\n\n"
+
     def event_stream():
         with RUN_STATE_LOCK:
             state = RUN_STATE.get(run_id)
         if not state:
+            run = get_run_record()
+            if run and run.get("status") in {"success", "error"}:
+                yield emit_done(run)
+                return
             yield "event: error\ndata: Run not found\n\n"
             return
         queue_ref = state["queue"]
@@ -1849,8 +1932,15 @@ def run_events(run_id):
                 event = queue_ref.get(timeout=1)
             except queue.Empty:
                 with RUN_STATE_LOCK:
-                    done = RUN_STATE.get(run_id, {}).get("done", False)
-                if done:
+                    state = RUN_STATE.get(run_id)
+                if not state:
+                    run = get_run_record()
+                    if run and run.get("status") in {"success", "error"}:
+                        yield emit_done(run)
+                    else:
+                        yield "event: error\ndata: Run state expired\n\n"
+                    break
+                if state.get("done"):
                     break
                 yield "event: ping\ndata: keepalive\n\n"
                 continue
@@ -1974,23 +2064,11 @@ def run_bulk_extractor():
     info_mode = bool(payload.get("info_mode"))
     histograms = bool(payload.get("histograms", True))
 
-    if not image_path:
-        return jsonify({"error": "Image path is required."}), 400
-    image_path = normalize_path(image_path)
-    if not os.path.exists(image_path):
-        return jsonify({"error": "Image path not found."}), 400
+    image_path, image_error = validate_input_path(image_path, "Image", INPUT_ROOTS)
+    if image_error:
+        return jsonify({"error": image_error}), 400
 
-    if case_id and not output_path:
-        case_slug = case_id
-        for case in load_cases():
-            if case.get("id") == case_id:
-                case_slug = case.get("slug", case_id)
-                break
-        output_path = default_output_path(case_slug, "bulk-extractor")
-
-    if not output_path:
-        return jsonify({"error": "Output folder is required."}), 400
-    output_path, output_error = normalize_output_path(output_path)
+    output_path, output_error = resolve_output_path(output_path, case_id, "bulk-extractor")
     if output_error:
         return jsonify({"error": output_error}), 400
     if os.path.exists(output_path):
@@ -2010,40 +2088,26 @@ def run_bulk_extractor():
         info_mode,
         histograms,
     )
-    command_text = " ".join(command)
+    command_text = shell_join(command)
 
-    runs = load_runs()
-    run_id = uuid.uuid4().hex
-    log_path = f"{output_path}.log"
+    run, run_error = create_run_record(
+        "bulk-extractor",
+        case_id,
+        image_path,
+        output_path,
+        command_text,
+    )
+    if run_error:
+        return jsonify({"error": run_error}), 400
 
-    try:
-        with open(log_path, "a", encoding="utf-8"):
-            pass
-    except OSError:
-        return jsonify({"error": "Unable to create log file."}), 400
-
-    run = {
-        "id": run_id,
-        "tool": "bulk-extractor",
-        "case_id": case_id,
-        "image_path": image_path,
-        "output_path": output_path,
-        "command": command_text,
-        "log_path": log_path,
-        "status": "running",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    runs.append(run)
-    save_runs(runs)
-
-    start_generic_run(run_id, command, log_path)
+    start_generic_run(run["id"], command, run["log_path"])
 
     return jsonify(
         {
             "status": "running",
             "command": command_text,
             "output_path": output_path,
-            "run_id": run_id,
+            "run_id": run["id"],
         }
     )
 
@@ -2062,27 +2126,19 @@ def run_eric_zimmerman():
     if not tool.get("installed"):
         return jsonify({"error": f"{tool['label']} is not installed or not on PATH."}), 400
 
-    if not source_path:
-        return jsonify({"error": "Source path is required."}), 400
-    source_path = normalize_path(source_path)
-    if not os.path.exists(source_path):
-        return jsonify({"error": "Source path not found."}), 400
+    source_path, source_error = validate_input_path(source_path, "Source", INPUT_ROOTS)
+    if source_error:
+        return jsonify({"error": source_error}), 400
     if tool["input_mode"] == "file" and not os.path.isfile(source_path):
         return jsonify({"error": "Source path must be a file for this tool."}), 400
     if tool["input_mode"] == "dir" and not os.path.isdir(source_path):
         return jsonify({"error": "Source path must be a directory for this tool."}), 400
 
-    if case_id and not output_path:
-        case_slug = case_id
-        for case in load_cases():
-            if case.get("id") == case_id:
-                case_slug = case.get("slug", case_id)
-                break
-        output_path = default_output_path(case_slug, f"eric-zimmerman/{tool_id}")
-
-    if not output_path:
-        return jsonify({"error": "Output folder is required."}), 400
-    output_path, output_error = normalize_output_path(output_path)
+    output_path, output_error = resolve_output_path(
+        output_path,
+        case_id,
+        f"eric-zimmerman/{tool_id}",
+    )
     if output_error:
         return jsonify({"error": output_error}), 400
     if os.path.exists(output_path) and not os.path.isdir(output_path):
@@ -2096,33 +2152,19 @@ def run_eric_zimmerman():
         return jsonify({"error": "Unable to create output folder."}), 400
 
     command = build_ez_command(tool, source_path, output_path)
-    command_text = " ".join(command)
+    command_text = shell_join(command)
 
-    runs = load_runs()
-    run_id = uuid.uuid4().hex
-    log_path = f"{output_path}.log"
+    run, run_error = create_run_record(
+        f"EZ {tool['label']}",
+        case_id,
+        source_path,
+        output_path,
+        command_text,
+    )
+    if run_error:
+        return jsonify({"error": run_error}), 400
 
-    try:
-        with open(log_path, "a", encoding="utf-8"):
-            pass
-    except OSError:
-        return jsonify({"error": "Unable to create log file."}), 400
-
-    run = {
-        "id": run_id,
-        "tool": f"EZ {tool['label']}",
-        "case_id": case_id,
-        "image_path": source_path,
-        "output_path": output_path,
-        "command": command_text,
-        "log_path": log_path,
-        "status": "running",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    runs.append(run)
-    save_runs(runs)
-
-    start_generic_run(run_id, command, log_path)
+    start_generic_run(run["id"], command, run["log_path"])
 
     output_file = os.path.join(output_path, tool["csv_name"])
 
@@ -2132,7 +2174,7 @@ def run_eric_zimmerman():
             "command": command_text,
             "output_path": output_path,
             "output_file": output_file,
-            "run_id": run_id,
+            "run_id": run["id"],
         }
     )
 
@@ -2146,23 +2188,11 @@ def run_scalpel():
     types = sanitize_types(payload.get("types") or [])
     organize = bool(payload.get("organize", True))
 
-    if not image_path:
-        return jsonify({"error": "Image path is required."}), 400
-    image_path = normalize_path(image_path)
-    if not os.path.exists(image_path):
-        return jsonify({"error": "Image path not found."}), 400
+    image_path, image_error = validate_input_path(image_path, "Image", INPUT_ROOTS)
+    if image_error:
+        return jsonify({"error": image_error}), 400
 
-    if case_id and not output_path:
-        case_slug = case_id
-        for case in load_cases():
-            if case.get("id") == case_id:
-                case_slug = case.get("slug", case_id)
-                break
-        output_path = default_output_path(case_slug, "scalpel")
-
-    if not output_path:
-        return jsonify({"error": "Output folder is required."}), 400
-    output_path, output_error = normalize_output_path(output_path)
+    output_path, output_error = resolve_output_path(output_path, case_id, "scalpel")
     if output_error:
         return jsonify({"error": output_error}), 400
     if not types:
@@ -2189,31 +2219,17 @@ def run_scalpel():
     if not organize:
         command.append("-O")
     command.append(image_path)
-    command_text = " ".join(command)
+    command_text = shell_join(command)
 
-    runs = load_runs()
-    run_id = uuid.uuid4().hex
-    log_path = f"{output_path}.log"
-
-    try:
-        with open(log_path, "a", encoding="utf-8"):
-            pass
-    except OSError:
-        return jsonify({"error": "Unable to create log file."}), 400
-
-    run = {
-        "id": run_id,
-        "tool": "scalpel",
-        "case_id": case_id,
-        "image_path": image_path,
-        "output_path": output_path,
-        "command": command_text,
-        "log_path": log_path,
-        "status": "running",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    runs.append(run)
-    save_runs(runs)
+    run, run_error = create_run_record(
+        "scalpel",
+        case_id,
+        image_path,
+        output_path,
+        command_text,
+    )
+    if run_error:
+        return jsonify({"error": run_error}), 400
 
     def finalize():
         summary = ""
@@ -2228,14 +2244,14 @@ def run_scalpel():
             pass
         return summary
 
-    start_generic_run(run_id, command, log_path, post_process=finalize)
+    start_generic_run(run["id"], command, run["log_path"], post_process=finalize)
 
     return jsonify(
         {
             "status": "running",
             "command": command_text,
             "output_path": output_path,
-            "run_id": run_id,
+            "run_id": run["id"],
         }
     )
 
@@ -2250,23 +2266,11 @@ def run_volatility():
     plugins = payload.get("plugins") or []
     renderer = (payload.get("renderer") or "json").strip().lower()
 
-    if not image_path:
-        return jsonify({"error": "Image path is required."}), 400
-    image_path = normalize_path(image_path)
-    if not os.path.exists(image_path):
-        return jsonify({"error": "Image path not found."}), 400
+    image_path, image_error = validate_input_path(image_path, "Image", INPUT_ROOTS)
+    if image_error:
+        return jsonify({"error": image_error}), 400
 
-    if case_id and not output_path:
-        case_slug = case_id
-        for case in load_cases():
-            if case.get("id") == case_id:
-                case_slug = case.get("slug", case_id)
-                break
-        output_path = default_output_path(case_slug, "volatility")
-
-    if not output_path:
-        return jsonify({"error": "Output folder is required."}), 400
-    output_path, output_error = normalize_output_path(output_path)
+    output_path, output_error = resolve_output_path(output_path, case_id, "volatility")
     if output_error:
         return jsonify({"error": output_error}), 400
 
@@ -2278,6 +2282,8 @@ def run_volatility():
     if not symbol_path:
         return jsonify({"error": "Symbol path is required."}), 400
     symbol_path = normalize_path(symbol_path)
+    if SYMBOL_ROOTS and not is_path_allowed(symbol_path, SYMBOL_ROOTS):
+        return jsonify({"error": "Symbol path is outside the allowed roots."}), 400
     if not os.path.isdir(symbol_path):
         return jsonify({"error": "Symbol path not found."}), 400
 
@@ -2296,40 +2302,33 @@ def run_volatility():
         plugins,
         renderer,
     )
-    command_text = " && ".join(" ".join(cmd) for cmd in commands)
+    command_text = " && ".join(shell_join(cmd) for cmd in commands)
 
-    runs = load_runs()
-    run_id = uuid.uuid4().hex
-    log_path = f"{output_path}.log"
+    run, run_error = create_run_record(
+        "volatility",
+        case_id,
+        image_path,
+        output_path,
+        command_text,
+    )
+    if run_error:
+        return jsonify({"error": run_error}), 400
 
-    try:
-        with open(log_path, "a", encoding="utf-8"):
-            pass
-    except OSError:
-        return jsonify({"error": "Unable to create log file."}), 400
-
-    run = {
-        "id": run_id,
-        "tool": "volatility",
-        "case_id": case_id,
-        "image_path": image_path,
-        "output_path": output_path,
-        "command": command_text,
-        "log_path": log_path,
-        "status": "running",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    runs.append(run)
-    save_runs(runs)
-
-    start_volatility_run(run_id, commands, log_path, plugins, output_path, renderer)
+    start_volatility_run(
+        run["id"],
+        commands,
+        run["log_path"],
+        plugins,
+        output_path,
+        renderer,
+    )
 
     return jsonify(
         {
             "status": "running",
             "command": command_text,
             "output_path": output_path,
-            "run_id": run_id,
+            "run_id": run["id"],
         }
     )
 
@@ -2342,23 +2341,11 @@ def run_artifact_timeline():
     case_id = payload.get("case_id") or None
     user_timezone = (payload.get("timezone") or "UTC").strip() or "UTC"
 
-    if not image_path:
-        return jsonify({"error": "Evidence path is required."}), 400
-    image_path = normalize_path(image_path)
-    if not os.path.exists(image_path):
-        return jsonify({"error": "Evidence path not found."}), 400
+    image_path, image_error = validate_input_path(image_path, "Evidence", INPUT_ROOTS)
+    if image_error:
+        return jsonify({"error": image_error}), 400
 
-    if case_id and not output_path:
-        case_slug = case_id
-        for case in load_cases():
-            if case.get("id") == case_id:
-                case_slug = case.get("slug", case_id)
-                break
-        output_path = default_output_path(case_slug, "artifact-triage")
-
-    if not output_path:
-        return jsonify({"error": "Output folder is required."}), 400
-    output_path, output_error = normalize_output_path(output_path)
+    output_path, output_error = resolve_output_path(output_path, case_id, "artifact-triage")
     if output_error:
         return jsonify({"error": output_error}), 400
     if os.path.exists(output_path) and not os.path.isdir(output_path):
@@ -2377,40 +2364,28 @@ def run_artifact_timeline():
         user_timezone,
     )
     command_text = " && ".join(
-        [" ".join(log2timeline_cmd), " ".join(psort_cmd)]
+        [shell_join(log2timeline_cmd), shell_join(psort_cmd)]
     )
 
-    runs = load_runs()
-    run_id = uuid.uuid4().hex
-    log_path = f"{output_path}.log"
-
-    try:
-        with open(log_path, "a", encoding="utf-8"):
-            pass
-    except OSError:
-        return jsonify({"error": "Unable to create log file."}), 400
-
-    run = {
-        "id": run_id,
-        "tool": "artifact-triage",
-        "case_id": case_id,
-        "image_path": image_path,
-        "output_path": output_path,
-        "command": command_text,
-        "log_path": log_path,
-        "status": "running",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "timeline_path": timeline_path,
-        "storage_path": storage_path,
-    }
-    runs.append(run)
-    save_runs(runs)
+    run, run_error = create_run_record(
+        "artifact-triage",
+        case_id,
+        image_path,
+        output_path,
+        command_text,
+        extra={
+            "timeline_path": timeline_path,
+            "storage_path": storage_path,
+        },
+    )
+    if run_error:
+        return jsonify({"error": run_error}), 400
 
     start_artifact_timeline_run(
-        run_id,
+        run["id"],
         log2timeline_cmd,
         psort_cmd,
-        log_path,
+        run["log_path"],
         output_path,
         timeline_path,
     )
@@ -2420,7 +2395,7 @@ def run_artifact_timeline():
             "status": "running",
             "command": command_text,
             "output_path": output_path,
-            "run_id": run_id,
+            "run_id": run["id"],
             "timeline_path": timeline_path,
         }
     )
