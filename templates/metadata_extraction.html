@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SIFTed | File Carving</title>
+    <title>SIFTed | Metadata Extraction</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   </head>
   <body>
@@ -13,12 +13,12 @@
 
     <header class="hero compact">
       <div class="hero-text">
-        <p class="eyebrow">File Carving</p>
-        <h1>Recover deleted files</h1>
+        <p class="eyebrow">Metadata Extraction</p>
+        <h1>Reveal hidden file data</h1>
         <p class="lead">
-          Scan disk images to find files that no longer appear in the filesystem.
+          Extract timestamps, GPS coordinates, author info, and software fingerprints from files.
         </p>
-        <p class="source-hint">Source artifact: raw disk or partition image (dd, E01).</p>
+        <p class="source-hint">Source artifact: files, images, documents, or directories.</p>
       </div>
     </header>
 
@@ -26,9 +26,9 @@
       <section class="start-here">
         <p class="helper">Start with what you're looking for:</p>
         <ul class="scenario-list">
-          <li><strong>Deleted documents, images, or executables</strong> — Foremost</li>
-          <li><strong>Email addresses, URLs, credit card numbers, or other text patterns</strong> — Bulk Extractor</li>
-          <li><strong>Specific file types with custom recovery rules</strong> — Scalpel</li>
+          <li><strong>GPS coordinates, camera info, or timestamps from photos</strong> — ExifTool</li>
+          <li><strong>Author names, creation dates, or software from documents</strong> — ExifTool</li>
+          <li><strong>Batch metadata extraction from a directory of files</strong> — ExifTool</li>
         </ul>
       </section>
 
@@ -36,16 +36,16 @@
         <article class="tool-card primary">
           <div class="tool-header">
             <div>
-              <h2>Foremost</h2>
-              <p>Recover common file types from disk images.</p>
+              <h2>ExifTool</h2>
+              <p>Comprehensive metadata extraction for 100+ file types.</p>
             </div>
             <span class="tool-status">Ready</span>
           </div>
           <p class="tool-detail">
-            Scans raw disk data for file headers and footers to reconstruct deleted files. Handles images, documents, archives, and executables out of the box. A good starting point when you don't know exactly what you're looking for.
+            The gold standard for metadata extraction. Reads EXIF, IPTC, XMP, GPS, and proprietary metadata from images, documents, PDFs, audio, video, and more. Essential for geolocation, timeline analysis, and attribution.
           </p>
           <div class="tool-actions">
-            <a class="action" href="/foremost">Open workflow</a>
+            <a class="action" href="/exiftool">Open workflow</a>
             <a class="ghost" href="/guides">Use cases</a>
           </div>
         </article>
@@ -53,16 +53,16 @@
         <article class="tool-card">
           <div class="tool-header">
             <div>
-              <h2>Bulk Extractor</h2>
-              <p>Find email addresses, URLs, and other text patterns.</p>
+              <h2>Strings</h2>
+              <p>Extract printable text from binary files.</p>
             </div>
             <span class="tool-status">Ready</span>
           </div>
           <p class="tool-detail">
-            Searches disk images for recognizable data patterns—email addresses, phone numbers, credit card numbers, URLs, and more. Useful when you need to answer "who was this machine communicating with?" or "what accounts were accessed?"
+            Scans binary files for sequences of printable characters. Useful for finding embedded URLs, file paths, error messages, and other text artifacts hidden in executables or memory dumps.
           </p>
           <div class="tool-actions">
-            <a class="action" href="/bulk-extractor">Open workflow</a>
+            <a class="action" href="/strings">Open workflow</a>
             <a class="ghost" href="/guides">Use cases</a>
           </div>
         </article>
@@ -70,16 +70,16 @@
         <article class="tool-card">
           <div class="tool-header">
             <div>
-              <h2>Scalpel</h2>
-              <p>Target specific file types with custom rules.</p>
+              <h2>File Type Detection</h2>
+              <p>Identify true file types regardless of extension.</p>
             </div>
             <span class="tool-status">Ready</span>
           </div>
           <p class="tool-detail">
-            Uses configurable header and footer patterns to carve files. Useful when you know exactly what you're looking for and need precise control over what gets recovered.
+            Uses magic bytes and file signatures to determine the actual file type, catching renamed or extension-spoofed files. Batch process directories to find mismatched extensions that may indicate concealment.
           </p>
           <div class="tool-actions">
-            <a class="action" href="/scalpel">Open workflow</a>
+            <a class="action" href="/filetype">Open workflow</a>
             <a class="ghost" href="/guides">Use cases</a>
           </div>
         </article>

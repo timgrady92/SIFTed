@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SIFTed | Eric Zimmerman</title>
+    <title>SIFTed | Artifact Parsing</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   </head>
   <body>
@@ -13,91 +13,111 @@
 
     <header class="hero compact">
       <div class="hero-text">
-        <p class="eyebrow">Eric Zimmerman Toolkit</p>
-        <h1>Windows artifact parsers</h1>
-        <p class="lead">Run focused parsers for common Windows artifacts.</p>
+        <p class="eyebrow">Artifact Parsing</p>
+        <h1>Parse Windows artifacts</h1>
+        <p class="lead">Convert binary Windows artifacts into readable, searchable formats.</p>
       </div>
     </header>
 
-    <main class="foremost">
-      <section class="work-pane">
-        {% from "_components.html" import run_context %}
-        {{ run_context(
-          cases,
-          "/cases/<case-name>/eric-zimmerman/<tool>/<timestamp>",
-          "eric-zimmerman",
-          true,
-          "Source",
-          "Source path",
-          "/cases/case-name/artifacts",
-          "Source artifact: specific artifact file or folder (Prefetch, LNK, Event Logs)."
-        ) }}
-
-        <div class="card block">
-          <div class="block-header">
-            <div>
-              <h2>Choose a parser</h2>
-              <p class="helper">Start with a curated set, then expand if needed.</p>
-            </div>
-            <button class="ghost" id="toggleEzCatalog" type="button">Show all tools</button>
-          </div>
-          <div class="ez-tool-grid" id="ezToolGrid" data-show-all="false">
-            {% for tool in tools %}
-              <button
-                class="ez-tool-card{% if not tool.installed %} missing{% endif %}"
-                type="button"
-                data-tool-id="{{ tool.id }}"
-                data-curated="{{ 'true' if tool.curated else 'false' }}"
-              >
-                <span class="ez-tool-name">{{ tool.label }}</span>
-                <span class="ez-tool-summary">{{ tool.summary }}</span>
-                <span class="ez-tool-status">{{ "Installed" if tool.installed else "Missing" }}</span>
-              </button>
-            {% endfor %}
-          </div>
-          <div class="ez-tool-detail" id="ezToolDetail">
-            <h3 id="ezToolName"></h3>
-            <p class="helper" id="ezToolDescription"></p>
-            <p class="helper" id="ezToolHint"></p>
-            <p class="helper" id="ezToolOutput"></p>
-            <span class="tool-status" id="ezToolStatus"></span>
-          </div>
-        </div>
+    <main class="carving">
+      <section class="start-here">
+        <p class="helper">Start with what you're investigating:</p>
+        <ul class="scenario-list">
+          <li><strong>What programs ran and when?</strong> — Program Execution</li>
+          <li><strong>What files did the user open or access?</strong> — User Activity</li>
+          <li><strong>What security events occurred?</strong> — System Events</li>
+          <li><strong>What file system changes happened?</strong> — File System</li>
+          <li><strong>How did malware survive reboots?</strong> — Persistence & Autostart</li>
+          <li><strong>What sites were visited or downloaded?</strong> — Browser & Network</li>
+        </ul>
       </section>
 
-      <aside class="results-pane">
-        <div class="panel block">
-          <h2>Command</h2>
-          <pre id="commandPreview" class="command"></pre>
-        </div>
-        <div class="panel block">
-          <h2>Status</h2>
-          <p class="run-status" id="runStatus">Select a parser to begin.</p>
-          <div class="run-results" id="runResults" hidden>
-            <span class="run-results-label">Results</span>
-            <div class="run-results-links" id="runResultsLinks"></div>
+      <section class="tool-grid">
+        <article class="tool-card primary">
+          <div class="tool-header">
+            <div>
+              <h2>Program Execution</h2>
+              <p>Evidence of programs that ran on the system.</p>
+            </div>
+            <span class="tool-status">Ready</span>
           </div>
-          <button class="ghost wide" id="openLog">View full log</button>
-          <button class="action wide" id="runEzTool" disabled>Run parser</button>
-        </div>
-      </aside>
+          <p class="tool-detail">Parse Prefetch files and Amcache to determine what programs executed, when they ran, and how many times. Critical for establishing whether malware or tools were used.</p>
+          <div class="tool-actions">
+            <a class="action" href="/artifact-parsing/program-execution">Open category</a>
+          </div>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-header">
+            <div>
+              <h2>User Activity</h2>
+              <p>Evidence of files and folders the user interacted with.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">Parse LNK shortcuts and Jump Lists to see what files were opened, from where, and when. Reveals user behavior and accessed resources, including deleted files and network shares.</p>
+          <div class="tool-actions">
+            <a class="action" href="/artifact-parsing/user-activity">Open category</a>
+          </div>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-header">
+            <div>
+              <h2>System Events</h2>
+              <p>Windows Event Log entries for security and system activity.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">Parse EVTX event logs to review logon events, process creation, service installations, and security alerts. The backbone of most Windows investigations.</p>
+          <div class="tool-actions">
+            <a class="action" href="/artifact-parsing/system-events">Open category</a>
+          </div>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-header">
+            <div>
+              <h2>File System</h2>
+              <p>Low-level file system metadata and change journals.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">Parse the Master File Table ($MFT) and USN Journal to see every file that existed, when it was created, modified, or deleted—even if the file itself is gone.</p>
+          <div class="tool-actions">
+            <a class="action" href="/artifact-parsing/file-system">Open category</a>
+          </div>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-header">
+            <div>
+              <h2>Persistence & Autostart</h2>
+              <p>Mechanisms attackers use to survive reboots.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">Parse Registry Run keys, scheduled tasks, services, and other autostart locations to find how malware maintains access across reboots.</p>
+          <div class="tool-actions">
+            <a class="action" href="/artifact-parsing/persistence">Open category</a>
+          </div>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-header">
+            <div>
+              <h2>Browser & Network</h2>
+              <p>Web browsing history, downloads, and cached data.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">Parse browser databases to reconstruct browsing history, downloads, cached pages, and cookies. Useful for phishing investigations and tracking data exfiltration.</p>
+          <div class="tool-actions">
+            <a class="action" href="/artifact-parsing/browser-network">Open category</a>
+          </div>
+        </article>
+      </section>
     </main>
-
-    {% from "_components.html" import browse_drawer %}
-    {{ browse_drawer() }}
-
-    <div class="log-drawer" id="logDrawer" aria-hidden="true">
-      <div class="drawer-surface">
-        <div class="drawer-header">
-          <h3>Full log</h3>
-          <button class="ghost" id="closeLog">Close</button>
-        </div>
-        <p class="drawer-status" id="logDrawerStatus"></p>
-        <pre class="run-log" id="logDrawerContent"></pre>
-      </div>
-    </div>
-
-    <script type="application/json" id="ezToolData">{{ tools_json | tojson }}</script>
 
     {% from "_components.html" import glossary_sidebar, guides_sidebar, active_jobs_drawer %}
     {{ glossary_sidebar() }}
@@ -107,7 +127,5 @@
     <script src="{{ url_for('static', filename='app.js') }}"></script>
     <script src="{{ url_for('static', filename='glossary.js') }}"></script>
     <script src="{{ url_for('static', filename='guides-sidebar.js') }}"></script>
-    <script src="{{ url_for('static', filename='tool_shared.js') }}"></script>
-    <script src="{{ url_for('static', filename='eric_zimmerman.js') }}"></script>
   </body>
 </html>

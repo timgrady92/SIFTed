@@ -32,22 +32,52 @@ const runResultsLinks = document.getElementById("runResultsLinks");
 let currentRunId = "";
 let selectedToolId = "";
 
-const renderResultsLink = (outputFile) => {
+const renderResultsLinks = (items, truncated = false) => {
   if (!runResults || !runResultsLinks) {
     return;
   }
-  if (!outputFile) {
+  runResultsLinks.innerHTML = "";
+  const existingNote = runResults.querySelector(".run-results-note");
+  if (existingNote) {
+    existingNote.remove();
+  }
+  if (!items || items.length === 0) {
     runResults.hidden = true;
-    runResultsLinks.innerHTML = "";
     return;
   }
-  runResultsLinks.innerHTML = "";
-  const link = document.createElement("a");
-  link.className = "run-result-link";
-  link.href = `/view-file?path=${encodeURIComponent(outputFile)}`;
-  link.textContent = outputFile.split("/").pop() || "results.csv";
-  runResultsLinks.appendChild(link);
+  items.forEach((item) => {
+    if (!item || !item.path) {
+      return;
+    }
+    const link = document.createElement("a");
+    link.className = "run-result-link";
+    link.href = `/view-file?path=${encodeURIComponent(item.path)}`;
+    link.textContent = item.name || item.path.split("/").pop() || "results.csv";
+    runResultsLinks.appendChild(link);
+  });
+  if (truncated) {
+    const note = document.createElement("span");
+    note.className = "run-results-note";
+    note.textContent = `Showing first ${items.length} files.`;
+    runResults.appendChild(note);
+  }
   runResults.hidden = false;
+};
+
+const fetchRunResults = async (runId) => {
+  if (!runId) {
+    return;
+  }
+  try {
+    const response = await fetch(`/api/run/${runId}/results`);
+    if (!response.ok) {
+      return;
+    }
+    const data = await response.json();
+    const items = Array.isArray(data.files) ? data.files : [];
+    renderResultsLinks(items, Boolean(data.truncated));
+  } catch (error) {
+  }
 };
 
 const updateOutputForTool = (toolId) => {
@@ -85,9 +115,15 @@ const buildCommand = () => {
     source,
     "--csv",
     outputDir,
-    "--csvf",
-    tool.csv_name,
   ];
+  // Add batch file for RECmd
+  if (tool.batch_file) {
+    args.push("--bn", tool.batch_file);
+  }
+  // Add custom output filename if supported
+  if (tool.supports_csvf !== false) {
+    args.push("--csvf", tool.csv_name);
+  }
   commandPreview.textContent = `${args.join(" ")}${note}`;
 };
 
@@ -110,7 +146,11 @@ const selectTool = (toolId) => {
     toolHint.textContent = tool.input_hint;
   }
   if (toolOutput) {
-    toolOutput.textContent = `Output: ${tool.csv_name} (CSV)`;
+    if (tool.supports_csvf === false) {
+      toolOutput.textContent = "Output: CSV files (tool-defined names)";
+    } else {
+      toolOutput.textContent = `Output: ${tool.csv_name} (CSV)`;
+    }
   }
   if (toolStatus) {
     toolStatus.textContent = tool.installed ? "Installed" : "Missing from PATH";
@@ -126,7 +166,7 @@ const selectTool = (toolId) => {
   } else if (tooling) {
     tooling.setRunStatus(runStatus, "Ready to run.", "neutral");
   }
-  renderResultsLink("");
+  renderResultsLinks([]);
   updateOutputForTool(toolId);
   buildCommand();
 };
@@ -203,6 +243,7 @@ if (runButton && tooling) {
     runButton.disabled = true;
     runButton.textContent = "Running...";
     tooling.setRunStatus(runStatus, `Running ${tool.label}...`, "neutral");
+    renderResultsLinks([]);
 
     try {
       const response = await fetch("/api/eric-zimmerman/run", {
@@ -223,7 +264,12 @@ if (runButton && tooling) {
         outputPath.value = data.output_path;
       }
       if (data.output_file) {
-        renderResultsLink(data.output_file);
+        renderResultsLinks([
+          {
+            name: data.output_file.split("/").pop() || "results.csv",
+            path: data.output_file,
+          },
+        ]);
       }
       if (data.command && commandPreview) {
         commandPreview.textContent = data.command;
@@ -241,6 +287,7 @@ if (runButton && tooling) {
             const exitCode = Number(payload.message || 0);
             const { message, tone } = tooling.getCompletionStatus(exitCode);
             tooling.setRunStatus(runStatus, message, tone);
+            fetchRunResults(currentRunId);
             resetRunButton();
           },
           onError: () => {

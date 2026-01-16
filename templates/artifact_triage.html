@@ -14,24 +14,34 @@
     <header class="hero compact">
       <div class="hero-text">
         <p class="eyebrow">Artifact Triage</p>
-        <h1>Choose Your Tool</h1>
-        <p class="lead">Build a timeline and triage host activity quickly.</p>
+        <h1>Build a timeline</h1>
+        <p class="lead">Combine timestamps from across the system into one chronological view.</p>
         <p class="source-hint">Source artifact: disk image or a directory of collected artifacts.</p>
       </div>
     </header>
 
     <main class="carving">
+      <section class="start-here">
+        <p class="helper">Timelines help answer "what happened and when?"</p>
+        <ul class="scenario-list">
+          <li><strong>When did the attacker first access the system?</strong> — Find the earliest suspicious activity</li>
+          <li><strong>What happened in the minutes before and after an event?</strong> — Correlate related actions</li>
+          <li><strong>What was the sequence of events?</strong> — Reconstruct the full attack chain</li>
+          <li><strong>Are there gaps or anomalies in the record?</strong> — Detect timestamp manipulation or log clearing</li>
+        </ul>
+      </section>
+
       <section class="tool-grid">
         <article class="tool-card primary">
           <div class="tool-header">
             <div>
-              <h2>Plaso Timeline</h2>
-              <p>Generate a timeline from forensic artifacts.</p>
+              <h2>Timeline Generator</h2>
+              <p>Create a unified timeline from system artifacts.</p>
             </div>
             <span class="tool-status">Ready</span>
           </div>
           <p class="tool-detail">
-            Runs log2timeline and psort to create a CSV timeline for quick review.
+            Extracts timestamps from filesystem metadata, event logs, registry keys, browser history, and dozens of other sources. Outputs a single CSV you can filter, sort, and search to trace activity across the entire system.
           </p>
           <div class="tool-actions">
             <a class="action" href="/artifact-timeline">Open workflow</a>

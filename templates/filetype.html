@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | File Type Detection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("tools") }}
+
+    <header class="hero compact">
+      <div class="hero-text">
+        <p class="eyebrow">Metadata Extraction</p>
+        <h1>File Type Detection</h1>
+        <p class="lead">Identify true file types using magic bytes and signatures.</p>
+      </div>
+    </header>
+
+    <main class="foremost">
+      <section class="work-pane">
+        {% from "_components.html" import run_context %}
+        {{ run_context(
+          cases,
+          "/cases/<case-name>/filetype/<timestamp>",
+          "filetype",
+          true,
+          "Source",
+          "File or directory path",
+          "/cases/case-name/evidence/unknown_files",
+          "Source artifact: file or directory to analyze."
+        ) }}
+
+        <div class="card block">
+          <h2>Detection mode</h2>
+          <div class="toggle-row">
+            <label class="toggle">
+              <input type="radio" name="mode" value="mime" checked />
+              MIME type
+            </label>
+            <label class="toggle">
+              <input type="radio" name="mode" value="brief" />
+              Brief description
+            </label>
+            <label class="toggle">
+              <input type="radio" name="mode" value="full" />
+              Full details
+            </label>
+          </div>
+        </div>
+
+        <div class="card block">
+          <h2>Options</h2>
+          <div class="toggle-row">
+            <label class="toggle">
+              <input id="recursiveFlag" type="checkbox" checked />
+              Recursive (include subdirectories)
+            </label>
+            <label class="toggle">
+              <input id="mismatchOnly" type="checkbox" />
+              Show mismatches only
+            </label>
+          </div>
+          <p class="helper">Mismatch detection finds files where the extension doesn't match the true type.</p>
+        </div>
+      </section>
+
+      <aside class="results-pane">
+        <div class="panel block">
+          <h2>Command</h2>
+          <pre id="commandPreview" class="command"></pre>
+        </div>
+        <div class="panel block">
+          <h2>Results</h2>
+          <div class="result-list">
+            <div class="result-item">
+              <span class="result-label">Type report</span>
+              <span class="result-value" id="resultOutput">filetypes.csv</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Files analyzed</span>
+              <span class="result-value" id="resultCount">—</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Mismatches</span>
+              <span class="result-value" id="resultMismatches">—</span>
+            </div>
+          </div>
+          <p class="run-status" id="runStatus"></p>
+          <button class="ghost wide" id="openLog">View full log</button>
+          <button class="action wide" id="runFiletype">Run File Type Detection</button>
+        </div>
+      </aside>
+    </main>
+
+    <div class="log-drawer" id="logDrawer" aria-hidden="true">
+      <div class="drawer-surface">
+        <div class="drawer-header">
+          <h3>Full log</h3>
+          <button class="ghost" id="closeLog">Close</button>
+        </div>
+        <p class="drawer-status" id="logDrawerStatus"></p>
+        <pre class="run-log" id="logDrawerContent"></pre>
+      </div>
+    </div>
+
+    {% from "_components.html" import browse_drawer %}
+    {{ browse_drawer() }}
+
+    {% from "_components.html" import glossary_sidebar, guides_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ guides_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+    <script src="{{ url_for('static', filename='guides-sidebar.js') }}"></script>
+    <script src="{{ url_for('static', filename='tool_shared.js') }}"></script>
+    <script src="{{ url_for('static', filename='filetype.js') }}"></script>
+  </body>
+</html>

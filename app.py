@@ -248,12 +248,18 @@ def run_completion_message(status):
 
 
 EZ_TOOL_ORDER = [
-    "amcacheparser",
     "pecmd",
+    "amcacheparser",
+    "appcompatcacheparser",
     "lecmd",
     "jlecmd",
+    "sbecmd",
+    "rbcmd",
+    "recentfilecacheparser",
     "evtxecmd",
     "mftecmd",
+    "recmd",
+    "sqlecmd",
 ]
 
 EZ_TOOL_CATALOG = {
@@ -266,6 +272,7 @@ EZ_TOOL_CATALOG = {
         "csv_name": "amcache.csv",
         "binaries": ["AmcacheParser", "amcacheparser"],
         "curated": True,
+        "category": "program-execution",
     },
     "pecmd": {
         "label": "PECmd",
@@ -276,6 +283,7 @@ EZ_TOOL_CATALOG = {
         "csv_name": "prefetch.csv",
         "binaries": ["PECmd", "pecmd"],
         "curated": True,
+        "category": "program-execution",
     },
     "lecmd": {
         "label": "LECmd",
@@ -286,6 +294,7 @@ EZ_TOOL_CATALOG = {
         "csv_name": "lnk.csv",
         "binaries": ["LECmd", "lecmd"],
         "curated": True,
+        "category": "user-activity",
     },
     "jlecmd": {
         "label": "JLECmd",
@@ -296,6 +305,7 @@ EZ_TOOL_CATALOG = {
         "csv_name": "jumplist.csv",
         "binaries": ["JLECmd", "jlecmd"],
         "curated": True,
+        "category": "user-activity",
     },
     "evtxecmd": {
         "label": "EvtxECmd",
@@ -306,6 +316,7 @@ EZ_TOOL_CATALOG = {
         "csv_name": "eventlogs.csv",
         "binaries": ["EvtxECmd", "evtxecmd"],
         "curated": True,
+        "category": "system-events",
     },
     "mftecmd": {
         "label": "MFTECmd",
@@ -315,7 +326,76 @@ EZ_TOOL_CATALOG = {
         "input_mode": "file",
         "csv_name": "mft.csv",
         "binaries": ["MFTECmd", "mftecmd"],
+        "curated": True,
+        "category": "file-system",
+    },
+    "appcompatcacheparser": {
+        "label": "AppCompatCacheParser",
+        "summary": "ShimCache execution evidence",
+        "description": "Parses the Application Compatibility Cache (ShimCache) from the SYSTEM registry hive to show programs that have executed.",
+        "input_hint": "Source: SYSTEM registry hive",
+        "input_mode": "file",
+        "csv_name": "shimcache.csv",
+        "binaries": ["AppCompatCacheParser", "appcompatcacheparser"],
+        "curated": True,
+        "category": "program-execution",
+    },
+    "sbecmd": {
+        "label": "SBECmd",
+        "summary": "ShellBags folder history",
+        "description": "Parses ShellBags from NTUSER.DAT and UsrClass.dat to reveal folder access history, including deleted folders and network shares.",
+        "input_hint": "Source: Directory containing registry hives (NTUSER.DAT, UsrClass.dat)",
+        "input_mode": "dir",
+        "csv_name": "shellbags.csv",
+        "binaries": ["SBECmd", "sbecmd"],
+        "curated": True,
+        "category": "user-activity",
+    },
+    "rbcmd": {
+        "label": "RBCmd",
+        "summary": "Recycle Bin contents",
+        "description": "Parses Recycle Bin $I files to show deleted file metadata including original path, deletion time, and file size.",
+        "input_hint": "Source: $Recycle.Bin folder or $I file",
+        "input_mode": "file_or_dir",
+        "csv_name": "recyclebin.csv",
+        "binaries": ["RBCmd", "rbcmd"],
+        "curated": True,
+        "category": "user-activity",
+    },
+    "recentfilecacheparser": {
+        "label": "RecentFileCacheParser",
+        "summary": "RecentFileCache.bcf parsing",
+        "description": "Parses RecentFileCache.bcf to list recently executed programs. Present on Windows 7/Server 2008 R2 systems.",
+        "input_hint": "Source: RecentFileCache.bcf file",
+        "input_mode": "file",
+        "csv_name": "recentfilecache.csv",
+        "binaries": ["RecentFileCacheParser", "recentfilecacheparser"],
         "curated": False,
+        "category": "program-execution",
+    },
+    "recmd": {
+        "label": "RECmd",
+        "summary": "Registry analysis",
+        "description": "Parses Windows registry hives using the RegistryASEPs batch file to extract Run keys, services, scheduled tasks, and other persistence mechanisms.",
+        "input_hint": "Source: Directory containing registry hives (SYSTEM, SOFTWARE, NTUSER.DAT)",
+        "input_mode": "dir",
+        "csv_name": "registry.csv",
+        "binaries": ["RECmd", "recmd"],
+        "curated": True,
+        "category": "persistence",
+        "batch_file": "/opt/zimmermantools/RECmd/BatchExamples/RegistryASEPs.reb",
+    },
+    "sqlecmd": {
+        "label": "SQLECmd",
+        "summary": "SQLite database parsing",
+        "description": "Parses SQLite databases using predefined maps. Supports browser history, cookies, downloads, and other SQLite-based artifacts.",
+        "input_hint": "Source: SQLite database file or directory",
+        "input_mode": "file_or_dir",
+        "csv_name": "sqlite.csv",
+        "binaries": ["SQLECmd", "sqlecmd"],
+        "curated": True,
+        "category": "browser-network",
+        "supports_csvf": False,
     },
 }
 
@@ -350,15 +430,20 @@ def build_ez_command(tool, source_path, output_path):
     else:
         input_flag = "-d" if os.path.isdir(source_path) else "-f"
     binary = tool["binary"] or tool["binary_display"]
-    return [
+    command = [
         binary,
         input_flag,
         source_path,
         "--csv",
         output_path,
-        "--csvf",
-        tool["csv_name"],
     ]
+    # Add batch file for RECmd
+    if tool.get("batch_file"):
+        command.extend(["--bn", tool["batch_file"]])
+    # Add custom output filename if supported
+    if tool.get("supports_csvf", True):
+        command.extend(["--csvf", tool["csv_name"]])
+    return command
 
 LINUX_TRIAGE_BUNDLES = [
     {
@@ -1754,12 +1839,39 @@ def glossary():
 
 @app.route("/eric-zimmerman")
 def eric_zimmerman():
+    return render_template("eric_zimmerman.html")
+
+
+@app.route("/metadata-extraction")
+def metadata_extraction():
+    return render_template("metadata_extraction.html")
+
+
+@app.route("/exiftool")
+def exiftool():
     cases = load_cases()
+    return render_template("exiftool.html", cases=cases)
+
+
+@app.route("/strings")
+def strings_tool():
+    cases = load_cases()
+    return render_template("strings.html", cases=cases)
+
+
+@app.route("/filetype")
+def filetype():
+    cases = load_cases()
+    return render_template("filetype.html", cases=cases)
+
+
+def get_tools_for_category(category):
+    """Get tools filtered by category, with JSON-serializable version."""
     tools = []
     tools_json = []
     for tool_id in EZ_TOOL_ORDER:
         tool = resolve_ez_tool(tool_id)
-        if not tool:
+        if not tool or tool.get("category") != category:
             continue
         tools.append(tool)
         tools_json.append(
@@ -1774,10 +1886,79 @@ def eric_zimmerman():
                 "curated": tool["curated"],
                 "installed": tool["installed"],
                 "binary_display": tool["binary_display"],
+                "batch_file": tool.get("batch_file"),
+                "supports_csvf": tool.get("supports_csvf", True),
             }
         )
+    return tools, tools_json
+
+
+@app.route("/artifact-parsing/program-execution")
+def artifact_program_execution():
+    cases = load_cases()
+    tools, tools_json = get_tools_for_category("program-execution")
     return render_template(
-        "eric_zimmerman.html",
+        "artifact_program_execution.html",
+        cases=cases,
+        tools=tools,
+        tools_json=tools_json,
+    )
+
+
+@app.route("/artifact-parsing/user-activity")
+def artifact_user_activity():
+    cases = load_cases()
+    tools, tools_json = get_tools_for_category("user-activity")
+    return render_template(
+        "artifact_user_activity.html",
+        cases=cases,
+        tools=tools,
+        tools_json=tools_json,
+    )
+
+
+@app.route("/artifact-parsing/system-events")
+def artifact_system_events():
+    cases = load_cases()
+    tools, tools_json = get_tools_for_category("system-events")
+    return render_template(
+        "artifact_system_events.html",
+        cases=cases,
+        tools=tools,
+        tools_json=tools_json,
+    )
+
+
+@app.route("/artifact-parsing/file-system")
+def artifact_file_system():
+    cases = load_cases()
+    tools, tools_json = get_tools_for_category("file-system")
+    return render_template(
+        "artifact_file_system.html",
+        cases=cases,
+        tools=tools,
+        tools_json=tools_json,
+    )
+
+
+@app.route("/artifact-parsing/persistence")
+def artifact_persistence():
+    cases = load_cases()
+    tools, tools_json = get_tools_for_category("persistence")
+    return render_template(
+        "artifact_persistence.html",
+        cases=cases,
+        tools=tools,
+        tools_json=tools_json,
+    )
+
+
+@app.route("/artifact-parsing/browser-network")
+def artifact_browser_network():
+    cases = load_cases()
+    tools, tools_json = get_tools_for_category("browser-network")
+    return render_template(
+        "artifact_browser_network.html",
         cases=cases,
         tools=tools,
         tools_json=tools_json,
@@ -2058,6 +2239,16 @@ def run_log(run_id):
     return jsonify({"error": "Run not found."}), 404
 
 
+@app.route("/api/run/<run_id>/results")
+def run_results(run_id):
+    runs = load_runs()
+    for run in runs:
+        if run.get("id") == run_id:
+            files, truncated = build_run_manifest(run)
+            return jsonify({"files": files, "truncated": truncated})
+    return jsonify({"error": "Run not found."}), 404
+
+
 @app.route("/api/run/<run_id>/status")
 def run_status(run_id):
     runs = load_runs()
@@ -2244,29 +2435,33 @@ def run_eric_zimmerman():
     command = build_ez_command(tool, source_path, output_path)
     command_text = shell_join(command)
 
-    output_file = os.path.join(output_path, tool["csv_name"])
+    output_file = None
+    extra = None
+    if tool.get("supports_csvf", True):
+        output_file = os.path.join(output_path, tool["csv_name"])
+        extra = {"output_file": output_file}
     run, run_error = create_run_record(
         f"EZ {tool['label']}",
         case_id,
         source_path,
         output_path,
         command_text,
-        extra={"output_file": output_file},
+        extra=extra,
     )
     if run_error:
         return jsonify({"error": run_error}), 400
 
     start_generic_run(run["id"], command, run["log_path"])
 
-    return jsonify(
-        {
-            "status": "running",
-            "command": command_text,
-            "output_path": output_path,
-            "output_file": output_file,
-            "run_id": run["id"],
-        }
-    )
+    response = {
+        "status": "running",
+        "command": command_text,
+        "output_path": output_path,
+        "run_id": run["id"],
+    }
+    if output_file:
+        response["output_file"] = output_file
+    return jsonify(response)
 
 
 @app.route("/api/scalpel/run", methods=["POST"])
@@ -2698,6 +2893,495 @@ def api_table_rows():
         return jsonify({"error": str(exc)}), 400
     except OSError:
         return jsonify({"error": "Unable to read file."}), 500
+
+
+# --- Metadata Extraction Tools ---
+
+
+def build_exiftool_command(source_path, output_path, output_format, options):
+    """Build exiftool command with given options."""
+    output_file = os.path.join(
+        output_path,
+        f"metadata.{output_format}" if output_format != "json" else "metadata.json",
+    )
+    args = ["exiftool"]
+
+    # Output format
+    if output_format == "json":
+        args.append("-json")
+    else:
+        args.append("-csv")
+
+    # Options
+    if options.get("recursive"):
+        args.append("-r")
+    if options.get("extract_unknown"):
+        args.append("-u")
+    if options.get("duplicates"):
+        args.append("-a")
+
+    # Always include common forensic tags
+    args.extend(["-G1", "-s"])
+
+    args.append(source_path)
+    return args, output_file
+
+
+def start_exiftool_run(run_id, command, log_path, output_path, output_file):
+    """Run exiftool in a background thread."""
+    event_queue, emit = init_run_state(run_id)
+
+    def runner():
+        emit("status", "Running ExifTool...")
+        file_count = 0
+        try:
+            with open(log_path, "w", encoding="utf-8") as log_file:
+                with open(output_file, "w", encoding="utf-8") as out_file:
+                    process = subprocess.Popen(
+                        command,
+                        stdout=out_file,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                    )
+                    # Read stderr for progress
+                    while True:
+                        line = process.stderr.readline() if process.stderr else ""
+                        if not line:
+                            if process.poll() is not None:
+                                break
+                            continue
+                        log_file.write(line)
+                        log_file.flush()
+
+                    exit_code = process.poll() or 0
+
+            # Count files processed by checking output
+            if os.path.exists(output_file):
+                with open(output_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    if output_file.endswith(".json"):
+                        try:
+                            data = json.loads(content)
+                            file_count = len(data) if isinstance(data, list) else 1
+                        except json.JSONDecodeError:
+                            file_count = 0
+                    else:
+                        # CSV: count lines minus header
+                        file_count = max(0, content.count("\n") - 1)
+
+            emit("milestone", f"Processed {file_count} files")
+
+        except FileNotFoundError:
+            emit("error", "ExifTool is not installed or not on PATH.")
+            exit_code = 127
+        except OSError as e:
+            emit("error", f"Unable to run ExifTool: {e}")
+            exit_code = 1
+
+        status = "success" if exit_code == 0 else "error"
+        emit("status", run_completion_message(status))
+        emit("done", str(exit_code))
+
+        mark_run_done(run_id)
+        finalize_run(
+            run_id, status, exit_code, log_path, {"file_count": file_count}
+        )
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    return event_queue
+
+
+@app.route("/api/exiftool/run", methods=["POST"])
+def run_exiftool():
+    payload = request.get_json(force=True, silent=True) or {}
+    source_path = payload.get("image_path", "").strip()
+    output_path = payload.get("output_path", "").strip()
+    case_id = payload.get("case_id") or None
+    output_format = payload.get("output_format", "csv").strip()
+    options = {
+        "recursive": bool(payload.get("recursive", True)),
+        "extract_unknown": bool(payload.get("extract_unknown", False)),
+        "duplicates": bool(payload.get("duplicates", False)),
+    }
+
+    source_path, source_error = validate_input_path(source_path, "Source", INPUT_ROOTS)
+    if source_error:
+        return error_response(source_error)
+
+    output_path, output_error = resolve_output_path(output_path, case_id, "exiftool")
+    if output_error:
+        return error_response(output_error)
+
+    folder_error = validate_output_folder(output_path)
+    if folder_error:
+        return error_response(folder_error)
+
+    create_error = ensure_output_folder(output_path)
+    if create_error:
+        return error_response(create_error)
+
+    command, output_file = build_exiftool_command(
+        source_path, output_path, output_format, options
+    )
+    command_text = shell_join(command) + f" > {shlex.quote(output_file)}"
+
+    run, run_error = create_run_record(
+        "exiftool",
+        case_id,
+        source_path,
+        output_path,
+        command_text,
+    )
+    if run_error:
+        return jsonify({"error": run_error}), 400
+
+    start_exiftool_run(
+        run["id"],
+        command,
+        run["log_path"],
+        output_path,
+        output_file,
+    )
+
+    return jsonify(
+        {
+            "status": "running",
+            "command": command_text,
+            "output_path": output_path,
+            "run_id": run["id"],
+        }
+    )
+
+
+def build_strings_command(source_path, output_path, encoding, min_length, show_offsets):
+    """Build strings command with given options."""
+    output_file = os.path.join(output_path, "strings.txt")
+    args = ["strings"]
+
+    # Encoding
+    if encoding == "l":
+        args.extend(["-e", "l"])  # UTF-16 LE
+    elif encoding == "S":
+        args.extend(["-e", "S"])  # All encodings
+
+    # Minimum length
+    args.extend(["-n", str(min_length)])
+
+    # Show offsets
+    if show_offsets:
+        args.append("-t")
+        args.append("x")  # hex offsets
+
+    args.append(source_path)
+    return args, output_file
+
+
+def start_strings_run(run_id, command, log_path, output_path, output_file):
+    """Run strings in a background thread."""
+    event_queue, emit = init_run_state(run_id)
+
+    def runner():
+        emit("status", "Running strings...")
+        string_count = 0
+        try:
+            with open(log_path, "w", encoding="utf-8") as log_file:
+                with open(output_file, "w", encoding="utf-8") as out_file:
+                    process = subprocess.Popen(
+                        command,
+                        stdout=out_file,
+                        stderr=log_file,
+                        text=True,
+                    )
+                    process.wait()
+                    exit_code = process.returncode
+
+            # Count strings found
+            if os.path.exists(output_file):
+                with open(output_file, "r", encoding="utf-8", errors="ignore") as f:
+                    string_count = sum(1 for _ in f)
+
+            emit("milestone", f"Found {string_count} strings")
+
+        except FileNotFoundError:
+            emit("error", "strings is not installed or not on PATH.")
+            exit_code = 127
+        except OSError as e:
+            emit("error", f"Unable to run strings: {e}")
+            exit_code = 1
+
+        status = "success" if exit_code == 0 else "error"
+        emit("status", run_completion_message(status))
+        emit("done", str(exit_code))
+
+        mark_run_done(run_id)
+        finalize_run(
+            run_id, status, exit_code, log_path, {"string_count": string_count}
+        )
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    return event_queue
+
+
+@app.route("/api/strings/run", methods=["POST"])
+def run_strings():
+    payload = request.get_json(force=True, silent=True) or {}
+    source_path = payload.get("image_path", "").strip()
+    output_path = payload.get("output_path", "").strip()
+    case_id = payload.get("case_id") or None
+    encoding = payload.get("encoding", "s").strip()
+    try:
+        min_length = int(payload.get("min_length", 4))
+    except (ValueError, TypeError):
+        min_length = 4
+    min_length = max(1, min(min_length, 100))
+    show_offsets = bool(payload.get("show_offsets", True))
+
+    source_path, source_error = validate_input_path(source_path, "Source", INPUT_ROOTS)
+    if source_error:
+        return error_response(source_error)
+
+    if not os.path.isfile(source_path):
+        return error_response("Source must be a file.")
+
+    output_path, output_error = resolve_output_path(output_path, case_id, "strings")
+    if output_error:
+        return error_response(output_error)
+
+    folder_error = validate_output_folder(output_path)
+    if folder_error:
+        return error_response(folder_error)
+
+    create_error = ensure_output_folder(output_path)
+    if create_error:
+        return error_response(create_error)
+
+    command, output_file = build_strings_command(
+        source_path, output_path, encoding, min_length, show_offsets
+    )
+    command_text = shell_join(command) + f" > {shlex.quote(output_file)}"
+
+    run, run_error = create_run_record(
+        "strings",
+        case_id,
+        source_path,
+        output_path,
+        command_text,
+    )
+    if run_error:
+        return jsonify({"error": run_error}), 400
+
+    start_strings_run(
+        run["id"],
+        command,
+        run["log_path"],
+        output_path,
+        output_file,
+    )
+
+    return jsonify(
+        {
+            "status": "running",
+            "command": command_text,
+            "output_path": output_path,
+            "run_id": run["id"],
+        }
+    )
+
+
+def start_filetype_run(run_id, source_path, log_path, output_path, mode, recursive, mismatch_only):
+    """Run file type detection in a background thread."""
+    event_queue, emit = init_run_state(run_id)
+    output_file = os.path.join(output_path, "filetypes.csv")
+
+    def runner():
+        emit("status", "Detecting file types...")
+        file_count = 0
+        mismatch_count = 0
+        results = []
+
+        try:
+            # Get list of files to process
+            if os.path.isfile(source_path):
+                files_to_check = [source_path]
+            elif recursive:
+                files_to_check = []
+                for root, _, files in os.walk(source_path):
+                    for f in files:
+                        files_to_check.append(os.path.join(root, f))
+            else:
+                files_to_check = [
+                    os.path.join(source_path, f)
+                    for f in os.listdir(source_path)
+                    if os.path.isfile(os.path.join(source_path, f))
+                ]
+
+            with open(log_path, "w", encoding="utf-8") as log_file:
+                for filepath in files_to_check:
+                    try:
+                        # Run file command
+                        if mode == "mime":
+                            cmd = ["file", "--mime-type", "-b", filepath]
+                        elif mode == "brief":
+                            cmd = ["file", "-b", filepath]
+                        else:
+                            cmd = ["file", filepath]
+
+                        result = subprocess.run(
+                            cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                        )
+                        detected_type = result.stdout.strip()
+
+                        # Get extension
+                        _, ext = os.path.splitext(filepath)
+                        ext = ext.lower().lstrip(".")
+
+                        # Check for mismatch
+                        is_mismatch = False
+                        if ext and mode == "mime":
+                            # Basic mismatch detection
+                            ext_type_map = {
+                                "jpg": "image/jpeg",
+                                "jpeg": "image/jpeg",
+                                "png": "image/png",
+                                "gif": "image/gif",
+                                "pdf": "application/pdf",
+                                "doc": "application/msword",
+                                "docx": "application/vnd.openxmlformats",
+                                "xls": "application/vnd.ms-excel",
+                                "xlsx": "application/vnd.openxmlformats",
+                                "zip": "application/zip",
+                                "exe": "application/x-dosexec",
+                                "dll": "application/x-dosexec",
+                                "txt": "text/plain",
+                                "html": "text/html",
+                                "js": "text/javascript",
+                                "json": "application/json",
+                                "xml": "text/xml",
+                            }
+                            expected = ext_type_map.get(ext, "")
+                            if expected and not detected_type.startswith(expected.split("/")[0]):
+                                is_mismatch = True
+                                mismatch_count += 1
+
+                        if not mismatch_only or is_mismatch:
+                            results.append({
+                                "path": filepath,
+                                "extension": ext,
+                                "detected_type": detected_type,
+                                "mismatch": is_mismatch,
+                            })
+
+                        file_count += 1
+                        if file_count % 100 == 0:
+                            emit("milestone", f"Processed {file_count} files...")
+
+                    except subprocess.TimeoutExpired:
+                        log_file.write(f"Timeout: {filepath}\n")
+                    except OSError as e:
+                        log_file.write(f"Error: {filepath}: {e}\n")
+
+            # Write results to CSV
+            with open(output_file, "w", encoding="utf-8") as csv_file:
+                csv_file.write("Path,Extension,Detected Type,Mismatch\n")
+                for r in results:
+                    mismatch_str = "Yes" if r["mismatch"] else "No"
+                    # Escape commas in detected_type
+                    detected = r["detected_type"].replace('"', '""')
+                    csv_file.write(
+                        f'"{r["path"]}","{r["extension"]}","{detected}","{mismatch_str}"\n'
+                    )
+
+            emit("milestone", f"Processed {file_count} files, {mismatch_count} mismatches")
+            exit_code = 0
+
+        except FileNotFoundError:
+            emit("error", "file command is not installed or not on PATH.")
+            exit_code = 127
+        except OSError as e:
+            emit("error", f"Unable to run file type detection: {e}")
+            exit_code = 1
+
+        status = "success" if exit_code == 0 else "error"
+        emit("status", run_completion_message(status))
+        emit("done", str(exit_code))
+
+        mark_run_done(run_id)
+        finalize_run(
+            run_id,
+            status,
+            exit_code,
+            log_path,
+            {"file_count": file_count, "mismatch_count": mismatch_count},
+        )
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    return event_queue
+
+
+@app.route("/api/filetype/run", methods=["POST"])
+def run_filetype():
+    payload = request.get_json(force=True, silent=True) or {}
+    source_path = payload.get("image_path", "").strip()
+    output_path = payload.get("output_path", "").strip()
+    case_id = payload.get("case_id") or None
+    mode = payload.get("mode", "mime").strip()
+    recursive = bool(payload.get("recursive", True))
+    mismatch_only = bool(payload.get("mismatch_only", False))
+
+    source_path, source_error = validate_input_path(source_path, "Source", INPUT_ROOTS)
+    if source_error:
+        return error_response(source_error)
+
+    output_path, output_error = resolve_output_path(output_path, case_id, "filetype")
+    if output_error:
+        return error_response(output_error)
+
+    folder_error = validate_output_folder(output_path)
+    if folder_error:
+        return error_response(folder_error)
+
+    create_error = ensure_output_folder(output_path)
+    if create_error:
+        return error_response(create_error)
+
+    command_text = f"file {'--mime-type ' if mode == 'mime' else ''}{shlex.quote(source_path)}"
+    if recursive:
+        command_text = f"find {shlex.quote(source_path)} -type f -exec {command_text} {{}}"
+
+    run, run_error = create_run_record(
+        "filetype",
+        case_id,
+        source_path,
+        output_path,
+        command_text,
+    )
+    if run_error:
+        return jsonify({"error": run_error}), 400
+
+    start_filetype_run(
+        run["id"],
+        source_path,
+        run["log_path"],
+        output_path,
+        mode,
+        recursive,
+        mismatch_only,
+    )
+
+    return jsonify(
+        {
+            "status": "running",
+            "command": command_text,
+            "output_path": output_path,
+            "run_id": run["id"],
+        }
+    )
 
 
 if __name__ == "__main__":

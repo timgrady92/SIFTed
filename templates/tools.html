@@ -15,21 +15,32 @@
       <div class="hero-text">
         <p class="eyebrow">Tools</p>
         <h1>Choose a category</h1>
-        <p class="lead">Start with a focused workflow and build from there.</p>
+        <p class="lead">Each category groups workflows by what you're trying to accomplish.</p>
       </div>
     </header>
 
     <main class="carving">
+      <section class="start-here">
+        <p class="helper">Start with what you have:</p>
+        <ul class="scenario-list">
+          <li><strong>Disk image, looking for deleted files</strong> — File Carving</li>
+          <li><strong>RAM dump, need to see what was running</strong> — Memory Analysis</li>
+          <li><strong>Host image, building a timeline of activity</strong> — Artifact Triage</li>
+          <li><strong>Specific Windows artifacts to parse</strong> — Artifact Parsing</li>
+          <li><strong>Files or images, need to extract hidden metadata</strong> — Metadata Extraction</li>
+        </ul>
+      </section>
+
       <section class="tool-grid">
         <article class="tool-card primary">
           <div class="tool-header">
             <div>
               <h2>File Carving</h2>
-              <p>Recover files and triage evidence with guided carving tools.</p>
+              <p>Recover deleted or hidden files from disk images.</p>
             </div>
             <span class="tool-status">Ready</span>
           </div>
-          <p class="tool-detail">Foremost and Bulk Extractor workflows live here.</p>
+          <p class="tool-detail">When files are deleted, the data often remains on disk until overwritten. These workflows scan raw images to recover documents, photos, executables, and other files that no longer appear in the filesystem.</p>
           <div class="tool-actions">
             <a class="action" href="/file-carving">Open category</a>
           </div>
@@ -39,11 +50,11 @@
           <div class="tool-header">
             <div>
               <h2>Memory Analysis</h2>
-              <p>Analyze memory images with Volatility 3.</p>
+              <p>See what was running when the RAM was captured.</p>
             </div>
             <span class="tool-status">Ready</span>
           </div>
-          <p class="tool-detail">Start with Volatility triage plugins.</p>
+          <p class="tool-detail">Memory captures preserve processes, network connections, and loaded code that disappear when a machine powers off. These workflows extract that volatile evidence to reveal what was happening at the moment of capture.</p>
           <div class="tool-actions">
             <a class="action" href="/memory">Open category</a>
           </div>
@@ -53,11 +64,11 @@
           <div class="tool-header">
             <div>
               <h2>Artifact Triage</h2>
-              <p>Build timelines from host artifacts and triage faster.</p>
+              <p>Build a timeline of activity from host artifacts.</p>
             </div>
             <span class="tool-status">Ready</span>
           </div>
-          <p class="tool-detail">Plaso timeline workflows for novice-friendly triage.</p>
+          <p class="tool-detail">Operating systems record timestamps everywhere—file access, program execution, user actions. These workflows combine those scattered timestamps into a single chronological view to reconstruct what happened and when.</p>
           <div class="tool-actions">
             <a class="action" href="/artifact-triage">Open category</a>
           </div>
@@ -66,14 +77,28 @@
         <article class="tool-card">
           <div class="tool-header">
             <div>
-              <h2>Eric Zimmerman Toolkit</h2>
-              <p>Parse Windows artifacts into analyst-ready CSV outputs.</p>
+              <h2>Artifact Parsing</h2>
+              <p>Extract evidence from specific Windows artifacts.</p>
             </div>
             <span class="tool-status">Ready</span>
           </div>
-          <p class="tool-detail">Curated parsers for Prefetch, LNK, Event Logs, and more.</p>
+          <p class="tool-detail">Windows stores forensic gold in structured files—program execution history, recently opened files, USB device records, and event logs. These workflows parse those artifacts into readable formats you can search and filter.</p>
           <div class="tool-actions">
             <a class="action" href="/eric-zimmerman">Open category</a>
+          </div>
+        </article>
+
+        <article class="tool-card">
+          <div class="tool-header">
+            <div>
+              <h2>Metadata Extraction</h2>
+              <p>Reveal hidden information embedded in files.</p>
+            </div>
+            <span class="tool-status">Ready</span>
+          </div>
+          <p class="tool-detail">Files contain more than their visible content—GPS coordinates in photos, author names in documents, creation timestamps, and software fingerprints. These workflows extract that metadata to establish provenance, location, and attribution.</p>
+          <div class="tool-actions">
+            <a class="action" href="/metadata-extraction">Open category</a>
           </div>
         </article>
       </section>
