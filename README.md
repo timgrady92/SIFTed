@@ -10,6 +10,7 @@ SIFTed is a guided interface for SANS SIFT workstation workflows. It lets junior
 
 ```bash
 git clone https://www.github.com/timgrady92/SIFTed
+cd SIFTed
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
