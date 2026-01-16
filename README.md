@@ -1,6 +1,6 @@
 # SIFTed
 
-> **Note**: Tool integration is currently in development. Workflows are being introduced slowly and methodically after rigorous testing.
+> **Note**: Tool integration is currently in development. Workflows are being introduced slowly and methodically after rigorous testing. Existing workflows should be treated as experimental at best.
 
 **Training wheels for forensic analysts.**
 
