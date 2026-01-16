@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | Case Results{% if case %} - {{ case.name }}{% endif %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav %}
+    {{ site_nav("cases") }}
+
+    <header class="hero compact">
+      <div class="hero-text">
+        <p class="eyebrow">Cross-Tool Analysis</p>
+        {% if case %}
+          <h1>{{ case.name }}</h1>
+          <p class="lead">Aggregated results from all tools run against this case.</p>
+        {% else %}
+          <h1>Case Results</h1>
+          <p class="lead">{{ error or "View aggregated results for a case." }}</p>
+        {% endif %}
+      </div>
+    </header>
+
+    {% if case %}
+    <main class="single">
+      <!-- Stats Summary -->
+      <section class="card block results-stats">
+        <h2>Analysis Summary</h2>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-value">{{ stats.total_runs }}</span>
+            <span class="stat-label">Total Runs</span>
+          </div>
+          <div class="stat-item success">
+            <span class="stat-value">{{ stats.successful_runs }}</span>
+            <span class="stat-label">Successful</span>
+          </div>
+          <div class="stat-item error">
+            <span class="stat-value">{{ stats.failed_runs }}</span>
+            <span class="stat-label">Failed</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value">{{ stats.tools_used|length }}</span>
+            <span class="stat-label">Tools Used</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value">{{ stats.total_files }}</span>
+            <span class="stat-label">Output Files</span>
+          </div>
+        </div>
+        <div class="tools-used">
+          <span class="tools-label">Tools:</span>
+          {% for tool in stats.tools_used|sort %}
+            <span class="tool-chip">{{ tool }}</span>
+          {% endfor %}
+        </div>
+      </section>
+
+      <!-- Cross-tool Search -->
+      <section class="card block">
+        <h2>Search Across All Results</h2>
+        <p class="helper">Search for keywords, IPs, filenames, or any text across all output files from this case.</p>
+        <div class="cross-search-form">
+          <div class="cross-search-row">
+            <input type="text" id="crossSearchQuery" placeholder="Enter search term..." class="cross-search-input" />
+            <select id="crossSearchTool" class="cross-search-select">
+              <option value="">All tools</option>
+              {% for tool in stats.tools_used|sort %}
+                <option value="{{ tool }}">{{ tool }}</option>
+              {% endfor %}
+            </select>
+            <select id="crossSearchType" class="cross-search-select">
+              <option value="">All file types</option>
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+              <option value="txt">TXT</option>
+              <option value="log">LOG</option>
+            </select>
+            <button class="action" id="crossSearchBtn" type="button">Search</button>
+          </div>
+        </div>
+        <div id="crossSearchResults" class="cross-search-results" hidden>
+          <div class="cross-search-meta">
+            <span id="crossSearchCount"></span>
+            <button class="ghost" id="crossSearchClear" type="button">Clear</button>
+          </div>
+          <div id="crossSearchList" class="cross-search-list"></div>
+        </div>
+        <div id="crossSearchLoading" class="cross-search-loading" hidden>
+          <span>Searching...</span>
+        </div>
+      </section>
+
+      <!-- Results by Tool -->
+      <section class="card block">
+        <div class="results-header">
+          <h2>All Result Files</h2>
+          <div class="results-filters">
+            <input type="text" id="fileFilter" placeholder="Filter files..." class="file-filter-input" />
+            <select id="toolFilter" class="file-filter-select">
+              <option value="">All tools</option>
+              {% for tool in stats.tools_used|sort %}
+                <option value="{{ tool }}">{{ tool }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        {% if result_files %}
+          <div class="results-table-wrap">
+            <table class="data-table results-table" id="resultsTable">
+              <thead>
+                <tr>
+                  <th data-col="tool">Tool</th>
+                  <th data-col="name">File</th>
+                  <th data-col="date">Run Date</th>
+                  <th data-col="status">Status</th>
+                  <th data-col="actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="resultsBody">
+                {% for file in result_files %}
+                  <tr data-tool="{{ file.tool|lower }}" data-name="{{ file.name|lower }}">
+                    <td>
+                      <span class="tool-chip small">{{ file.tool }}</span>
+                    </td>
+                    <td class="file-name">{{ file.name }}</td>
+                    <td class="file-date">{{ file.run_date[:19] if file.run_date else "—" }}</td>
+                    <td>
+                      <span class="run-status-pill small" data-status="{{ file.run_status|lower }}">
+                        {{ file.run_status or "unknown" }}
+                      </span>
+                    </td>
+                    <td class="file-actions">
+                      <a class="ghost small" href="{{ url_for('view_file') }}?path={{ file.path|urlencode }}">View</a>
+                      <a class="ghost small" href="{{ url_for('view_file') }}?path={{ file.path|urlencode }}&view=raw">Raw</a>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="results-footer">
+            <span id="visibleCount">{{ result_files|length }}</span> of {{ result_files|length }} files shown
+          </div>
+        {% else %}
+          <p class="helper">No result files found. Run some tools against this case first.</p>
+        {% endif %}
+      </section>
+
+      <!-- Recent Runs -->
+      <section class="card block">
+        <h2>Recent Runs</h2>
+        {% if runs %}
+          <div class="runs-list">
+            {% for run in runs[:10] %}
+              <div class="run-card">
+                <div class="run-card-header">
+                  <span class="tool-chip">{{ run.tool }}</span>
+                  <span class="run-status-pill" data-status="{{ (run.status or 'logged')|lower }}">
+                    {{ run.status or "logged" }}
+                  </span>
+                </div>
+                <div class="run-card-body">
+                  <div class="run-card-meta">
+                    <span class="run-card-date">{{ run.created_at[:19] if run.created_at else "—" }}</span>
+                  </div>
+                  {% if run.command %}
+                    <code class="run-card-command">{{ run.command[:100] }}{% if run.command|length > 100 %}...{% endif %}</code>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          {% if runs|length > 10 %}
+            <p class="helper">Showing 10 of {{ runs|length }} runs.</p>
+          {% endif %}
+        {% else %}
+          <p class="helper">No runs found for this case.</p>
+        {% endif %}
+      </section>
+
+      <div class="results-nav">
+        <a class="ghost" href="{{ url_for('cases') }}#case-{{ case.id }}">Back to Cases</a>
+      </div>
+    </main>
+    {% else %}
+    <main class="single">
+      <section class="card block">
+        <p class="run-status" data-tone="error">{{ error or "Case not found." }}</p>
+        <a class="ghost" href="{{ url_for('cases') }}">Back to Cases</a>
+      </section>
+    </main>
+    {% endif %}
+
+    {% from "_components.html" import glossary_sidebar, guides_sidebar, active_jobs_drawer %}
+    {{ glossary_sidebar() }}
+    {{ guides_sidebar() }}
+    {{ active_jobs_drawer() }}
+    <footer></footer>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
+    <script src="{{ url_for('static', filename='guides-sidebar.js') }}"></script>
+    <script>
+      (function() {
+        "use strict";
+
+        const caseId = "{{ case.id if case else '' }}";
+
+        // File filtering
+        const fileFilter = document.getElementById("fileFilter");
+        const toolFilter = document.getElementById("toolFilter");
+        const resultsBody = document.getElementById("resultsBody");
+        const visibleCount = document.getElementById("visibleCount");
+
+        function filterFiles() {
+          if (!resultsBody) return;
+
+          const query = (fileFilter?.value || "").toLowerCase();
+          const tool = (toolFilter?.value || "").toLowerCase();
+          const rows = resultsBody.querySelectorAll("tr");
+          let visible = 0;
+
+          rows.forEach(row => {
+            const rowTool = row.dataset.tool || "";
+            const rowName = row.dataset.name || "";
+
+            const matchesTool = !tool || rowTool.includes(tool);
+            const matchesQuery = !query || rowName.includes(query);
+
+            if (matchesTool && matchesQuery) {
+              row.hidden = false;
+              visible++;
+            } else {
+              row.hidden = true;
+            }
+          });
+
+          if (visibleCount) {
+            visibleCount.textContent = visible;
+          }
+        }
+
+        if (fileFilter) fileFilter.addEventListener("input", filterFiles);
+        if (toolFilter) toolFilter.addEventListener("change", filterFiles);
+
+        // Cross-tool search
+        const searchQuery = document.getElementById("crossSearchQuery");
+        const searchTool = document.getElementById("crossSearchTool");
+        const searchType = document.getElementById("crossSearchType");
+        const searchBtn = document.getElementById("crossSearchBtn");
+        const searchResults = document.getElementById("crossSearchResults");
+        const searchList = document.getElementById("crossSearchList");
+        const searchCount = document.getElementById("crossSearchCount");
+        const searchLoading = document.getElementById("crossSearchLoading");
+        const searchClear = document.getElementById("crossSearchClear");
+
+        async function performSearch() {
+          const query = searchQuery?.value.trim();
+          if (!query || !caseId) return;
+
+          const params = new URLSearchParams({ q: query });
+          if (searchTool?.value) params.set("tool", searchTool.value);
+          if (searchType?.value) params.set("type", searchType.value);
+
+          if (searchLoading) searchLoading.hidden = false;
+          if (searchResults) searchResults.hidden = true;
+
+          try {
+            const response = await fetch(`/api/case/${caseId}/search?${params}`);
+            const data = await response.json();
+
+            if (data.error) {
+              if (searchList) searchList.innerHTML = `<p class="helper">${data.error}</p>`;
+            } else if (data.results.length === 0) {
+              if (searchList) searchList.innerHTML = `<p class="helper">No matches found.</p>`;
+            } else {
+              let html = "";
+              data.results.forEach(result => {
+                const escapedContent = result.content
+                  .replace(/&/g, "&amp;")
+                  .replace(/</g, "&lt;")
+                  .replace(/>/g, "&gt;");
+                html += `
+                  <div class="search-result-item">
+                    <div class="search-result-header">
+                      <span class="tool-chip small">${result.tool}</span>
+                      <a href="/view-file?path=${encodeURIComponent(result.path)}&view=raw" class="search-result-file">${result.file}</a>
+                      <span class="search-result-line">Line ${result.line}</span>
+                    </div>
+                    <pre class="search-result-content">${escapedContent}</pre>
+                  </div>
+                `;
+              });
+              if (searchList) searchList.innerHTML = html;
+            }
+
+            if (searchCount) {
+              const truncNote = data.truncated ? " (limit reached)" : "";
+              searchCount.textContent = `${data.total} results found in ${data.files_searched} files${truncNote}`;
+            }
+
+            if (searchResults) searchResults.hidden = false;
+          } catch (err) {
+            console.error("Search error:", err);
+            if (searchList) searchList.innerHTML = `<p class="helper">Search failed. Please try again.</p>`;
+            if (searchResults) searchResults.hidden = false;
+          } finally {
+            if (searchLoading) searchLoading.hidden = true;
+          }
+        }
+
+        if (searchBtn) {
+          searchBtn.addEventListener("click", performSearch);
+        }
+
+        if (searchQuery) {
+          searchQuery.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") performSearch();
+          });
+        }
+
+        if (searchClear) {
+          searchClear.addEventListener("click", () => {
+            if (searchQuery) searchQuery.value = "";
+            if (searchResults) searchResults.hidden = true;
+            if (searchList) searchList.innerHTML = "";
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

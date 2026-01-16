@@ -1,6 +1,7 @@
 /**
  * Table Viewer - Interactive table features for file viewer
- * Features: Column sorting, column visibility toggle, virtual scrolling
+ * Features: Column sorting, column visibility toggle, virtual scrolling,
+ *           global search, column-specific filtering, CSV export
  */
 
 (function () {
@@ -21,6 +22,18 @@
   const columnHideAll = document.getElementById("columnHideAll");
   const rowCountSpan = document.getElementById("rowCount");
   const columnCountSpan = document.getElementById("columnCount");
+
+  // New elements for search/filter/export
+  const globalSearchInput = document.getElementById("globalSearch");
+  const clearSearchBtn = document.getElementById("clearSearch");
+  const filterCountSpan = document.getElementById("filterCount");
+  const columnFilterBtn = document.getElementById("columnFilterBtn");
+  const columnFiltersPanel = document.getElementById("columnFiltersPanel");
+  const columnFiltersClose = document.getElementById("columnFiltersClose");
+  const columnFiltersList = document.getElementById("columnFiltersList");
+  const clearAllFiltersBtn = document.getElementById("clearAllFilters");
+  const applyFiltersBtn = document.getElementById("applyFilters");
+  const exportCsvBtn = document.getElementById("exportCsvBtn");
 
   function setupPathCopy() {
     if (!viewerPath || !copyViewerPath) return;
@@ -74,11 +87,26 @@
   let currentSortCol = null;
   let currentSortDir = "none";
 
-  // All rows data (for client-side sorting after loading)
+  // All rows data (for client-side sorting/filtering after loading)
   let allRowsData = [];
+  let filteredRowsData = [];
 
-  // Initialize: capture initial rows data
+  // Filter state
+  let globalSearchTerm = "";
+  let columnFilters = {}; // { colIndex: { operator: 'contains', value: 'search' } }
+  let isFiltered = false;
+
+  // Column names for filter labels
+  let columnNames = [];
+
+  // Initialize: capture initial rows data and column names
   function initRowsData() {
+    const headers = dataTable.querySelectorAll("thead th");
+    headers.forEach((th) => {
+      const label = th.querySelector(".th-label");
+      columnNames.push(label ? label.textContent : "");
+    });
+
     const rows = tableBody.querySelectorAll("tr");
     rows.forEach((row) => {
       const cells = row.querySelectorAll("td");
@@ -86,6 +114,7 @@
       cells.forEach((cell) => rowData.push(cell.textContent));
       allRowsData.push(rowData);
     });
+    filteredRowsData = [...allRowsData];
   }
 
   // ==================== COLUMN SORTING ====================
@@ -124,17 +153,15 @@
     currentSortCol = newSort === "none" ? null : colIndex;
     currentSortDir = newSort;
 
-    sortTable(colIndex, newSort);
+    sortAndRender();
   }
 
-  function sortTable(colIndex, direction) {
-    if (direction === "none") {
-      // Restore original order
-      renderRows(allRowsData);
-      return;
+  function sortData(data, colIndex, direction) {
+    if (direction === "none" || colIndex === null) {
+      return data;
     }
 
-    const sortedData = [...allRowsData].sort((a, b) => {
+    return [...data].sort((a, b) => {
       const valA = a[colIndex] || "";
       const valB = b[colIndex] || "";
 
@@ -154,11 +181,15 @@
       if (strA > strB) return direction === "asc" ? 1 : -1;
       return 0;
     });
+  }
 
+  function sortAndRender() {
+    const dataToSort = isFiltered ? filteredRowsData : allRowsData;
+    const sortedData = sortData(dataToSort, currentSortCol, currentSortDir);
     renderRows(sortedData);
   }
 
-  function renderRows(rowsData) {
+  function renderRows(rowsData, highlightTerm = "") {
     const hiddenCols = getHiddenColumns();
     tableBody.innerHTML = "";
 
@@ -167,7 +198,14 @@
       row.forEach((cell, idx) => {
         const td = document.createElement("td");
         td.dataset.colIndex = idx;
-        td.textContent = cell;
+
+        // Highlight search matches if there's a search term
+        if (highlightTerm && cell) {
+          td.innerHTML = highlightMatches(cell, highlightTerm);
+        } else {
+          td.textContent = cell;
+        }
+
         if (hiddenCols.has(idx)) {
           td.hidden = true;
         }
@@ -175,8 +213,297 @@
       });
       tableBody.appendChild(tr);
     });
+    updateRowCountDisplay();
     updateColumnCount();
     updateColumnToggleLabel();
+  }
+
+  function highlightMatches(text, term) {
+    if (!term) return escapeHtml(text);
+    const escaped = escapeHtml(text);
+    const regex = new RegExp(`(${escapeRegex(term)})`, 'gi');
+    return escaped.replace(regex, '<span class="search-match">$1</span>');
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // ==================== GLOBAL SEARCH ====================
+
+  function setupGlobalSearch() {
+    if (!globalSearchInput) return;
+
+    let debounceTimeout;
+    globalSearchInput.addEventListener("input", (e) => {
+      clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => {
+        globalSearchTerm = e.target.value.trim().toLowerCase();
+        applyAllFilters();
+
+        // Show/hide clear button
+        if (clearSearchBtn) {
+          clearSearchBtn.hidden = !globalSearchTerm;
+        }
+      }, 150);
+    });
+
+    if (clearSearchBtn) {
+      clearSearchBtn.addEventListener("click", () => {
+        globalSearchInput.value = "";
+        globalSearchTerm = "";
+        clearSearchBtn.hidden = true;
+        applyAllFilters();
+      });
+    }
+  }
+
+  // ==================== COLUMN FILTERING ====================
+
+  function setupColumnFilters() {
+    if (!columnFilterBtn || !columnFiltersPanel) return;
+
+    columnFilterBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      columnFiltersPanel.hidden = !columnFiltersPanel.hidden;
+      if (!columnFiltersPanel.hidden) {
+        buildColumnFilterUI();
+      }
+    });
+
+    if (columnFiltersClose) {
+      columnFiltersClose.addEventListener("click", () => {
+        columnFiltersPanel.hidden = true;
+      });
+    }
+
+    if (clearAllFiltersBtn) {
+      clearAllFiltersBtn.addEventListener("click", () => {
+        columnFilters = {};
+        globalSearchTerm = "";
+        if (globalSearchInput) globalSearchInput.value = "";
+        if (clearSearchBtn) clearSearchBtn.hidden = true;
+        buildColumnFilterUI();
+        applyAllFilters();
+      });
+    }
+
+    if (applyFiltersBtn) {
+      applyFiltersBtn.addEventListener("click", () => {
+        collectColumnFilters();
+        applyAllFilters();
+        columnFiltersPanel.hidden = true;
+      });
+    }
+
+    // Close on outside click
+    document.addEventListener("click", (e) => {
+      if (columnFiltersPanel && !columnFiltersPanel.hidden &&
+          !columnFiltersPanel.contains(e.target) &&
+          e.target !== columnFilterBtn) {
+        columnFiltersPanel.hidden = true;
+      }
+    });
+  }
+
+  function buildColumnFilterUI() {
+    if (!columnFiltersList) return;
+    columnFiltersList.innerHTML = "";
+
+    columnNames.forEach((name, idx) => {
+      if (!name) return;
+
+      const existing = columnFilters[idx] || { operator: "contains", value: "" };
+      const isActive = existing.value.trim() !== "";
+
+      const item = document.createElement("div");
+      item.className = "column-filter-item" + (isActive ? " active" : "");
+      item.innerHTML = `
+        <label>${escapeHtml(name)}</label>
+        <div style="display: flex; gap: 6px;">
+          <select data-col="${idx}" class="filter-operator" style="width: 100px;">
+            <option value="contains" ${existing.operator === "contains" ? "selected" : ""}>Contains</option>
+            <option value="equals" ${existing.operator === "equals" ? "selected" : ""}>Equals</option>
+            <option value="starts" ${existing.operator === "starts" ? "selected" : ""}>Starts with</option>
+            <option value="ends" ${existing.operator === "ends" ? "selected" : ""}>Ends with</option>
+            <option value="gt" ${existing.operator === "gt" ? "selected" : ""}>&gt; (greater)</option>
+            <option value="lt" ${existing.operator === "lt" ? "selected" : ""}>&lt; (less)</option>
+            <option value="empty" ${existing.operator === "empty" ? "selected" : ""}>Is empty</option>
+            <option value="notempty" ${existing.operator === "notempty" ? "selected" : ""}>Not empty</option>
+          </select>
+          <input type="text" data-col="${idx}" class="filter-value" value="${escapeHtml(existing.value)}" placeholder="Filter value..." style="flex: 1;" />
+        </div>
+      `;
+      columnFiltersList.appendChild(item);
+    });
+  }
+
+  function collectColumnFilters() {
+    columnFilters = {};
+    if (!columnFiltersList) return;
+
+    const operators = columnFiltersList.querySelectorAll(".filter-operator");
+    const values = columnFiltersList.querySelectorAll(".filter-value");
+
+    operators.forEach((select) => {
+      const colIdx = parseInt(select.dataset.col, 10);
+      const operator = select.value;
+      const valueInput = columnFiltersList.querySelector(`.filter-value[data-col="${colIdx}"]`);
+      const value = valueInput ? valueInput.value.trim() : "";
+
+      // Only add filter if there's a value (unless operator is empty/notempty)
+      if (value || operator === "empty" || operator === "notempty") {
+        columnFilters[colIdx] = { operator, value };
+      }
+    });
+  }
+
+  function applyAllFilters() {
+    // Start with all data
+    let result = [...allRowsData];
+
+    // Apply global search
+    if (globalSearchTerm) {
+      result = result.filter(row => {
+        return row.some(cell =>
+          (cell || "").toLowerCase().includes(globalSearchTerm)
+        );
+      });
+    }
+
+    // Apply column filters
+    Object.entries(columnFilters).forEach(([colIdx, filter]) => {
+      const idx = parseInt(colIdx, 10);
+      result = result.filter(row => {
+        const cellValue = (row[idx] || "").toLowerCase();
+        const filterValue = filter.value.toLowerCase();
+
+        switch (filter.operator) {
+          case "contains":
+            return cellValue.includes(filterValue);
+          case "equals":
+            return cellValue === filterValue;
+          case "starts":
+            return cellValue.startsWith(filterValue);
+          case "ends":
+            return cellValue.endsWith(filterValue);
+          case "gt":
+            const numA = parseFloat(row[idx]);
+            const numFilterA = parseFloat(filter.value);
+            return !isNaN(numA) && !isNaN(numFilterA) && numA > numFilterA;
+          case "lt":
+            const numB = parseFloat(row[idx]);
+            const numFilterB = parseFloat(filter.value);
+            return !isNaN(numB) && !isNaN(numFilterB) && numB < numFilterB;
+          case "empty":
+            return !row[idx] || row[idx].trim() === "";
+          case "notempty":
+            return row[idx] && row[idx].trim() !== "";
+          default:
+            return true;
+        }
+      });
+    });
+
+    filteredRowsData = result;
+    isFiltered = globalSearchTerm || Object.keys(columnFilters).length > 0;
+
+    // Re-apply sorting
+    const dataToRender = sortData(filteredRowsData, currentSortCol, currentSortDir);
+    renderRows(dataToRender, globalSearchTerm);
+
+    updateFilterCount();
+  }
+
+  function updateFilterCount() {
+    if (!filterCountSpan) return;
+
+    const activeFilters = Object.keys(columnFilters).length + (globalSearchTerm ? 1 : 0);
+
+    if (isFiltered) {
+      filterCountSpan.hidden = false;
+      filterCountSpan.textContent = `${filteredRowsData.length} of ${allRowsData.length} rows (${activeFilters} filter${activeFilters !== 1 ? 's' : ''} active)`;
+    } else {
+      filterCountSpan.hidden = true;
+    }
+  }
+
+  function updateRowCountDisplay() {
+    if (!rowCountSpan) return;
+
+    if (isFiltered) {
+      rowCountSpan.textContent = `${filteredRowsData.length} rows (filtered)`;
+    } else if (loadedRows >= totalRows) {
+      rowCountSpan.textContent = `${totalRows} rows`;
+    } else {
+      rowCountSpan.textContent = `Showing ${loadedRows} of ${totalRows} rows (scroll for more)`;
+    }
+  }
+
+  // ==================== CSV EXPORT ====================
+
+  function setupExport() {
+    if (!exportCsvBtn) return;
+
+    exportCsvBtn.addEventListener("click", () => {
+      exportToCsv();
+    });
+  }
+
+  function exportToCsv() {
+    const visibleCols = [];
+    const hiddenCols = getHiddenColumns();
+
+    columnNames.forEach((name, idx) => {
+      if (!hiddenCols.has(idx)) {
+        visibleCols.push({ name, idx });
+      }
+    });
+
+    // Use filtered data if filtering is active
+    const dataToExport = isFiltered ? filteredRowsData : allRowsData;
+
+    // Build CSV content
+    const lines = [];
+
+    // Header row
+    lines.push(visibleCols.map(col => csvEscape(col.name)).join(","));
+
+    // Data rows
+    dataToExport.forEach(row => {
+      const values = visibleCols.map(col => csvEscape(row[col.idx] || ""));
+      lines.push(values.join(","));
+    });
+
+    const csvContent = lines.join("\n");
+
+    // Download
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const fileName = filePath ? filePath.split("/").pop().replace(/\.[^.]+$/, "") + "_export.csv" : "export.csv";
+
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  }
+
+  function csvEscape(value) {
+    if (value === null || value === undefined) return "";
+    const str = String(value);
+    if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+      return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
   }
 
   // ==================== COLUMN VISIBILITY ====================
@@ -346,49 +673,22 @@
         return;
       }
 
-      // Append new rows
-      const hiddenCols = getHiddenColumns();
+      // Append new rows to allRowsData
       data.rows.forEach((row) => {
         allRowsData.push(row);
-
-        const tr = document.createElement("tr");
-        row.forEach((cell, idx) => {
-          const td = document.createElement("td");
-          td.dataset.colIndex = idx;
-          td.textContent = cell;
-          if (hiddenCols.has(idx)) {
-            td.hidden = true;
-          }
-          tr.appendChild(td);
-        });
-        tableBody.appendChild(tr);
       });
 
       loadedRows += data.rows.length;
       hasMore = data.has_more;
 
-      // Update row count display
-      updateRowCount();
+      // Re-apply filters and sorting
+      applyAllFilters();
 
-      // Re-apply sorting if active
-      if (currentSortCol !== null && currentSortDir !== "none") {
-        sortTable(currentSortCol, currentSortDir);
-      }
     } catch (err) {
       console.error("Error loading more rows:", err);
     } finally {
       isLoading = false;
       if (tableLoading) tableLoading.hidden = true;
-    }
-  }
-
-  function updateRowCount() {
-    if (rowCountSpan) {
-      if (loadedRows >= totalRows) {
-        rowCountSpan.textContent = `${totalRows} rows`;
-      } else {
-        rowCountSpan.textContent = `Showing ${loadedRows} of ${totalRows} rows (scroll for more)`;
-      }
     }
   }
 
@@ -399,6 +699,9 @@
     setupSorting();
     setupColumnToggle();
     setupVirtualScroll();
+    setupGlobalSearch();
+    setupColumnFilters();
+    setupExport();
     updateColumnCount();
     updateColumnToggleLabel();
   }

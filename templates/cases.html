@@ -99,6 +99,7 @@
                   {% elif case.hash_error %}
                     <span class="case-meta-pill case-hash warn">{{ case.hash_error }}</span>
                   {% endif %}
+                  <a class="case-meta-pill case-results-link" href="{{ url_for('case_results', case_id=case.id) }}">View All Results</a>
                 </div>
                 {% if case.summary %}
                   <p class="case-summary">{{ case.summary }}</p>

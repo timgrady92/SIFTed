@@ -779,7 +779,7 @@ def build_table_from_list(items):
     return ["Value"], [[item] for item in items]
 
 
-def parse_csv_table(path, row_limit=500, max_bytes=10 * 1024 * 1024):
+def parse_csv_table(path, row_limit=500, max_bytes=10 * 1024 * 1024, row_offset=0):
     """Parse a CSV file into table data structure."""
     try:
         file_size = os.path.getsize(path)
@@ -803,16 +803,267 @@ def parse_csv_table(path, row_limit=500, max_bytes=10 * 1024 * 1024):
     columns = rows_data[0] if rows_data else []
     rows = rows_data[1:] if len(rows_data) > 1 else []
 
+    row_offset = max(0, row_offset)
+    row_limit = max(0, row_limit)
     total_rows = len(rows)
-    truncated = total_rows > row_limit
-    sliced_rows = rows[:row_limit]
+    start = min(row_offset, total_rows)
+    end = start + row_limit
+    sliced_rows = rows[start:end]
+    truncated = total_rows > start + len(sliced_rows)
     columns = [coerce_table_value(col) for col in columns]
     sliced_rows = [[coerce_table_value(value) for value in row] for row in sliced_rows]
 
     return {"columns": columns, "rows": sliced_rows}, total_rows, truncated
 
 
-def parse_json_table(path, row_limit=500, max_bytes=10 * 1024 * 1024):
+def parse_strings_table(path, row_limit=500, max_bytes=50 * 1024 * 1024, row_offset=0):
+    """Parse strings output (with optional offsets) into table data structure."""
+    try:
+        file_size = os.path.getsize(path)
+    except OSError:
+        raise ValueError("Unable to read file size.")
+    if file_size > max_bytes:
+        size_mb = file_size / (1024 * 1024)
+        raise ValueError(f"File is too large for table view ({size_mb:.1f} MB).")
+
+    # Pattern for strings with hex offset (e.g., "   1234 some string here")
+    offset_pattern = re.compile(r"^\s*([0-9a-fA-F]+)\s+(.+)$")
+
+    row_offset = max(0, row_offset)
+    row_limit = max(0, row_limit)
+    rows = []
+    has_offsets = None  # Will be determined from first line
+    total_rows = 0
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            line_num = 0
+            for line in handle:
+                line_num += 1
+                line = line.rstrip("\n\r")
+                if not line:
+                    continue
+
+                match = offset_pattern.match(line)
+                if has_offsets is None:
+                    has_offsets = bool(match)
+
+                if has_offsets and match:
+                    file_offset = match.group(1)
+                    content = match.group(2)
+                    row = [str(line_num), file_offset, content]
+                else:
+                    row = [str(line_num), line]
+
+                row_index = total_rows
+                if row_index >= row_offset and len(rows) < row_limit:
+                    rows.append(row)
+                total_rows += 1
+    except OSError:
+        raise ValueError("Unable to read file.")
+
+    if total_rows == 0:
+        raise ValueError("No string data found.")
+
+    if has_offsets:
+        columns = ["Line", "Offset (hex)", "String"]
+    else:
+        columns = ["Line", "String"]
+
+    truncated = total_rows > row_offset + len(rows)
+    columns = [coerce_table_value(col) for col in columns]
+    rows = [[coerce_table_value(value) for value in row] for row in rows]
+
+    return {"columns": columns, "rows": rows}, total_rows, truncated
+
+
+def parse_foremost_audit(path, row_limit=500, max_bytes=10 * 1024 * 1024, row_offset=0):
+    """Parse Foremost audit.txt into table data structure."""
+    try:
+        file_size = os.path.getsize(path)
+    except OSError:
+        raise ValueError("Unable to read file size.")
+    if file_size > max_bytes:
+        size_mb = file_size / (1024 * 1024)
+        raise ValueError(f"File is too large for table view ({size_mb:.1f} MB).")
+
+    # Pattern for carved files: "   12345:   filename.ext"
+    file_pattern = re.compile(r"^\s*(\d+):\s+(\S+)")
+    # Section header pattern
+    section_pattern = re.compile(r"^Foremost.*|^Audit File|^Invocation:|^Output directory:|^Configuration file:|^-----|^File:")
+
+    row_offset = max(0, row_offset)
+    row_limit = max(0, row_limit)
+    rows = []
+    current_type = "unknown"
+    total_rows = 0
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                line = line.rstrip("\n\r")
+
+                # Skip headers and section markers
+                if section_pattern.match(line) or not line.strip():
+                    continue
+
+                # Check for file type sections (e.g., "jpg:")
+                if line.endswith(":") and not line.startswith(" "):
+                    current_type = line[:-1].strip()
+                    continue
+
+                # Parse carved file entries
+                match = file_pattern.match(line)
+                if match:
+                    file_offset = match.group(1)
+                    filename = match.group(2)
+                    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+                    row = [current_type, file_offset, filename, ext]
+                    row_index = total_rows
+                    if row_index >= row_offset and len(rows) < row_limit:
+                        rows.append(row)
+                    total_rows += 1
+    except OSError:
+        raise ValueError("Unable to read file.")
+
+    if total_rows == 0:
+        raise ValueError("No carved files found in audit.")
+
+    columns = ["Type", "Offset", "Filename", "Extension"]
+    truncated = total_rows > row_offset + len(rows)
+    columns = [coerce_table_value(col) for col in columns]
+    rows = [[coerce_table_value(value) for value in row] for row in rows]
+
+    return {"columns": columns, "rows": rows}, total_rows, truncated
+
+
+def parse_bulk_extractor_feature(path, row_limit=500, max_bytes=50 * 1024 * 1024, row_offset=0):
+    """Parse Bulk Extractor feature file into table data structure."""
+    try:
+        file_size = os.path.getsize(path)
+    except OSError:
+        raise ValueError("Unable to read file size.")
+    if file_size > max_bytes:
+        size_mb = file_size / (1024 * 1024)
+        raise ValueError(f"File is too large for table view ({size_mb:.1f} MB).")
+
+    row_offset = max(0, row_offset)
+    row_limit = max(0, row_limit)
+    rows = []
+    is_histogram = False
+    total_rows = 0
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                line = line.rstrip("\n\r")
+
+                # Skip comments
+                if line.startswith("#"):
+                    continue
+                if not line:
+                    continue
+
+                parts = line.split("\t")
+
+                row = None
+                # Histogram format: "n=COUNT\tVALUE"
+                if parts and parts[0].startswith("n="):
+                    is_histogram = True
+                    count = parts[0][2:]  # Remove "n=" prefix
+                    value = parts[1] if len(parts) > 1 else ""
+                    row = [count, value]
+                # Standard feature format: "OFFSET\tFEATURE\tCONTEXT"
+                elif len(parts) >= 2:
+                    file_offset = parts[0]
+                    feature = parts[1]
+                    context = parts[2] if len(parts) > 2 else ""
+                    row = [file_offset, feature, context]
+                elif len(parts) == 1 and parts[0]:
+                    row = [parts[0], "", ""]
+
+                if row is not None:
+                    row_index = total_rows
+                    if row_index >= row_offset and len(rows) < row_limit:
+                        rows.append(row)
+                    total_rows += 1
+    except OSError:
+        raise ValueError("Unable to read file.")
+
+    if total_rows == 0:
+        raise ValueError("No feature data found.")
+
+    if is_histogram:
+        columns = ["Count", "Value"]
+    else:
+        columns = ["Offset", "Feature", "Context"]
+
+    truncated = total_rows > row_offset + len(rows)
+    columns = [coerce_table_value(col) for col in columns]
+    rows = [[coerce_table_value(value) for value in row] for row in rows]
+
+    return {"columns": columns, "rows": rows}, total_rows, truncated
+
+
+def detect_text_table_format(path):
+    """Detect if a text file can be parsed as a table and return the format type."""
+    basename = os.path.basename(path).lower()
+
+    # Foremost/Scalpel audit files
+    if basename in ("audit.txt", "foremost.log") or basename.startswith("audit_"):
+        return "foremost_audit"
+
+    # Bulk Extractor feature files (common patterns)
+    bulk_patterns = [
+        "email", "url", "domain", "telephone", "ccn", "ssn", "ip",
+        "ether", "exif", "gps", "json", "kml", "rar", "zip", "pdf",
+        "winpe", "winlnk", "winprefetch", "httplogs", "wordlist",
+        "aes_keys", "facebook", "find", "hex", "pii", "vcard"
+    ]
+
+    # Check if it looks like a bulk_extractor output
+    for pattern in bulk_patterns:
+        if pattern in basename:
+            # Verify it's tab-separated or histogram format
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    for line in f:
+                        if line.startswith("#"):
+                            continue
+                        if "\t" in line or line.startswith("n="):
+                            return "bulk_extractor"
+                        break
+            except OSError:
+                pass
+            break
+
+    # Strings output detection
+    if basename == "strings.txt" or basename.endswith("_strings.txt"):
+        return "strings"
+
+    # Generic strings detection: check for strings-like output
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            line_count = 0
+            offset_count = 0
+            for line in f:
+                line_count += 1
+                if line_count > 20:
+                    break
+                # Check for hex offset pattern
+                if re.match(r"^\s*[0-9a-fA-F]+\s+", line):
+                    offset_count += 1
+
+            # If most lines have offsets, it's likely strings output
+            if line_count > 0 and offset_count / line_count > 0.7:
+                return "strings"
+    except OSError:
+        pass
+
+    return None
+
+
+def parse_json_table(path, row_limit=500, max_bytes=10 * 1024 * 1024, row_offset=0):
     try:
         file_size = os.path.getsize(path)
     except OSError:
@@ -857,16 +1108,20 @@ def parse_json_table(path, row_limit=500, max_bytes=10 * 1024 * 1024):
     else:
         columns, rows = ["Value"], [[data]]
 
+    row_offset = max(0, row_offset)
+    row_limit = max(0, row_limit)
     total_rows = len(rows)
-    truncated = total_rows > row_limit
-    sliced_rows = rows[:row_limit]
+    start = min(row_offset, total_rows)
+    end = start + row_limit
+    sliced_rows = rows[start:end]
+    truncated = total_rows > start + len(sliced_rows)
     columns = [coerce_table_value(col) for col in columns]
     sliced_rows = [[coerce_table_value(value) for value in row] for row in sliced_rows]
     return {"columns": columns, "rows": sliced_rows}, total_rows, truncated
 
 
 def list_directory_files(directory, limit=RESULT_FILE_LIMIT):
-    if limit <= 0:
+    if limit is not None and limit <= 0:
         return [], False
     if not directory or not os.path.isdir(directory):
         return [], False
@@ -883,13 +1138,15 @@ def list_directory_files(directory, limit=RESULT_FILE_LIMIT):
                 if not is_path_allowed(entry.path, OUTPUT_ROOTS):
                     continue
                 files.append({"name": entry.name, "path": entry.path})
-                if len(files) > limit:
+                if limit is not None and len(files) > limit:
                     truncated = True
                     break
     except OSError:
         return [], False
     files.sort(key=lambda item: item["name"].lower())
-    return files[:limit], truncated
+    if limit is not None:
+        return files[:limit], truncated
+    return files, truncated
 
 
 def list_result_files(output_path, limit=RESULT_FILE_LIMIT):
@@ -934,16 +1191,16 @@ def build_run_manifest(run, limit=RESULT_FILE_LIMIT):
 
     output_path = run.get("output_path") or ""
     if output_path:
-        remaining = max(0, limit - len(files))
-        if run.get("tool") == "volatility" and remaining:
+        remaining = None if limit is None else max(0, limit - len(files))
+        if run.get("tool") == "volatility" and (remaining is None or remaining):
             result_files, result_truncated = list_result_files(output_path, limit=remaining)
             add_list(result_files, result_truncated)
-            remaining = max(0, limit - len(files))
-        if remaining:
+            remaining = None if limit is None else max(0, limit - len(files))
+        if remaining is None or remaining:
             root_files, root_truncated = list_directory_files(output_path, limit=remaining)
             add_list(root_files, root_truncated)
 
-    if len(files) > limit:
+    if limit is not None and len(files) > limit:
         truncated = True
         files = files[:limit]
 
@@ -2059,6 +2316,166 @@ def cases():
     return render_template("cases.html", cases=cases, runs_by_case=grouped_runs)
 
 
+@app.route("/case/<case_id>/results")
+def case_results(case_id):
+    """Aggregated results view for a case - shows all tool outputs in one place."""
+    cases = load_cases()
+    case = None
+    for c in cases:
+        if c.get("id") == case_id:
+            case = c
+            break
+
+    if not case:
+        return render_template(
+            "case_results.html",
+            case=None,
+            error="Case not found.",
+            runs=[],
+            result_files=[],
+            stats={},
+        )
+
+    runs = load_runs()
+    case_runs = [run for run in runs if run.get("case_id") == case_id]
+
+    # Sort by date (newest first)
+    case_runs.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+
+    # Build result files from all runs
+    all_result_files = []
+    stats = {
+        "total_runs": len(case_runs),
+        "successful_runs": 0,
+        "failed_runs": 0,
+        "tools_used": set(),
+        "total_files": 0,
+    }
+
+    for run in case_runs:
+        tool = run.get("tool", "unknown")
+        stats["tools_used"].add(tool)
+
+        if run.get("status") == "success":
+            stats["successful_runs"] += 1
+        elif run.get("status") == "error":
+            stats["failed_runs"] += 1
+
+        # Get result files for this run
+        files, truncated = build_run_manifest(run)
+        for f in files:
+            f["tool"] = tool
+            f["run_id"] = run.get("id")
+            f["run_status"] = run.get("status", "unknown")
+            f["run_date"] = run.get("created_at", "")
+            all_result_files.append(f)
+
+        stats["total_files"] += len(files)
+
+    stats["tools_used"] = list(stats["tools_used"])
+
+    return render_template(
+        "case_results.html",
+        case=case,
+        error="",
+        runs=case_runs,
+        result_files=all_result_files,
+        stats=stats,
+    )
+
+
+@app.route("/api/case/<case_id>/search")
+def case_search(case_id):
+    """Search across all result files in a case."""
+    query = request.args.get("q", "").strip().lower()
+    file_type = request.args.get("type", "").strip().lower()
+    tool_filter = request.args.get("tool", "").strip().lower()
+    limit = request.args.get("limit", 100, type=int)
+    limit = min(max(1, limit), 500)
+
+    if not query:
+        return jsonify({"error": "Search query required."}), 400
+
+    cases = load_cases()
+    case = None
+    for c in cases:
+        if c.get("id") == case_id:
+            case = c
+            break
+
+    if not case:
+        return jsonify({"error": "Case not found."}), 404
+
+    runs = load_runs()
+    case_runs = [run for run in runs if run.get("case_id") == case_id]
+
+    results = []
+    files_searched = 0
+
+    for run in case_runs:
+        tool = run.get("tool", "unknown").lower()
+
+        # Apply tool filter if specified
+        if tool_filter and tool_filter not in tool:
+            continue
+
+        files, _ = build_run_manifest(run, limit=None)
+
+        for f in files:
+            file_path = f.get("path", "")
+            file_name = f.get("name", "").lower()
+
+            # Apply file type filter
+            if file_type:
+                if not file_name.endswith(f".{file_type}"):
+                    continue
+
+            # Skip non-text files
+            if not file_name.endswith((".txt", ".csv", ".json", ".log")):
+                continue
+
+            if not is_path_allowed(file_path, ALLOWED_PATHS):
+                continue
+
+            if not os.path.isfile(file_path):
+                continue
+
+            files_searched += 1
+
+            # Search file contents
+            try:
+                with open(file_path, "r", encoding="utf-8", errors="replace") as handle:
+                    line_num = 0
+                    for line in handle:
+                        line_num += 1
+                        if query in line.lower():
+                            results.append({
+                                "file": f.get("name"),
+                                "path": file_path,
+                                "tool": run.get("tool"),
+                                "line": line_num,
+                                "content": line.strip()[:500],  # Truncate long lines
+                            })
+
+                            if len(results) >= limit:
+                                break
+                    if len(results) >= limit:
+                        break
+            except OSError:
+                continue
+
+        if len(results) >= limit:
+            break
+
+    return jsonify({
+        "query": query,
+        "results": results,
+        "total": len(results),
+        "truncated": len(results) >= limit,
+        "files_searched": files_searched,
+    })
+
+
 @app.route("/api/run", methods=["POST"])
 def log_run():
     payload = request.get_json(force=True, silent=True) or {}
@@ -2729,9 +3146,19 @@ def view_file():
     lower_target = target.lower() if target else ""
     is_json = lower_target.endswith(".json")
     is_csv = lower_target.endswith(".csv")
-    table_available = is_json or is_csv
+    is_txt = lower_target.endswith(".txt")
 
-    # Default to table view for structured data (JSON, CSV), raw for others
+    # Detect text file format for table parsing
+    text_format = None
+    if is_txt and target:
+        try:
+            text_format = detect_text_table_format(target)
+        except Exception:
+            text_format = None
+
+    table_available = is_json or is_csv or bool(text_format)
+
+    # Default to table view for structured data, raw for others
     if view_param:
         view_mode = view_param
     else:
@@ -2756,7 +3183,17 @@ def view_file():
     lower_target = target.lower()
     is_json = lower_target.endswith(".json")
     is_csv = lower_target.endswith(".csv")
-    table_available = is_json or is_csv
+    is_txt = lower_target.endswith(".txt")
+
+    # Re-detect text format after normalization
+    text_format = None
+    if is_txt:
+        try:
+            text_format = detect_text_table_format(target)
+        except Exception:
+            text_format = None
+
+    table_available = is_json or is_csv or bool(text_format)
 
     # Re-evaluate default view mode after path normalization
     if not view_param:
@@ -2798,14 +3235,22 @@ def view_file():
 
     if view_mode == "table":
         if not table_available:
-            table_error = "Table view is only available for JSON and CSV files."
+            table_error = "Table view is only available for JSON, CSV, and supported text files."
         else:
             try:
                 # Load initial 100 rows for virtual scroll (50 per batch after)
                 if is_csv:
                     table_data, table_total, table_truncated = parse_csv_table(target, row_limit=100)
-                else:
+                elif is_json:
                     table_data, table_total, table_truncated = parse_json_table(target, row_limit=100)
+                elif text_format == "strings":
+                    table_data, table_total, table_truncated = parse_strings_table(target, row_limit=100)
+                elif text_format == "foremost_audit":
+                    table_data, table_total, table_truncated = parse_foremost_audit(target, row_limit=100)
+                elif text_format == "bulk_extractor":
+                    table_data, table_total, table_truncated = parse_bulk_extractor_feature(target, row_limit=100)
+                else:
+                    table_error = "Unable to parse file as table."
             except (ValueError, json.JSONDecodeError) as exc:
                 table_error = str(exc)
             except OSError:
@@ -2864,9 +3309,18 @@ def api_table_rows():
     lower_target = target.lower()
     is_json = lower_target.endswith(".json")
     is_csv = lower_target.endswith(".csv")
+    is_txt = lower_target.endswith(".txt")
 
-    if not (is_json or is_csv):
-        return jsonify({"error": "Only JSON and CSV files supported."}), 400
+    # Detect text file format
+    text_format = None
+    if is_txt:
+        try:
+            text_format = detect_text_table_format(target)
+        except Exception:
+            text_format = None
+
+    if not (is_json or is_csv or text_format):
+        return jsonify({"error": "Only JSON, CSV, and supported text files allowed."}), 400
 
     if not is_path_allowed(target, ALLOWED_PATHS):
         return jsonify({"error": "Access denied."}), 403
@@ -2875,14 +3329,41 @@ def api_table_rows():
         return jsonify({"error": "File not found."}), 404
 
     try:
+        # Parse window for the requested offset/limit while counting full rows.
         if is_csv:
-            # Parse CSV with high row limit to get all rows, then slice
-            table_data, total_rows, _ = parse_csv_table(target, row_limit=100000)
+            table_data, total_rows, _ = parse_csv_table(
+                target,
+                row_limit=limit,
+                row_offset=offset,
+            )
+        elif is_json:
+            table_data, total_rows, _ = parse_json_table(
+                target,
+                row_limit=limit,
+                row_offset=offset,
+            )
+        elif text_format == "strings":
+            table_data, total_rows, _ = parse_strings_table(
+                target,
+                row_limit=limit,
+                row_offset=offset,
+            )
+        elif text_format == "foremost_audit":
+            table_data, total_rows, _ = parse_foremost_audit(
+                target,
+                row_limit=limit,
+                row_offset=offset,
+            )
+        elif text_format == "bulk_extractor":
+            table_data, total_rows, _ = parse_bulk_extractor_feature(
+                target,
+                row_limit=limit,
+                row_offset=offset,
+            )
         else:
-            table_data, total_rows, _ = parse_json_table(target, row_limit=100000)
+            return jsonify({"error": "Unable to parse file format."}), 400
 
-        all_rows = table_data.get("rows", [])
-        sliced_rows = all_rows[offset:offset + limit]
+        sliced_rows = table_data.get("rows", [])
 
         return jsonify({
             "columns": table_data.get("columns", []),
@@ -2890,7 +3371,7 @@ def api_table_rows():
             "offset": offset,
             "limit": limit,
             "total": total_rows,
-            "has_more": offset + limit < total_rows,
+            "has_more": offset + len(sliced_rows) < total_rows,
         })
     except (ValueError, json.JSONDecodeError) as exc:
         return jsonify({"error": str(exc)}), 400

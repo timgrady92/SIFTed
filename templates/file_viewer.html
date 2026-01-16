@@ -49,10 +49,30 @@
                     <span class="table-row-count" id="rowCount">{{ table_total }} rows</span>
                   {% endif %}
                   <span class="table-col-count" id="columnCount"></span>
-                  <span class="table-tip">Tip: click a column header to sort.</span>
+                  <span class="table-filter-count" id="filterCount" hidden></span>
                 </div>
                 <div class="table-actions-row">
+                  <div class="table-search-wrap">
+                    <input type="text" id="globalSearch" class="table-search-input" placeholder="Search all columns..." />
+                    <button class="table-search-clear" id="clearSearch" type="button" hidden>&times;</button>
+                  </div>
                   <button class="ghost table-control-btn" id="columnToggleBtn" type="button">Filter Columns</button>
+                  <button class="ghost table-control-btn" id="columnFilterBtn" type="button">Column Filters</button>
+                  <button class="ghost table-control-btn" id="exportCsvBtn" type="button">Export CSV</button>
+                </div>
+              </div>
+              <!-- Column filters dropdown -->
+              <div class="column-filters-panel" id="columnFiltersPanel" hidden>
+                <div class="column-dropdown-header">
+                  <span>Filter by Column Value</span>
+                  <button class="column-dropdown-close" id="columnFiltersClose">&times;</button>
+                </div>
+                <div class="column-filters-list" id="columnFiltersList">
+                  <!-- Filters will be generated dynamically -->
+                </div>
+                <div class="column-filters-actions">
+                  <button class="ghost" id="clearAllFilters" type="button">Clear All Filters</button>
+                  <button class="ghost" id="applyFilters" type="button">Apply Filters</button>
                 </div>
               </div>
               <div class="column-dropdown" id="columnDropdown" hidden>
