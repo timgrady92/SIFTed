@@ -1,33 +1,27 @@
-const imagePath = document.getElementById("imagePath");
-const outputPath = document.getElementById("outputPath");
+const tooling = window.SiftedTooling;
+
+// Get common elements using helper
+const common = tooling?.getCommonElements() || {};
+const imagePath = common.imagePath;
+const outputPath = common.outputPath;
+const commandPreview = common.commandPreview;
+const caseSelect = common.caseSelect;
+const runStatus = common.runStatus;
+
+// Tool-specific elements
 const quickFlag = document.getElementById("quickFlag");
 const verboseFlag = document.getElementById("verboseFlag");
 const safeMode = document.getElementById("safeMode");
-const commandPreview = document.getElementById("commandPreview");
-const openBrowser = document.getElementById("openBrowser");
-const closeBrowser = document.getElementById("closeBrowser");
-const browserDrawer = document.getElementById("browserDrawer");
-const manualPath = document.getElementById("manualPath");
-const useManualPath = document.getElementById("useManualPath");
-const drawerList = document.getElementById("drawerList");
-const drawerError = document.getElementById("drawerError");
-const currentPathLabel = document.getElementById("currentPath");
-const pathChips = Array.from(document.querySelectorAll(".path-chip"));
-const caseSelect = document.getElementById("caseSelect");
 const runButton = document.getElementById("runForemost");
 const resultCarved = document.getElementById("resultCarved");
 const resultAudit = document.getElementById("resultAudit");
 const resultSummary = document.getElementById("resultSummary");
-const runStatus = document.getElementById("runStatus");
 const runLog = document.getElementById("runLog");
 const milestonesList = document.getElementById("milestoneList");
-const openLog = document.getElementById("openLog");
-const closeLog = document.getElementById("closeLog");
-const logDrawer = document.getElementById("logDrawer");
-const logDrawerContent = document.getElementById("logDrawerContent");
-const logDrawerStatus = document.getElementById("logDrawerStatus");
 
 let currentRunId = "";
+
+const mapType = (value) => (value === "jpeg" ? "jpg" : value);
 
 const buildCommand = () => {
   const types = Array.from(document.querySelectorAll(".chip input:checked"))
@@ -37,64 +31,47 @@ const buildCommand = () => {
   const args = [
     "foremost",
     "-i",
-    imagePath.value.trim() || "<image_path>",
+    imagePath?.value.trim() || "<image_path>",
     "-o",
-    outputPath.value.trim() || "<output_dir>",
+    outputPath?.value.trim() || "<output_dir>",
   ];
 
   if (types) {
     args.push("-t", types);
   }
-
-  if (quickFlag.checked) {
+  if (quickFlag?.checked) {
     args.push("-q");
   }
-
-  if (verboseFlag.checked) {
+  if (verboseFlag?.checked) {
     args.push("-v");
   }
-
-  if (safeMode && safeMode.checked) {
+  if (safeMode?.checked) {
     args.push("-T");
     args.push("# safe mode: 10s per type");
   }
 
-  commandPreview.textContent = args.join(" ");
-};
-
-const mapType = (value) => {
-  if (value === "jpeg") {
-    return "jpg";
+  if (commandPreview) {
+    commandPreview.textContent = args.join(" ");
   }
-  return value;
 };
 
 const buildPayload = () => ({
   tool: "foremost",
   case_id: caseSelect?.value || "",
-  image_path: imagePath.value.trim(),
-  output_path: outputPath.value.trim(),
+  image_path: imagePath?.value.trim() || "",
+  output_path: outputPath?.value.trim() || "",
   types: Array.from(document.querySelectorAll(".chip input:checked")).map(
     (input) => mapType(input.value),
   ),
-  quick: quickFlag.checked,
-  verbose: verboseFlag.checked,
+  quick: quickFlag?.checked || false,
+  verbose: verboseFlag?.checked || false,
   safe_mode: safeMode?.checked || false,
 });
 
-const setRunStatus = (message, tone) => {
-  if (!runStatus) {
-    return;
-  }
-  runStatus.textContent = message;
-  runStatus.dataset.tone = tone || "neutral";
-};
-
 const setRunLog = (text) => {
-  if (!runLog) {
-    return;
+  if (runLog) {
+    runLog.textContent = text || "";
   }
-  runLog.textContent = text || "";
 };
 
 const appendMilestone = (message) => {
@@ -110,60 +87,47 @@ const appendMilestone = (message) => {
   }
 };
 
-const tooling = window.SiftedTooling;
+// Initialize drawers using helper
 if (tooling) {
-  tooling.setupLogDrawer({
-    openButton: openLog,
-    closeButton: closeLog,
-    drawer: logDrawer,
-    content: logDrawerContent,
-    status: logDrawerStatus,
+  tooling.initializeDrawers({
+    ...common,
     getRunId: () => currentRunId,
-  });
-
-  tooling.setupBrowseDrawer({
-    openButton: openBrowser,
-    closeButton: closeBrowser,
-    drawer: browserDrawer,
-    drawerList,
-    drawerError,
-    currentPathLabel,
-    pathChips,
-    manualPath,
-    useManualPath,
     onSelectPath: (path) => {
-      imagePath.value = path;
+      if (imagePath) {
+        imagePath.value = path;
+      }
       buildCommand();
     },
   });
-}
 
-[runButton].forEach((button) => {
-  button.addEventListener("click", async () => {
-    button.disabled = true;
-    button.textContent = "Running...";
-    setRunStatus("Running Foremost...", "neutral");
-    setRunLog("");
-    try {
-      const response = await fetch("/api/foremost/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPayload()),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to run Foremost.");
+  // Create run handler using factory
+  tooling.createRunHandler({
+    runButton,
+    runStatus,
+    apiEndpoint: "/api/foremost/run",
+    toolName: "Foremost",
+    buildPayload,
+    onStart: () => {
+      if (milestonesList) {
+        milestonesList.innerHTML = "";
       }
-      commandPreview.textContent = data.command || commandPreview.textContent;
-      if (data.output_path) {
+      setRunLog("");
+    },
+    setRunIdRef: (id) => {
+      currentRunId = id;
+    },
+    onMilestone: (payload) => {
+      appendMilestone(payload.message || "Milestone");
+    },
+    onSuccess: (data) => {
+      if (commandPreview) {
+        commandPreview.textContent = data.command || commandPreview.textContent;
+      }
+      if (data.output_path && outputPath) {
         outputPath.value = data.output_path;
       }
-      currentRunId = data.run_id || "";
-      if (currentRunId && window.registerActiveJob) {
-        window.registerActiveJob({ id: currentRunId, tool: "Foremost" });
-      }
       if (resultCarved) {
-        resultCarved.textContent = `${data.output_path || outputPath.value}/`;
+        resultCarved.textContent = `${data.output_path || outputPath?.value}/`;
       }
       if (resultAudit) {
         resultAudit.textContent = "audit.txt";
@@ -171,55 +135,17 @@ if (tooling) {
       if (resultSummary) {
         resultSummary.textContent = "output.txt";
       }
-      if (milestonesList) {
-        milestonesList.innerHTML = "";
-      }
-      setRunStatus("Running Foremost...", "neutral");
-
-      if (currentRunId && tooling && window.EventSource) {
-        tooling.attachRunEvents(currentRunId, {
-          onMilestone: (payload) => {
-            appendMilestone(payload.message || "Milestone");
-          },
-          onStatus: (payload) => {
-            setRunStatus(payload.message || "Running...", "neutral");
-          },
-          onDone: (payload) => {
-            const exitCode = Number(payload.message || 0);
-            setRunStatus(
-              exitCode === 0 ? "Run completed." : "Run completed with errors.",
-              exitCode === 0 ? "success" : "error",
-            );
-            button.textContent = "Run Foremost";
-            button.disabled = false;
-          },
-          onError: () => {
-            setRunStatus("Run failed.", "error");
-            button.textContent = "Run Foremost";
-            button.disabled = false;
-          },
-        });
-      } else {
-        setRunStatus("Run started. Refresh to see results.", "neutral");
-        button.textContent = "Run Foremost";
-        button.disabled = false;
-      }
-    } catch (error) {
-      setRunStatus(error.message || "Run failed.", "error");
-      setRunLog("");
-      button.textContent = "Run Foremost";
-      button.disabled = false;
-    }
+    },
   });
-});
+}
 
-[imagePath, outputPath, quickFlag, verboseFlag, safeMode].forEach((input) => {
-  input.addEventListener("input", buildCommand);
-  input.addEventListener("change", buildCommand);
-});
-
-document.querySelectorAll(".chip input").forEach((input) => {
-  input.addEventListener("change", buildCommand);
-});
+// Attach input listeners using helper
+if (tooling) {
+  tooling.attachInputListeners(
+    [imagePath, outputPath, quickFlag, verboseFlag, safeMode],
+    buildCommand,
+  );
+  tooling.attachChipListeners(".chip input", buildCommand);
+}
 
 buildCommand();

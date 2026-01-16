@@ -137,6 +137,116 @@ def validate_input_path(raw_path, label, allowed_roots):
         return "", f"{label} path not found."
     return normalized, ""
 
+
+# --- Refactored Helper Functions ---
+
+
+def error_response(message, status=400):
+    """Create a standardized JSON error response."""
+    return jsonify({"error": message}), status
+
+
+def extract_run_payload(payload, required_keys=None):
+    """
+    Extract and validate common fields from a run request payload.
+    Returns (extracted_data, error_message) tuple.
+    """
+    extracted = {
+        "image_path": payload.get("image_path", "").strip(),
+        "output_path": payload.get("output_path", "").strip(),
+        "case_id": payload.get("case_id") or None,
+    }
+
+    if required_keys:
+        for key in required_keys:
+            if key == "image_path" and not extracted["image_path"]:
+                return None, "Image path is required."
+            if key == "source_path":
+                extracted["source_path"] = payload.get("source_path", "").strip()
+                if not extracted["source_path"]:
+                    return None, "Source path is required."
+
+    return extracted, ""
+
+
+def validate_output_folder(output_path, must_be_empty=True, must_not_exist=False):
+    """
+    Validate output folder constraints.
+    Returns error message string, or empty string if valid.
+    """
+    if must_not_exist and os.path.exists(output_path):
+        return "Output folder must not exist."
+    if os.path.exists(output_path) and not os.path.isdir(output_path):
+        return "Output path must be a folder."
+    if must_be_empty and os.path.isdir(output_path) and os.listdir(output_path):
+        return "Output folder must be empty."
+    return ""
+
+
+def ensure_output_folder(output_path, create_parent_only=False):
+    """
+    Create output folder (or its parent).
+    Returns error message string, or empty string if successful.
+    """
+    try:
+        target = os.path.dirname(output_path) if create_parent_only else output_path
+        os.makedirs(target, exist_ok=True)
+        return ""
+    except OSError:
+        return "Unable to create output folder."
+
+
+def update_run_status(run_id, updates):
+    """
+    Update a run record with the given field updates.
+    Updates are applied in-place and saved atomically.
+    """
+    runs = load_runs()
+    for run in runs:
+        if run.get("id") == run_id:
+            run.update(updates)
+            break
+    save_runs(runs)
+
+
+def init_run_state(run_id):
+    """
+    Initialize run state with event queue for a new run.
+    Returns (event_queue, emit_function) tuple.
+    """
+    event_queue = queue.Queue()
+    with RUN_STATE_LOCK:
+        RUN_STATE[run_id] = {
+            "queue": event_queue,
+            "done": False,
+        }
+
+    def emit(event_type, message):
+        payload = {"type": event_type, "message": message}
+        event_queue.put(payload)
+
+    return event_queue, emit
+
+
+def finalize_run(run_id, status, exit_code, log_path, extra_updates=None):
+    """
+    Finalize a run by emitting done event and updating run record.
+    """
+    updates = {
+        "status": status,
+        "exit_code": exit_code,
+        "log_path": log_path,
+    }
+    if extra_updates:
+        updates.update(extra_updates)
+    update_run_status(run_id, updates)
+
+
+def run_completion_message(status):
+    """Return standard run completion message based on status."""
+    return "Run completed." if status == "success" else "Run completed with errors."
+
+
 EZ_TOOL_ORDER = [
     "amcacheparser",
     "pecmd",
@@ -1231,20 +1341,10 @@ def parse_audit_counts(audit_path):
 
 
 def start_foremost_run(run_id, command, log_path, output_path, config_path=None):
-    event_queue = queue.Queue()
-    with RUN_STATE_LOCK:
-        RUN_STATE[run_id] = {
-            "queue": event_queue,
-            "done": False,
-        }
-
-    def emit(event_type, message):
-        payload = {"type": event_type, "message": message}
-        event_queue.put(payload)
+    event_queue, emit = init_run_state(run_id)
 
     def runner():
         emit("status", "Running Foremost...")
-        milestone_window = deque(maxlen=5)
         counts = {}
         try:
             with open(log_path, "w", encoding="utf-8") as log_file:
@@ -1298,20 +1398,11 @@ def start_foremost_run(run_id, command, log_path, output_path, config_path=None)
             emit("milestone", f"De-dup complete: {moved} moved to duplicates.")
         if skipped:
             emit("milestone", f"De-dup skipped: {skipped} files.")
-        emit("status", "Run completed." if status == "success" else "Run completed with errors.")
+        emit("status", run_completion_message(status))
         emit("done", str(exit_code))
 
         mark_run_done(run_id)
-
-        runs = load_runs()
-        for run in runs:
-            if run.get("id") == run_id:
-                run["status"] = status
-                run["exit_code"] = exit_code
-                run["log_path"] = log_path
-                run["summary"] = summary
-                break
-        save_runs(runs)
+        finalize_run(run_id, status, exit_code, log_path, {"summary": summary})
 
     thread = threading.Thread(target=runner, daemon=True)
     thread.start()
@@ -1322,16 +1413,7 @@ def start_foremost_run(run_id, command, log_path, output_path, config_path=None)
 def start_foremost_safe_run(
     run_id, image_path, output_path, types, quick, verbose, log_path, timeout_seconds
 ):
-    event_queue = queue.Queue()
-    with RUN_STATE_LOCK:
-        RUN_STATE[run_id] = {
-            "queue": event_queue,
-            "done": False,
-        }
-
-    def emit(event_type, message):
-        payload = {"type": event_type, "message": message}
-        event_queue.put(payload)
+    event_queue, emit = init_run_state(run_id)
 
     def runner():
         emit("status", "Running Foremost (safe mode)...")
@@ -1428,20 +1510,12 @@ def start_foremost_safe_run(
             emit("milestone", f"De-dup skipped: {skipped} files.")
 
         status = "error" if had_errors else "success"
-        emit("status", "Run completed." if status == "success" else "Run completed with errors.")
-        emit("done", "1" if had_errors else "0")
+        exit_code = 1 if had_errors else 0
+        emit("status", run_completion_message(status))
+        emit("done", str(exit_code))
 
         mark_run_done(run_id)
-
-        runs = load_runs()
-        for run in runs:
-            if run.get("id") == run_id:
-                run["status"] = status
-                run["exit_code"] = 1 if had_errors else 0
-                run["log_path"] = log_path
-                run["summary"] = summary
-                break
-        save_runs(runs)
+        finalize_run(run_id, status, exit_code, log_path, {"summary": summary})
 
     thread = threading.Thread(target=runner, daemon=True)
     thread.start()
@@ -1450,16 +1524,7 @@ def start_foremost_safe_run(
 
 
 def start_generic_run(run_id, command, log_path, post_process=None):
-    event_queue = queue.Queue()
-    with RUN_STATE_LOCK:
-        RUN_STATE[run_id] = {
-            "queue": event_queue,
-            "done": False,
-        }
-
-    def emit(event_type, message):
-        payload = {"type": event_type, "message": message}
-        event_queue.put(payload)
+    event_queue, emit = init_run_state(run_id)
 
     def runner():
         emit("status", "Running...")
@@ -1493,21 +1558,12 @@ def start_generic_run(run_id, command, log_path, post_process=None):
             except Exception:
                 emit("error", "Post-processing failed.")
                 status = "error"
-        emit("status", "Run completed." if status == "success" else "Run completed with errors.")
+        emit("status", run_completion_message(status))
         emit("done", str(exit_code))
 
         mark_run_done(run_id)
-
-        runs = load_runs()
-        for run in runs:
-            if run.get("id") == run_id:
-                run["status"] = status
-                run["exit_code"] = exit_code
-                run["log_path"] = log_path
-                if post_summary:
-                    run["summary"] = post_summary
-                break
-        save_runs(runs)
+        extra = {"summary": post_summary} if post_summary else None
+        finalize_run(run_id, status, exit_code, log_path, extra)
 
     thread = threading.Thread(target=runner, daemon=True)
     thread.start()
@@ -1516,16 +1572,7 @@ def start_generic_run(run_id, command, log_path, post_process=None):
 
 
 def start_volatility_run(run_id, commands, log_path, plugins, output_path, renderer):
-    event_queue = queue.Queue()
-    with RUN_STATE_LOCK:
-        RUN_STATE[run_id] = {
-            "queue": event_queue,
-            "done": False,
-        }
-
-    def emit(event_type, message):
-        payload = {"type": event_type, "message": message}
-        event_queue.put(payload)
+    event_queue, emit = init_run_state(run_id)
 
     def runner():
         exit_code = 0
@@ -1569,21 +1616,12 @@ def start_volatility_run(run_id, commands, log_path, plugins, output_path, rende
             exit_code = exit_code or 1
             emit("error", f"{len(failed_plugins)} plugin(s) failed.")
         status = "success" if exit_code == 0 else "error"
-        emit("status", "Run completed." if status == "success" else "Run completed with errors.")
+        emit("status", run_completion_message(status))
         emit("done", str(exit_code))
 
         mark_run_done(run_id)
-
-        runs = load_runs()
-        for run in runs:
-            if run.get("id") == run_id:
-                run["status"] = status
-                run["exit_code"] = exit_code
-                run["log_path"] = log_path
-                if failed_plugins:
-                    run["failed_plugins"] = failed_plugins
-                break
-        save_runs(runs)
+        extra = {"failed_plugins": failed_plugins} if failed_plugins else None
+        finalize_run(run_id, status, exit_code, log_path, extra)
 
     thread = threading.Thread(target=runner, daemon=True)
     thread.start()
@@ -1599,16 +1637,7 @@ def start_artifact_timeline_run(
     output_path,
     timeline_path,
 ):
-    event_queue = queue.Queue()
-    with RUN_STATE_LOCK:
-        RUN_STATE[run_id] = {
-            "queue": event_queue,
-            "done": False,
-        }
-
-    def emit(event_type, message):
-        payload = {"type": event_type, "message": message}
-        event_queue.put(payload)
+    event_queue, emit = init_run_state(run_id)
 
     def runner():
         exit_code = 0
@@ -1653,21 +1682,12 @@ def start_artifact_timeline_run(
         status = "success" if exit_code == 0 else "error"
         if status == "success":
             emit("milestone", f"Timeline written to {timeline_path}")
-        emit("status", "Run completed." if status == "success" else "Run completed with errors.")
+        emit("status", run_completion_message(status))
         emit("done", str(exit_code))
 
         mark_run_done(run_id)
-
-        runs = load_runs()
-        for run in runs:
-            if run.get("id") == run_id:
-                run["status"] = status
-                run["exit_code"] = exit_code
-                run["log_path"] = log_path
-                if status == "success":
-                    run["summary"] = f"Timeline written to {timeline_path}"
-                break
-        save_runs(runs)
+        extra = {"summary": f"Timeline written to {timeline_path}"} if status == "success" else None
+        finalize_run(run_id, status, exit_code, log_path, extra)
 
     thread = threading.Thread(target=runner, daemon=True)
     thread.start()
@@ -1891,22 +1911,21 @@ def run_foremost():
 
     image_path, image_error = validate_input_path(image_path, "Image", INPUT_ROOTS)
     if image_error:
-        return jsonify({"error": image_error}), 400
+        return error_response(image_error)
 
     output_path, output_error = resolve_output_path(output_path, case_id, "foremost")
     if output_error:
-        return jsonify({"error": output_error}), 400
-    if os.path.exists(output_path) and not os.path.isdir(output_path):
-        return jsonify({"error": "Output path must be a folder."}), 400
-    if os.path.isdir(output_path) and os.listdir(output_path):
-        return jsonify({"error": "Output folder must be empty."}), 400
-    if safe_mode and not types:
-        return jsonify({"error": "Select at least one type for safe mode."}), 400
+        return error_response(output_error)
 
-    try:
-        os.makedirs(output_path, exist_ok=True)
-    except OSError:
-        return jsonify({"error": "Unable to create output folder."}), 400
+    folder_error = validate_output_folder(output_path)
+    if folder_error:
+        return error_response(folder_error)
+    if safe_mode and not types:
+        return error_response("Select at least one type for safe mode.")
+
+    create_error = ensure_output_folder(output_path)
+    if create_error:
+        return error_response(create_error)
 
     config_path = None
     command = []
@@ -2138,19 +2157,19 @@ def run_bulk_extractor():
 
     image_path, image_error = validate_input_path(image_path, "Image", INPUT_ROOTS)
     if image_error:
-        return jsonify({"error": image_error}), 400
+        return error_response(image_error)
 
     output_path, output_error = resolve_output_path(output_path, case_id, "bulk-extractor")
     if output_error:
-        return jsonify({"error": output_error}), 400
-    if os.path.exists(output_path):
-        return jsonify({"error": "Output folder must not exist."}), 400
+        return error_response(output_error)
 
-    parent_dir = os.path.dirname(output_path)
-    try:
-        os.makedirs(parent_dir, exist_ok=True)
-    except OSError:
-        return jsonify({"error": "Unable to create output folder."}), 400
+    folder_error = validate_output_folder(output_path, must_not_exist=True)
+    if folder_error:
+        return error_response(folder_error)
+
+    create_error = ensure_output_folder(output_path, create_parent_only=True)
+    if create_error:
+        return error_response(create_error)
 
     command = build_bulk_command(
         image_path,
@@ -2194,17 +2213,17 @@ def run_eric_zimmerman():
 
     tool = resolve_ez_tool(tool_id)
     if not tool:
-        return jsonify({"error": "Unknown Eric Zimmerman tool."}), 400
+        return error_response("Unknown Eric Zimmerman tool.")
     if not tool.get("installed"):
-        return jsonify({"error": f"{tool['label']} is not installed or not on PATH."}), 400
+        return error_response(f"{tool['label']} is not installed or not on PATH.")
 
     source_path, source_error = validate_input_path(source_path, "Source", INPUT_ROOTS)
     if source_error:
-        return jsonify({"error": source_error}), 400
+        return error_response(source_error)
     if tool["input_mode"] == "file" and not os.path.isfile(source_path):
-        return jsonify({"error": "Source path must be a file for this tool."}), 400
+        return error_response("Source path must be a file for this tool.")
     if tool["input_mode"] == "dir" and not os.path.isdir(source_path):
-        return jsonify({"error": "Source path must be a directory for this tool."}), 400
+        return error_response("Source path must be a directory for this tool.")
 
     output_path, output_error = resolve_output_path(
         output_path,
@@ -2212,16 +2231,15 @@ def run_eric_zimmerman():
         f"eric-zimmerman/{tool_id}",
     )
     if output_error:
-        return jsonify({"error": output_error}), 400
-    if os.path.exists(output_path) and not os.path.isdir(output_path):
-        return jsonify({"error": "Output path must be a folder."}), 400
-    if os.path.isdir(output_path) and os.listdir(output_path):
-        return jsonify({"error": "Output folder must be empty."}), 400
+        return error_response(output_error)
 
-    try:
-        os.makedirs(output_path, exist_ok=True)
-    except OSError:
-        return jsonify({"error": "Unable to create output folder."}), 400
+    folder_error = validate_output_folder(output_path)
+    if folder_error:
+        return error_response(folder_error)
+
+    create_error = ensure_output_folder(output_path)
+    if create_error:
+        return error_response(create_error)
 
     command = build_ez_command(tool, source_path, output_path)
     command_text = shell_join(command)
@@ -2262,18 +2280,17 @@ def run_scalpel():
 
     image_path, image_error = validate_input_path(image_path, "Image", INPUT_ROOTS)
     if image_error:
-        return jsonify({"error": image_error}), 400
+        return error_response(image_error)
 
     output_path, output_error = resolve_output_path(output_path, case_id, "scalpel")
     if output_error:
-        return jsonify({"error": output_error}), 400
+        return error_response(output_error)
     if not types:
-        return jsonify({"error": "Select at least one file type."}), 400
+        return error_response("Select at least one file type.")
 
-    try:
-        os.makedirs(output_path, exist_ok=True)
-    except OSError:
-        return jsonify({"error": "Unable to create output folder."}), 400
+    create_error = ensure_output_folder(output_path)
+    if create_error:
+        return error_response(create_error)
 
     config_path, missing = build_scalpel_config_for_types(types)
     if missing:
@@ -2340,32 +2357,31 @@ def run_volatility():
 
     image_path, image_error = validate_input_path(image_path, "Image", INPUT_ROOTS)
     if image_error:
-        return jsonify({"error": image_error}), 400
+        return error_response(image_error)
 
     output_path, output_error = resolve_output_path(output_path, case_id, "volatility")
     if output_error:
-        return jsonify({"error": output_error}), 400
+        return error_response(output_error)
 
     if not plugins:
-        return jsonify({"error": "Select at least one plugin."}), 400
+        return error_response("Select at least one plugin.")
 
     if not symbol_path:
         symbol_path = detect_volatility_symbol_path()
     if not symbol_path:
-        return jsonify({"error": "Symbol path is required."}), 400
+        return error_response("Symbol path is required.")
     symbol_path = normalize_path(symbol_path)
     if SYMBOL_ROOTS and not is_path_allowed(symbol_path, SYMBOL_ROOTS):
-        return jsonify({"error": "Symbol path is outside the allowed roots."}), 400
+        return error_response("Symbol path is outside the allowed roots.")
     if not os.path.isdir(symbol_path):
-        return jsonify({"error": "Symbol path not found."}), 400
+        return error_response("Symbol path not found.")
 
     if renderer not in {"json", "pretty"}:
         renderer = "json"
 
-    try:
-        os.makedirs(output_path, exist_ok=True)
-    except OSError:
-        return jsonify({"error": "Unable to create output folder."}), 400
+    create_error = ensure_output_folder(output_path)
+    if create_error:
+        return error_response(create_error)
 
     commands = build_volatility_commands(
         image_path,
@@ -2415,20 +2431,19 @@ def run_artifact_timeline():
 
     image_path, image_error = validate_input_path(image_path, "Evidence", INPUT_ROOTS)
     if image_error:
-        return jsonify({"error": image_error}), 400
+        return error_response(image_error)
 
     output_path, output_error = resolve_output_path(output_path, case_id, "artifact-triage")
     if output_error:
-        return jsonify({"error": output_error}), 400
-    if os.path.exists(output_path) and not os.path.isdir(output_path):
-        return jsonify({"error": "Output path must be a folder."}), 400
-    if os.path.exists(output_path) and os.listdir(output_path):
-        return jsonify({"error": "Output folder must be empty."}), 400
+        return error_response(output_error)
 
-    try:
-        os.makedirs(output_path, exist_ok=True)
-    except OSError:
-        return jsonify({"error": "Unable to create output folder."}), 400
+    folder_error = validate_output_folder(output_path)
+    if folder_error:
+        return error_response(folder_error)
+
+    create_error = ensure_output_folder(output_path)
+    if create_error:
+        return error_response(create_error)
 
     log2timeline_cmd, psort_cmd, storage_path, timeline_path = build_plaso_commands(
         image_path,

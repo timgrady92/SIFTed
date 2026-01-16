@@ -131,14 +131,29 @@ const ACTIVE_JOBS_KEY = "sifted.activeJobs";
 
 const loadJobs = () => {
   try {
-    return JSON.parse(localStorage.getItem(ACTIVE_JOBS_KEY) || "[]");
+    const stored = JSON.parse(localStorage.getItem(ACTIVE_JOBS_KEY) || "[]");
+    if (!Array.isArray(stored)) {
+      return [];
+    }
+    const seen = new Set();
+    return stored.filter((job) => {
+      if (!job || !job.id || seen.has(job.id)) {
+        return false;
+      }
+      seen.add(job.id);
+      return true;
+    });
   } catch (error) {
     return [];
   }
 };
 
 const saveJobs = (jobs) => {
-  localStorage.setItem(ACTIVE_JOBS_KEY, JSON.stringify(jobs));
+  try {
+    localStorage.setItem(ACTIVE_JOBS_KEY, JSON.stringify(jobs));
+  } catch (error) {
+    // Ignore storage failures (private mode, quota exceeded, etc.)
+  }
 };
 
 const updateJobPill = (jobs) => {
@@ -298,7 +313,12 @@ const renderJobs = (runs) => {
 
     const header = document.createElement("div");
     header.className = "job-header";
-    header.innerHTML = `<span class="job-title">${run.tool || "job"}</span><span>${run.status}</span>`;
+    const title = document.createElement("span");
+    title.className = "job-title";
+    title.textContent = run.tool || "job";
+    const status = document.createElement("span");
+    status.textContent = run.status || "unknown";
+    header.append(title, status);
 
     const caseLine = document.createElement("div");
     caseLine.className = "job-meta";
@@ -354,12 +374,19 @@ window.registerActiveJob = (job) => {
     return;
   }
   const jobs = loadJobs();
-  jobs.push({
-    id: job.id,
-    tool: job.tool || "job",
-    status: "running",
-    startedAt: Date.now(),
-  });
+  const existing = jobs.find((entry) => entry.id === job.id);
+  if (existing) {
+    existing.tool = job.tool || existing.tool || "job";
+    existing.status = "running";
+    existing.startedAt = existing.startedAt || Date.now();
+  } else {
+    jobs.push({
+      id: job.id,
+      tool: job.tool || "job",
+      status: "running",
+      startedAt: Date.now(),
+    });
+  }
   saveJobs(jobs);
   updateJobPill(jobs);
 };

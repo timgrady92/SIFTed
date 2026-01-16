@@ -1,3 +1,6 @@
+const tooling = window.SiftedTooling;
+
+// Tool data from embedded JSON
 const toolDataElement = document.getElementById("ezToolData");
 const toolData = toolDataElement ? JSON.parse(toolDataElement.textContent || "[]") : [];
 const toolsById = toolData.reduce((acc, tool) => {
@@ -5,6 +8,15 @@ const toolsById = toolData.reduce((acc, tool) => {
   return acc;
 }, {});
 
+// Get common elements using helper
+const common = tooling?.getCommonElements() || {};
+const sourcePath = common.imagePath;
+const outputPath = common.outputPath;
+const commandPreview = common.commandPreview;
+const caseSelect = common.caseSelect;
+const runStatus = common.runStatus;
+
+// Tool-specific elements
 const toolButtons = Array.from(document.querySelectorAll(".ez-tool-card"));
 const toolGrid = document.getElementById("ezToolGrid");
 const toggleCatalog = document.getElementById("toggleEzCatalog");
@@ -13,41 +25,12 @@ const toolDescription = document.getElementById("ezToolDescription");
 const toolHint = document.getElementById("ezToolHint");
 const toolOutput = document.getElementById("ezToolOutput");
 const toolStatus = document.getElementById("ezToolStatus");
-
-const sourcePath = document.getElementById("imagePath");
-const outputPath = document.getElementById("outputPath");
-const caseSelect = document.getElementById("caseSelect");
-const commandPreview = document.getElementById("commandPreview");
 const runButton = document.getElementById("runEzTool");
-const runStatus = document.getElementById("runStatus");
 const runResults = document.getElementById("runResults");
 const runResultsLinks = document.getElementById("runResultsLinks");
-const openLog = document.getElementById("openLog");
-const closeLog = document.getElementById("closeLog");
-const logDrawer = document.getElementById("logDrawer");
-const logDrawerContent = document.getElementById("logDrawerContent");
-const logDrawerStatus = document.getElementById("logDrawerStatus");
-
-const openBrowser = document.getElementById("openBrowser");
-const closeBrowser = document.getElementById("closeBrowser");
-const browserDrawer = document.getElementById("browserDrawer");
-const manualPath = document.getElementById("manualPath");
-const useManualPath = document.getElementById("useManualPath");
-const drawerList = document.getElementById("drawerList");
-const drawerError = document.getElementById("drawerError");
-const currentPathLabel = document.getElementById("currentPath");
-const pathChips = Array.from(document.querySelectorAll(".path-chip"));
 
 let currentRunId = "";
 let selectedToolId = "";
-
-const setRunStatus = (message, tone) => {
-  if (!runStatus) {
-    return;
-  }
-  runStatus.textContent = message;
-  runStatus.dataset.tone = tone || "neutral";
-};
 
 const renderResultsLink = (outputFile) => {
   if (!runResults || !runResultsLinks) {
@@ -135,12 +118,13 @@ const selectTool = (toolId) => {
   }
   if (runButton) {
     runButton.textContent = `Run ${tool.label}`;
+    runButton.dataset.defaultLabel = runButton.textContent;
     runButton.disabled = !tool.installed;
   }
-  if (!tool.installed) {
-    setRunStatus(`${tool.label} is not available on PATH.`, "error");
-  } else {
-    setRunStatus("Ready to run.", "neutral");
+  if (!tool.installed && tooling) {
+    tooling.setRunStatus(runStatus, `${tool.label} is not available on PATH.`, "error");
+  } else if (tooling) {
+    tooling.setRunStatus(runStatus, "Ready to run.", "neutral");
   }
   renderResultsLink("");
   updateOutputForTool(toolId);
@@ -156,27 +140,11 @@ const selectInitialTool = () => {
   }
 };
 
-const tooling = window.SiftedTooling;
+// Initialize drawers using helper
 if (tooling) {
-  tooling.setupLogDrawer({
-    openButton: openLog,
-    closeButton: closeLog,
-    drawer: logDrawer,
-    content: logDrawerContent,
-    status: logDrawerStatus,
+  tooling.initializeDrawers({
+    ...common,
     getRunId: () => currentRunId,
-  });
-
-  tooling.setupBrowseDrawer({
-    openButton: openBrowser,
-    closeButton: closeBrowser,
-    drawer: browserDrawer,
-    drawerList,
-    drawerError,
-    currentPathLabel,
-    pathChips,
-    manualPath,
-    useManualPath,
     onSelectPath: (path) => {
       if (sourcePath) {
         sourcePath.value = path;
@@ -186,6 +154,7 @@ if (tooling) {
   });
 }
 
+// Tool button handlers
 toolButtons.forEach((button) => {
   button.addEventListener("click", () => {
     const toolId = button.dataset.toolId || "";
@@ -195,6 +164,7 @@ toolButtons.forEach((button) => {
   });
 });
 
+// Catalog toggle
 if (toggleCatalog && toolGrid) {
   toggleCatalog.addEventListener("click", () => {
     const showAll = toolGrid.dataset.showAll === "true";
@@ -213,20 +183,26 @@ if (toggleCatalog && toolGrid) {
   });
 }
 
-if (runButton) {
+// Run button handler - custom because of dynamic tool selection
+if (runButton && tooling) {
+  const resetRunButton = () => {
+    runButton.textContent = runButton.dataset.defaultLabel || runButton.textContent || "Run";
+    runButton.disabled = false;
+  };
+
   runButton.addEventListener("click", async () => {
     const tool = toolsById[selectedToolId];
     if (!tool) {
-      setRunStatus("Select a parser first.", "error");
+      tooling.setRunStatus(runStatus, "Select a parser first.", "error");
       return;
     }
     if (!tool.installed) {
-      setRunStatus(`${tool.label} is not available on PATH.`, "error");
+      tooling.setRunStatus(runStatus, `${tool.label} is not available on PATH.`, "error");
       return;
     }
     runButton.disabled = true;
     runButton.textContent = "Running...";
-    setRunStatus(`Running ${tool.label}...`, "neutral");
+    tooling.setRunStatus(runStatus, `Running ${tool.label}...`, "neutral");
 
     try {
       const response = await fetch("/api/eric-zimmerman/run", {
@@ -256,46 +232,37 @@ if (runButton) {
       if (currentRunId && window.registerActiveJob) {
         window.registerActiveJob({ id: currentRunId, tool: tool.label });
       }
-      if (currentRunId && tooling && window.EventSource) {
+      if (currentRunId && window.EventSource) {
         tooling.attachRunEvents(currentRunId, {
           onStatus: (payload) => {
-            setRunStatus(payload.message || "Running...", "neutral");
+            tooling.setRunStatus(runStatus, payload.message || "Running...", "neutral");
           },
           onDone: (payload) => {
             const exitCode = Number(payload.message || 0);
-            setRunStatus(
-              exitCode === 0 ? "Run completed." : "Run completed with errors.",
-              exitCode === 0 ? "success" : "error",
-            );
-            runButton.textContent = `Run ${tool.label}`;
-            runButton.disabled = false;
+            const { message, tone } = tooling.getCompletionStatus(exitCode);
+            tooling.setRunStatus(runStatus, message, tone);
+            resetRunButton();
           },
           onError: () => {
-            setRunStatus("Run failed.", "error");
-            runButton.textContent = `Run ${tool.label}`;
-            runButton.disabled = false;
+            tooling.setRunStatus(runStatus, tooling.RUN_MESSAGES.FAILED, "error");
+            resetRunButton();
           },
         });
       } else {
-        setRunStatus("Run started. Refresh to see results.", "neutral");
-        runButton.textContent = `Run ${tool.label}`;
-        runButton.disabled = false;
+        tooling.setRunStatus(runStatus, tooling.RUN_MESSAGES.STARTED_REFRESH, "neutral");
+        resetRunButton();
       }
     } catch (error) {
-      setRunStatus(error.message || "Run failed.", "error");
-      runButton.textContent = `Run ${tool.label}`;
-      runButton.disabled = false;
+      tooling.setRunStatus(runStatus, error.message || tooling.RUN_MESSAGES.FAILED, "error");
+      resetRunButton();
     }
   });
 }
 
-[sourcePath, outputPath].forEach((input) => {
-  if (!input) {
-    return;
-  }
-  input.addEventListener("input", buildCommand);
-  input.addEventListener("change", buildCommand);
-});
+// Attach input listeners using helper
+if (tooling) {
+  tooling.attachInputListeners([sourcePath, outputPath], buildCommand);
+}
 
 if (caseSelect) {
   caseSelect.addEventListener("change", buildCommand);

@@ -1,23 +1,15 @@
-const imagePath = document.getElementById("imagePath");
-const outputPath = document.getElementById("outputPath");
-const commandPreview = document.getElementById("commandPreview");
-const openBrowser = document.getElementById("openBrowser");
-const closeBrowser = document.getElementById("closeBrowser");
-const browserDrawer = document.getElementById("browserDrawer");
-const manualPath = document.getElementById("manualPath");
-const useManualPath = document.getElementById("useManualPath");
-const drawerList = document.getElementById("drawerList");
-const drawerError = document.getElementById("drawerError");
-const currentPathLabel = document.getElementById("currentPath");
-const pathChips = Array.from(document.querySelectorAll(".path-chip"));
-const caseSelect = document.getElementById("caseSelect");
+const tooling = window.SiftedTooling;
+
+// Get common elements using helper
+const common = tooling?.getCommonElements() || {};
+const imagePath = common.imagePath;
+const outputPath = common.outputPath;
+const commandPreview = common.commandPreview;
+const caseSelect = common.caseSelect;
+const runStatus = common.runStatus;
+
+// Tool-specific elements
 const runButton = document.getElementById("runBulk");
-const runStatus = document.getElementById("runStatus");
-const openLog = document.getElementById("openLog");
-const closeLog = document.getElementById("closeLog");
-const logDrawer = document.getElementById("logDrawer");
-const logDrawerContent = document.getElementById("logDrawerContent");
-const logDrawerStatus = document.getElementById("logDrawerStatus");
 const infoMode = document.getElementById("infoMode");
 const histograms = document.getElementById("histograms");
 const scannerPreset = document.getElementById("scannerPreset");
@@ -65,14 +57,14 @@ const buildCommand = () => {
   const args = [
     "bulk_extractor",
     "-o",
-    outputPath.value.trim() || "<output_dir>",
+    outputPath?.value.trim() || "<output_dir>",
   ];
 
-  if (infoMode.checked) {
+  if (infoMode?.checked) {
     args.push("-i");
   }
 
-  if (!histograms.checked) {
+  if (!histograms?.checked) {
     args.push("-S", "enable_histograms=NO");
   }
 
@@ -82,46 +74,12 @@ const buildCommand = () => {
   }
   advancedScanners.forEach((scanner) => args.push("-e", scanner));
 
-  args.push(imagePath.value.trim() || "<image_path>");
+  args.push(imagePath?.value.trim() || "<image_path>");
 
-  commandPreview.textContent = args.join(" ");
-};
-
-const setRunStatus = (message, tone) => {
-  if (!runStatus) {
-    return;
+  if (commandPreview) {
+    commandPreview.textContent = args.join(" ");
   }
-  runStatus.textContent = message;
-  runStatus.dataset.tone = tone || "neutral";
 };
-
-const tooling = window.SiftedTooling;
-if (tooling) {
-  tooling.setupLogDrawer({
-    openButton: openLog,
-    closeButton: closeLog,
-    drawer: logDrawer,
-    content: logDrawerContent,
-    status: logDrawerStatus,
-    getRunId: () => currentRunId,
-  });
-
-  tooling.setupBrowseDrawer({
-    openButton: openBrowser,
-    closeButton: closeBrowser,
-    drawer: browserDrawer,
-    drawerList,
-    drawerError,
-    currentPathLabel,
-    pathChips,
-    manualPath,
-    useManualPath,
-    onSelectPath: (path) => {
-      imagePath.value = path;
-      buildCommand();
-    },
-  });
-}
 
 const buildPayload = () => {
   const focusScanners = Array.from(
@@ -134,78 +92,57 @@ const buildPayload = () => {
   return {
     tool: "bulk-extractor",
     case_id: caseSelect?.value || "",
-    image_path: imagePath.value.trim(),
-    output_path: outputPath.value.trim(),
+    image_path: imagePath?.value.trim() || "",
+    output_path: outputPath?.value.trim() || "",
     focus_scanners: focusScanners,
     advanced_scanners: advancedScanners,
-    info_mode: infoMode.checked,
-    histograms: histograms.checked,
+    info_mode: infoMode?.checked || false,
+    histograms: histograms?.checked ?? true,
   };
 };
 
-runButton.addEventListener("click", async () => {
-  runButton.disabled = true;
-  runButton.textContent = "Running...";
-  setRunStatus("Running Bulk Extractor...", "neutral");
-  try {
-    const response = await fetch("/api/bulk-extractor/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildPayload()),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || "Unable to run Bulk Extractor.");
-    }
-    commandPreview.textContent = data.command || commandPreview.textContent;
-    if (data.output_path) {
-      outputPath.value = data.output_path;
-    }
-    currentRunId = data.run_id || "";
-    if (currentRunId && window.registerActiveJob) {
-      window.registerActiveJob({ id: currentRunId, tool: "Bulk Extractor" });
-    }
-    setRunStatus("Running Bulk Extractor...", "neutral");
-    if (currentRunId && tooling && window.EventSource) {
-      tooling.attachRunEvents(currentRunId, {
-        onStatus: (payload) => {
-          setRunStatus(payload.message || "Running...", "neutral");
-        },
-        onDone: (payload) => {
-          const exitCode = Number(payload.message || 0);
-          setRunStatus(
-            exitCode === 0 ? "Run completed." : "Run completed with errors.",
-            exitCode === 0 ? "success" : "error",
-          );
-          runButton.textContent = "Run Bulk Extractor";
-          runButton.disabled = false;
-        },
-        onError: () => {
-          setRunStatus("Run failed.", "error");
-          runButton.textContent = "Run Bulk Extractor";
-          runButton.disabled = false;
-        },
-      });
-    } else {
-      setRunStatus("Run started. Refresh to see results.", "neutral");
-      runButton.textContent = "Run Bulk Extractor";
-      runButton.disabled = false;
-    }
-  } catch (error) {
-    setRunStatus(error.message || "Run failed.", "error");
-    runButton.textContent = "Run Bulk Extractor";
-    runButton.disabled = false;
-  }
-});
+// Initialize drawers using helper
+if (tooling) {
+  tooling.initializeDrawers({
+    ...common,
+    getRunId: () => currentRunId,
+    onSelectPath: (path) => {
+      if (imagePath) {
+        imagePath.value = path;
+      }
+      buildCommand();
+    },
+  });
 
-[imagePath, outputPath, infoMode, histograms].forEach((input) => {
-  input.addEventListener("input", buildCommand);
-  input.addEventListener("change", buildCommand);
-});
+  // Create run handler using factory
+  tooling.createRunHandler({
+    runButton,
+    runStatus,
+    apiEndpoint: "/api/bulk-extractor/run",
+    toolName: "Bulk Extractor",
+    buildPayload,
+    setRunIdRef: (id) => {
+      currentRunId = id;
+    },
+    onSuccess: (data) => {
+      if (commandPreview) {
+        commandPreview.textContent = data.command || commandPreview.textContent;
+      }
+      if (data.output_path && outputPath) {
+        outputPath.value = data.output_path;
+      }
+    },
+  });
+}
 
-document.querySelectorAll(".chip input").forEach((input) => {
-  input.addEventListener("change", buildCommand);
-});
+// Attach input listeners using helper
+if (tooling) {
+  tooling.attachInputListeners(
+    [imagePath, outputPath, infoMode, histograms],
+    buildCommand,
+  );
+  tooling.attachChipListeners(".chip input", buildCommand);
+}
 
 if (scannerPreset) {
   scannerPreset.addEventListener("change", () => {
