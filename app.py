@@ -33,7 +33,7 @@ RUNS_PATH = os.path.join(DATA_DIR, "runs.json")
 VOLATILITY_PLUGINS_PATH = os.path.join(DATA_DIR, "volatility_plugins.json")
 RUN_STATE = {}
 RUN_STATE_LOCK = threading.Lock()
-DATA_LOCK = threading.Lock()
+DATA_LOCK = threading.RLock()
 RUN_STATE_TTL_SECONDS = int(os.environ.get("SIFTED_RUN_STATE_TTL_SECONDS", "600"))
 RESULT_FILE_LIMIT = int(os.environ.get("SIFTED_RESULT_FILE_LIMIT", "12"))
 
@@ -201,12 +201,13 @@ def update_run_status(run_id, updates):
     Update a run record with the given field updates.
     Updates are applied in-place and saved atomically.
     """
-    runs = load_runs()
-    for run in runs:
-        if run.get("id") == run_id:
-            run.update(updates)
-            break
-    save_runs(runs)
+    with DATA_LOCK:
+        runs = load_runs()
+        for run in runs:
+            if run.get("id") == run_id:
+                run.update(updates)
+                break
+        save_runs(runs)
 
 
 def init_run_state(run_id):
@@ -1027,9 +1028,10 @@ def create_run_record(tool, case_id, image_path, output_path, command_text, extr
     if extra:
         run.update(extra)
 
-    runs = load_runs()
-    runs.append(run)
-    save_runs(runs)
+    with DATA_LOCK:
+        runs = load_runs()
+        runs.append(run)
+        save_runs(runs)
 
     return run, ""
 
@@ -1643,6 +1645,7 @@ def start_generic_run(run_id, command, log_path, post_process=None):
             except Exception:
                 emit("error", "Post-processing failed.")
                 status = "error"
+                exit_code = exit_code or 1
         emit("status", run_completion_message(status))
         emit("done", str(exit_code))
 
@@ -2998,7 +3001,9 @@ def run_exiftool():
     source_path = payload.get("image_path", "").strip()
     output_path = payload.get("output_path", "").strip()
     case_id = payload.get("case_id") or None
-    output_format = payload.get("output_format", "csv").strip()
+    output_format = payload.get("output_format", "csv").strip().lower()
+    if output_format not in {"csv", "json"}:
+        output_format = "csv"
     options = {
         "recursive": bool(payload.get("recursive", True)),
         "extract_unknown": bool(payload.get("extract_unknown", False)),
@@ -3190,6 +3195,24 @@ def run_strings():
     )
 
 
+def build_filetype_command_preview(source_path, mode, recursive):
+    file_cmd = ["file"]
+    if mode == "mime":
+        file_cmd.extend(["--mime-type", "-b"])
+    elif mode == "brief":
+        file_cmd.append("-b")
+    file_cmd_text = " ".join(file_cmd)
+    quoted_source = shlex.quote(source_path)
+
+    if os.path.isfile(source_path):
+        return f"{file_cmd_text} {quoted_source}"
+    if os.path.isdir(source_path):
+        if recursive:
+            return f"find {quoted_source} -type f -exec {file_cmd_text} {{}} \\;"
+        return f"find {quoted_source} -maxdepth 1 -type f -exec {file_cmd_text} {{}} \\;"
+    return f"{file_cmd_text} {quoted_source}"
+
+
 def start_filetype_run(run_id, source_path, log_path, output_path, mode, recursive, mismatch_only):
     """Run file type detection in a background thread."""
     event_queue, emit = init_run_state(run_id)
@@ -3350,9 +3373,7 @@ def run_filetype():
     if create_error:
         return error_response(create_error)
 
-    command_text = f"file {'--mime-type ' if mode == 'mime' else ''}{shlex.quote(source_path)}"
-    if recursive:
-        command_text = f"find {shlex.quote(source_path)} -type f -exec {command_text} {{}}"
+    command_text = build_filetype_command_preview(source_path, mode, recursive)
 
     run, run_error = create_run_record(
         "filetype",

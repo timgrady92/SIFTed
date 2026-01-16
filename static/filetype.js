@@ -41,7 +41,7 @@ const buildCommand = () => {
   }
 
   if (recursiveFlag?.checked) {
-    args.push("{}", ";");
+    args.push("{}", "\\;");
   } else {
     args.push(source);
   }
