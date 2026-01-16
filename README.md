@@ -10,7 +10,7 @@ SIFTed is a guided interface for SANS SIFT workstation workflows. It lets junior
 
 ## Quick Start
 
-1. Download and deploy a [SIFT Workstation Virtual Machine](https://www.sans.org/tools/sift-workstation)
+1. Download and deploy a [SIFT Workstation Virtual Machine](https://www.sans.org/tools/sift-workstation). Note: You will need to create and log in to a SANS account to download the virtual machine.
 
 2. Log in to the SIFT Workstation machine, update the packages, and install the python3 virtual environment package. Open a terminal and execute the following commands:
 
