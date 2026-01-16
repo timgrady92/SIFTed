@@ -2,6 +2,10 @@
 
 > **Note**: Tool integration is currently in development. Workflows are being introduced slowly and methodically after rigorous testing. Existing workflows should be treated as experimental at best.
 
+**Training wheels for forensic analysts.**
+
+SIFTed is a guided interface for SANS SIFT workstation workflows. It lets junior analysts contribute meaningful work on day one while building the knowledge to outgrow it.
+
 ## Quick Start
 
 ```bash
@@ -14,9 +18,7 @@ python app.py
 
 Open `http://127.0.0.1:5000` in your browser.
 
-**Training wheels for forensic analysts.**
 
-SIFTed is a guided interface for SANS SIFT workstation workflows. It lets junior analysts contribute meaningful work on day one while building the knowledge to outgrow it.
 
 ## Philosophy
 
