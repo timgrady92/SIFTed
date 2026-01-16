@@ -35,6 +35,7 @@ RUN_STATE = {}
 RUN_STATE_LOCK = threading.Lock()
 DATA_LOCK = threading.Lock()
 RUN_STATE_TTL_SECONDS = int(os.environ.get("SIFTED_RUN_STATE_TTL_SECONDS", "600"))
+RESULT_FILE_LIMIT = int(os.environ.get("SIFTED_RESULT_FILE_LIMIT", "12"))
 
 SECRET_KEY = os.environ.get("SIFTED_SECRET_KEY")
 if not SECRET_KEY:
@@ -668,17 +669,89 @@ def parse_json_table(path, row_limit=500, max_bytes=10 * 1024 * 1024):
     return {"columns": columns, "rows": sliced_rows}, total_rows, truncated
 
 
-def list_result_files(output_path, limit=12):
-    results_dir = os.path.join(output_path, "results")
-    if not os.path.isdir(results_dir):
+def list_directory_files(directory, limit=RESULT_FILE_LIMIT):
+    if limit <= 0:
+        return [], False
+    if not directory or not os.path.isdir(directory):
+        return [], False
+    normalized = normalize_path(directory)
+    if not is_path_allowed(normalized, OUTPUT_ROOTS):
         return [], False
     files = []
-    for entry in os.scandir(results_dir):
-        if entry.is_file():
-            files.append({"name": entry.name, "path": entry.path})
+    truncated = False
+    try:
+        with os.scandir(normalized) as it:
+            for entry in it:
+                if not entry.is_file():
+                    continue
+                if not is_path_allowed(entry.path, OUTPUT_ROOTS):
+                    continue
+                files.append({"name": entry.name, "path": entry.path})
+                if len(files) > limit:
+                    truncated = True
+                    break
+    except OSError:
+        return [], False
     files.sort(key=lambda item: item["name"].lower())
-    truncated = len(files) > limit
     return files[:limit], truncated
+
+
+def list_result_files(output_path, limit=RESULT_FILE_LIMIT):
+    results_dir = os.path.join(output_path, "results")
+    return list_directory_files(results_dir, limit=limit)
+
+
+def build_run_manifest(run, limit=RESULT_FILE_LIMIT):
+    files = []
+    truncated = False
+    seen = set()
+
+    def add_file(path, label=None):
+        if not path:
+            return
+        normalized = normalize_path(path)
+        if not is_path_allowed(normalized, OUTPUT_ROOTS):
+            return
+        if not os.path.isfile(normalized):
+            return
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        files.append({"name": label or os.path.basename(normalized), "path": normalized})
+
+    def add_list(items, was_truncated):
+        nonlocal truncated
+        if was_truncated:
+            truncated = True
+        for item in items:
+            path = item.get("path")
+            if not path:
+                continue
+            if path in seen:
+                continue
+            seen.add(path)
+            files.append(item)
+
+    add_file(run.get("output_file"))
+    add_file(run.get("timeline_path"))
+    add_file(run.get("storage_path"))
+
+    output_path = run.get("output_path") or ""
+    if output_path:
+        remaining = max(0, limit - len(files))
+        if run.get("tool") == "volatility" and remaining:
+            result_files, result_truncated = list_result_files(output_path, limit=remaining)
+            add_list(result_files, result_truncated)
+            remaining = max(0, limit - len(files))
+        if remaining:
+            root_files, root_truncated = list_directory_files(output_path, limit=remaining)
+            add_list(root_files, root_truncated)
+
+    if len(files) > limit:
+        truncated = True
+        files = files[:limit]
+
+    return files, truncated
 
 
 def save_cases(cases):
@@ -1763,10 +1836,9 @@ def cases():
         case_id = run.get("case_id")
         if not case_id:
             continue
-        if run.get("tool") == "volatility":
-            output_path = run.get("output_path") or ""
-            result_files, truncated = list_result_files(output_path)
-            run["result_files"] = result_files
+        output_files, truncated = build_run_manifest(run)
+        if output_files:
+            run["result_files"] = output_files
             run["result_truncated"] = truncated
         tool = run.get("tool") or "unknown"
         runs_by_case.setdefault(case_id, {}).setdefault(tool, []).append(run)
@@ -2154,19 +2226,19 @@ def run_eric_zimmerman():
     command = build_ez_command(tool, source_path, output_path)
     command_text = shell_join(command)
 
+    output_file = os.path.join(output_path, tool["csv_name"])
     run, run_error = create_run_record(
         f"EZ {tool['label']}",
         case_id,
         source_path,
         output_path,
         command_text,
+        extra={"output_file": output_file},
     )
     if run_error:
         return jsonify({"error": run_error}), 400
 
     start_generic_run(run["id"], command, run["log_path"])
-
-    output_file = os.path.join(output_path, tool["csv_name"])
 
     return jsonify(
         {

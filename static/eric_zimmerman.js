@@ -38,7 +38,6 @@ const drawerError = document.getElementById("drawerError");
 const currentPathLabel = document.getElementById("currentPath");
 const pathChips = Array.from(document.querySelectorAll(".path-chip"));
 
-let currentPath = "/cases";
 let currentRunId = "";
 let selectedToolId = "";
 
@@ -157,86 +156,35 @@ const selectInitialTool = () => {
   }
 };
 
-const toggleDrawer = (isOpen) => {
-  if (!browserDrawer) {
-    return;
-  }
-  browserDrawer.classList.toggle("open", isOpen);
-  browserDrawer.setAttribute("aria-hidden", String(!isOpen));
-};
-
-const renderDrawer = (data) => {
-  drawerList.innerHTML = "";
-  drawerError.hidden = true;
-  currentPathLabel.textContent = data.path;
-
-  if (data.parent) {
-    const upButton = document.createElement("button");
-    upButton.className = "drawer-item";
-    upButton.dataset.type = "dir";
-    upButton.dataset.path = data.parent;
-    upButton.textContent = "..";
-    drawerList.appendChild(upButton);
-  }
-
-  data.entries.forEach((entry) => {
-    const button = document.createElement("button");
-    button.className = "drawer-item";
-    button.dataset.type = entry.type;
-    button.dataset.path = entry.path;
-    button.textContent = entry.name;
-    drawerList.appendChild(button);
+const tooling = window.SiftedTooling;
+if (tooling) {
+  tooling.setupLogDrawer({
+    openButton: openLog,
+    closeButton: closeLog,
+    drawer: logDrawer,
+    content: logDrawerContent,
+    status: logDrawerStatus,
+    getRunId: () => currentRunId,
   });
-};
 
-const loadDirectory = async (path) => {
-  try {
-    const response = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
-    if (!response.ok) {
-      throw new Error("browse-failed");
-    }
-    const data = await response.json();
-    currentPath = data.path;
-    renderDrawer(data);
-  } catch (error) {
-    drawerError.hidden = false;
-  }
-};
-
-const toggleLogDrawer = (isOpen) => {
-  if (!logDrawer) {
-    return;
-  }
-  logDrawer.classList.toggle("open", isOpen);
-  logDrawer.setAttribute("aria-hidden", String(!isOpen));
-};
-
-const loadFullLog = async () => {
-  if (!currentRunId || !logDrawerContent) {
-    return;
-  }
-  if (logDrawerStatus) {
-    logDrawerStatus.textContent = "Loading log...";
-  }
-  try {
-    const response = await fetch(`/api/run/${currentRunId}/log`);
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || "Unable to load log.");
-    }
-    logDrawerContent.textContent = data.log || "No log output.";
-    if (logDrawerStatus) {
-      logDrawerStatus.textContent = "";
-    }
-  } catch (error) {
-    if (logDrawerStatus) {
-      logDrawerStatus.textContent = error.message;
-    }
-    if (logDrawerContent) {
-      logDrawerContent.textContent = "";
-    }
-  }
-};
+  tooling.setupBrowseDrawer({
+    openButton: openBrowser,
+    closeButton: closeBrowser,
+    drawer: browserDrawer,
+    drawerList,
+    drawerError,
+    currentPathLabel,
+    pathChips,
+    manualPath,
+    useManualPath,
+    onSelectPath: (path) => {
+      if (sourcePath) {
+        sourcePath.value = path;
+      }
+      buildCommand();
+    },
+  });
+}
 
 toolButtons.forEach((button) => {
   button.addEventListener("click", () => {
@@ -263,66 +211,6 @@ if (toggleCatalog && toolGrid) {
       }
     }
   });
-}
-
-if (openBrowser) {
-  openBrowser.addEventListener("click", () => {
-    toggleDrawer(true);
-    loadDirectory(currentPath);
-  });
-}
-
-if (closeBrowser) {
-  closeBrowser.addEventListener("click", () => toggleDrawer(false));
-}
-
-if (drawerList) {
-  drawerList.addEventListener("click", (event) => {
-    const target = event.target.closest(".drawer-item");
-    if (!target) {
-      return;
-    }
-    const entryPath = target.dataset.path || "";
-    const entryType = target.dataset.type || "file";
-    if (entryType === "dir") {
-      loadDirectory(entryPath);
-      return;
-    }
-    if (sourcePath) {
-      sourcePath.value = entryPath;
-    }
-    toggleDrawer(false);
-    buildCommand();
-  });
-}
-
-pathChips.forEach((chip) => {
-  chip.addEventListener("click", () => {
-    const nextPath = chip.dataset.path || "/cases";
-    loadDirectory(nextPath);
-  });
-});
-
-if (useManualPath) {
-  useManualPath.addEventListener("click", () => {
-    if (manualPath.value.trim() && sourcePath) {
-      sourcePath.value = manualPath.value.trim();
-      manualPath.value = "";
-      toggleDrawer(false);
-      buildCommand();
-    }
-  });
-}
-
-if (openLog) {
-  openLog.addEventListener("click", () => {
-    toggleLogDrawer(true);
-    loadFullLog();
-  });
-}
-
-if (closeLog) {
-  closeLog.addEventListener("click", () => toggleLogDrawer(false));
 }
 
 if (runButton) {
@@ -368,28 +256,25 @@ if (runButton) {
       if (currentRunId && window.registerActiveJob) {
         window.registerActiveJob({ id: currentRunId, tool: tool.label });
       }
-      if (currentRunId && window.EventSource) {
-        const source = new EventSource(`/api/run/${currentRunId}/events`);
-        source.addEventListener("status", (event) => {
-          const payload = JSON.parse(event.data || "{}");
-          setRunStatus(payload.message || "Running...", "neutral");
-        });
-        source.addEventListener("done", (event) => {
-          const payload = JSON.parse(event.data || "{}");
-          const exitCode = Number(payload.message || 0);
-          setRunStatus(
-            exitCode === 0 ? "Run completed." : "Run completed with errors.",
-            exitCode === 0 ? "success" : "error",
-          );
-          runButton.textContent = `Run ${tool.label}`;
-          runButton.disabled = false;
-          source.close();
-        });
-        source.addEventListener("error", () => {
-          setRunStatus("Run failed.", "error");
-          runButton.textContent = `Run ${tool.label}`;
-          runButton.disabled = false;
-          source.close();
+      if (currentRunId && tooling && window.EventSource) {
+        tooling.attachRunEvents(currentRunId, {
+          onStatus: (payload) => {
+            setRunStatus(payload.message || "Running...", "neutral");
+          },
+          onDone: (payload) => {
+            const exitCode = Number(payload.message || 0);
+            setRunStatus(
+              exitCode === 0 ? "Run completed." : "Run completed with errors.",
+              exitCode === 0 ? "success" : "error",
+            );
+            runButton.textContent = `Run ${tool.label}`;
+            runButton.disabled = false;
+          },
+          onError: () => {
+            setRunStatus("Run failed.", "error");
+            runButton.textContent = `Run ${tool.label}`;
+            runButton.disabled = false;
+          },
         });
       } else {
         setRunStatus("Run started. Refresh to see results.", "neutral");
