@@ -1,1 +1,5 @@
+# Web framework
 Flask==3.0.3
+
+# Testing
+pytest>=7.0.0

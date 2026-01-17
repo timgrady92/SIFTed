@@ -249,7 +249,6 @@ def run_completion_message(status):
 
 
 EZ_TOOL_ORDER = [
-    "pecmd",
     "amcacheparser",
     "appcompatcacheparser",
     "lecmd",
@@ -272,17 +271,6 @@ EZ_TOOL_CATALOG = {
         "input_mode": "file",
         "csv_name": "amcache.csv",
         "binaries": ["AmcacheParser", "amcacheparser"],
-        "curated": True,
-        "category": "program-execution",
-    },
-    "pecmd": {
-        "label": "PECmd",
-        "summary": "Prefetch execution evidence",
-        "description": "Parses Prefetch files to extract execution counts, timestamps, and referenced file paths.",
-        "input_hint": "Source: Prefetch file or directory",
-        "input_mode": "file_or_dir",
-        "csv_name": "prefetch.csv",
-        "binaries": ["PECmd", "pecmd"],
         "curated": True,
         "category": "program-execution",
     },
@@ -2097,9 +2085,72 @@ def glossary():
     return render_template("glossary.html")
 
 
+EZ_CATEGORIES = [
+    {
+        "id": "program-execution",
+        "label": "Program Execution",
+        "description": "Evidence of programs that ran on the system",
+    },
+    {
+        "id": "user-activity",
+        "label": "User Activity",
+        "description": "Evidence of files and folders the user interacted with",
+    },
+    {
+        "id": "system-events",
+        "label": "System Events",
+        "description": "Windows Event Log entries for security and system activity",
+    },
+    {
+        "id": "file-system",
+        "label": "File System",
+        "description": "Low-level file system metadata and change journals",
+    },
+    {
+        "id": "persistence",
+        "label": "Persistence & Autostart",
+        "description": "Mechanisms attackers use to survive reboots",
+    },
+    {
+        "id": "browser-network",
+        "label": "Browser & Network",
+        "description": "Web browsing history, downloads, and cached data",
+    },
+]
+
+
+def get_all_ez_tools_grouped():
+    """Get all EZ tools grouped by category for single-page display."""
+    categories_with_tools = []
+    all_tools_json = []
+
+    for category in EZ_CATEGORIES:
+        cat_id = category["id"]
+        tools, tools_json = get_tools_for_category(cat_id)
+        if tools:
+            categories_with_tools.append(
+                {
+                    "id": cat_id,
+                    "label": category["label"],
+                    "description": category["description"],
+                    "tools": tools,
+                }
+            )
+            all_tools_json.extend(tools_json)
+
+    return categories_with_tools, all_tools_json
+
+
 @app.route("/eric-zimmerman")
 def eric_zimmerman():
-    return render_template("eric_zimmerman.html")
+    cases = load_cases()
+    categories, tools_json = get_all_ez_tools_grouped()
+    return render_template(
+        "eric_zimmerman.html",
+        cases=cases,
+        categories=categories,
+        tools_json=tools_json,
+    )
 
 
 @app.route("/metadata-extraction")
@@ -2153,76 +2204,15 @@ def get_tools_for_category(category):
     return tools, tools_json
 
 
+# Legacy category routes - redirect to consolidated page
 @app.route("/artifact-parsing/program-execution")
-def artifact_program_execution():
-    cases = load_cases()
-    tools, tools_json = get_tools_for_category("program-execution")
-    return render_template(
-        "artifact_program_execution.html",
-        cases=cases,
-        tools=tools,
-        tools_json=tools_json,
-    )
-
-
 @app.route("/artifact-parsing/user-activity")
-def artifact_user_activity():
-    cases = load_cases()
-    tools, tools_json = get_tools_for_category("user-activity")
-    return render_template(
-        "artifact_user_activity.html",
-        cases=cases,
-        tools=tools,
-        tools_json=tools_json,
-    )
-
-
 @app.route("/artifact-parsing/system-events")
-def artifact_system_events():
-    cases = load_cases()
-    tools, tools_json = get_tools_for_category("system-events")
-    return render_template(
-        "artifact_system_events.html",
-        cases=cases,
-        tools=tools,
-        tools_json=tools_json,
-    )
-
-
 @app.route("/artifact-parsing/file-system")
-def artifact_file_system():
-    cases = load_cases()
-    tools, tools_json = get_tools_for_category("file-system")
-    return render_template(
-        "artifact_file_system.html",
-        cases=cases,
-        tools=tools,
-        tools_json=tools_json,
-    )
-
-
 @app.route("/artifact-parsing/persistence")
-def artifact_persistence():
-    cases = load_cases()
-    tools, tools_json = get_tools_for_category("persistence")
-    return render_template(
-        "artifact_persistence.html",
-        cases=cases,
-        tools=tools,
-        tools_json=tools_json,
-    )
-
-
 @app.route("/artifact-parsing/browser-network")
-def artifact_browser_network():
-    cases = load_cases()
-    tools, tools_json = get_tools_for_category("browser-network")
-    return render_template(
-        "artifact_browser_network.html",
-        cases=cases,
-        tools=tools,
-        tools_json=tools_json,
-    )
+def artifact_parsing_redirect():
+    return redirect(url_for("eric_zimmerman"))
 
 
 @app.route("/volatility")
