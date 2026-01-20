@@ -20,32 +20,25 @@
       <div class="context-body">
         <div class="block">
           <h3>Case (optional)</h3>
-          <label class="input-stack">
-            Link this run to a case
-            <select id="caseSelect" data-tool="{{ tool_slug }}">
-              <option value="">No case selected</option>
-              {% for case in cases|reverse %}
-                <option value="{{ case.id }}" data-slug="{{ case.slug }}" data-image="{{ case.image_path }}">
-                  {{ case.name }}
-                </option>
-              {% endfor %}
-            </select>
-          </label>
+          <select id="caseSelect" data-tool="{{ tool_slug }}">
+            <option value="">No case selected</option>
+            {% for case in cases|reverse %}
+              <option value="{{ case.id }}" data-slug="{{ case.slug }}" data-image="{{ case.image_path }}">
+                {{ case.name }}
+              </option>
+            {% endfor %}
+          </select>
           {% if cases %}
-            <div class="helper-row">
-              <span class="helper-label">Recent cases</span>
-              <div class="chip-grid compact">
-                {% for case in cases|reverse %}
-                  {% if loop.index <= 3 %}
-                    <button class="chip" data-case-id="{{ case.id }}" type="button">
-                      {{ case.name }}
-                    </button>
-                  {% endif %}
-                {% endfor %}
-              </div>
+            <div class="chip-row">
+              {% for case in cases|reverse %}
+                {% if loop.index <= 3 %}
+                  <button class="chip" data-case-id="{{ case.id }}" type="button">
+                    {{ case.name }}
+                  </button>
+                {% endif %}
+              {% endfor %}
             </div>
           {% endif %}
-          <p class="helper">Cases keep related runs together for reporting.</p>
         </div>
 
         <div class="block">
@@ -56,21 +49,24 @@
             {% endif %}
           </div>
           <div class="source-selector">
-            <label class="input-stack artifact-select-stack">
-              <span>Select from case</span>
-              <select id="artifactSelect" class="artifact-select">
-                <option value="">-- Select artifact or enter path below --</option>
-              </select>
-            </label>
-            <span class="source-or">or</span>
-            <label class="input-stack source-manual">
-              <span>{{ source_label }}</span>
-              <input
-                id="imagePath"
-                type="text"
-                placeholder="{{ source_placeholder }}"
-              />
-            </label>
+            <div class="source-tabs" role="tablist">
+              <button class="source-tab active" type="button" role="tab" data-source-mode="case" aria-selected="true">From Case</button>
+              <button class="source-tab" type="button" role="tab" data-source-mode="manual" aria-selected="false">Enter Path</button>
+            </div>
+            <div class="source-panels">
+              <div class="source-panel active" data-panel="case">
+                <select id="artifactSelect" class="artifact-select">
+                  <option value="">Select an artifact</option>
+                </select>
+              </div>
+              <div class="source-panel" data-panel="manual">
+                <input
+                  id="imagePath"
+                  type="text"
+                  placeholder="{{ source_placeholder }}"
+                />
+              </div>
+            </div>
           </div>
           {% if source_hint %}
             <p class="source-hint">{{ source_hint }}</p>
@@ -79,11 +75,7 @@
 
         <div class="block">
           <h3>Output</h3>
-          <label class="input-stack">
-            Output folder
-            <input id="outputPath" type="text" placeholder="{{ output_placeholder }}" />
-          </label>
-          <p class="helper">Default is grouped under the selected case.</p>
+          <input id="outputPath" type="text" placeholder="{{ output_placeholder }}" />
         </div>
       </div>
     </div>

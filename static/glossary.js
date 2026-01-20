@@ -2053,9 +2053,30 @@ const buildDetailMarkup = (data) => {
   if (data.keyFields && data.keyFields.length > 0) {
     html += `<div class="detail-section">
       <div class="detail-label">Key fields to query</div>
-      <ul class="detail-list detail-fields">
-        ${data.keyFields.map((field) => `<li><code>${escapeHtml(field)}</code></li>`).join("")}
-      </ul>
+      <div class="detail-fields-grid">
+        ${data.keyFields.map((field) => {
+          // Split on first colon or dash to separate field name from description
+          const colonIdx = field.indexOf(": ");
+          const dashIdx = field.indexOf(" - ");
+          let fieldName, fieldDesc;
+
+          if (colonIdx > 0 && (dashIdx < 0 || colonIdx < dashIdx)) {
+            fieldName = field.substring(0, colonIdx);
+            fieldDesc = field.substring(colonIdx + 2);
+          } else if (dashIdx > 0) {
+            fieldName = field.substring(0, dashIdx);
+            fieldDesc = field.substring(dashIdx + 3);
+          } else {
+            fieldName = field;
+            fieldDesc = "";
+          }
+
+          return `<div class="detail-field-row">
+            <code class="detail-field-name">${escapeHtml(fieldName)}</code>
+            ${fieldDesc ? `<span class="detail-field-desc">${escapeHtml(fieldDesc)}</span>` : ""}
+          </div>`;
+        }).join("")}
+      </div>
     </div>`;
   }
 
@@ -3521,7 +3542,16 @@ const initReferenceSections = () => {
       if (detailContent && !refContent.querySelector(".artifact-row.active")) {
         detailContent.innerHTML = `
           <div class="detail-placeholder">
-            <p class="helper">Select an artifact to view details</p>
+            <div class="detail-placeholder-icon">
+              <span class="placeholder-ring"></span>
+              <span class="placeholder-symbol">?</span>
+            </div>
+            <p class="detail-placeholder-title">Select an Artifact</p>
+            <p class="detail-placeholder-hint">Click any artifact to view forensic details, file locations, and investigation tips.</p>
+            <div class="detail-placeholder-keys">
+              <span class="key-hint"><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+              <span class="key-hint"><kbd>Enter</kbd> Select</span>
+            </div>
           </div>
         `;
       }

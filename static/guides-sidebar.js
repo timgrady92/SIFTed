@@ -1408,6 +1408,7 @@ const initGuidesSidebar = () => {
     }
 
     detailPane.hidden = false;
+    detailPane.dataset.category = guide.category;
     if (sidebarContent) sidebarContent.style.display = "none";
   };
 

@@ -39,7 +39,7 @@ const initCaseContext = () => {
 
   const populateArtifactSelect = (artifacts) => {
     if (!artifactSelect) return;
-    artifactSelect.innerHTML = '<option value="">-- Select artifact or enter path below --</option>';
+    artifactSelect.innerHTML = '<option value="">Select an artifact</option>';
 
     if (!artifacts || artifacts.length === 0) {
       artifactSelect.innerHTML = '<option value="">No artifacts in this case</option>';
@@ -145,6 +145,11 @@ const initCaseContext = () => {
       if (selectedPath) {
         imagePath.value = selectedPath;
         autoImage = selectedPath;
+        // Switch to "Enter Path" tab to show the selected value
+        const manualTab = document.querySelector('.source-tab[data-source-mode="manual"]');
+        if (manualTab) {
+          manualTab.click();
+        }
         const event = new Event("change", { bubbles: true });
         imagePath.dispatchEvent(event);
       }
@@ -223,6 +228,39 @@ const initContextCards = () => {
 };
 
 initContextCards();
+
+const initSourceTabs = () => {
+  const tabContainers = document.querySelectorAll(".source-tabs");
+  tabContainers.forEach((tabContainer) => {
+    const tabs = tabContainer.querySelectorAll(".source-tab");
+    const panelContainer = tabContainer.nextElementSibling;
+    if (!panelContainer || !panelContainer.classList.contains("source-panels")) {
+      return;
+    }
+    const panels = panelContainer.querySelectorAll(".source-panel");
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const mode = tab.dataset.sourceMode;
+
+        // Update tab states
+        tabs.forEach((t) => {
+          t.classList.remove("active");
+          t.setAttribute("aria-selected", "false");
+        });
+        tab.classList.add("active");
+        tab.setAttribute("aria-selected", "true");
+
+        // Update panel visibility
+        panels.forEach((panel) => {
+          panel.classList.toggle("active", panel.dataset.panel === mode);
+        });
+      });
+    });
+  });
+};
+
+initSourceTabs();
 
 // Guide cards are now handled by guides.js with modal functionality
 
