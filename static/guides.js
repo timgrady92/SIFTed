@@ -125,26 +125,32 @@ if (tabButtons.length) {
 }
 
 if (guideSearch) {
+  // Pre-cache search data to avoid repeated DOM queries
+  const guidesSearchIndex = guideCards.map((card) => ({
+    card,
+    searchText: [
+      card.querySelector("h2")?.textContent || "",
+      card.querySelector(".helper")?.textContent || "",
+      card.dataset.keywords || "",
+      card.dataset.category || ""
+    ].join(" ").toLowerCase()
+  }));
+
+  let searchTimeout;
   guideSearch.addEventListener("input", () => {
-    const query = guideSearch.value.toLowerCase().trim();
-    guideCards.forEach((card) => {
-      const title = card.querySelector("h2")?.textContent.toLowerCase() || "";
-      const helper = card.querySelector(".helper")?.textContent.toLowerCase() || "";
-      const keywords = card.dataset.keywords?.toLowerCase() || "";
-      const category = card.dataset.category?.toLowerCase() || "";
-
-      const matches = !query ||
-        title.includes(query) ||
-        helper.includes(query) ||
-        keywords.includes(query) ||
-        category.includes(query);
-
-      card.classList.toggle("search-hidden", !matches);
-    });
-    if (clearGuideSearch) {
-      clearGuideSearch.hidden = query.length === 0;
-    }
-    updateGuideMeta();
+    // Debounce search to avoid blocking main thread on every keystroke
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      const query = guideSearch.value.toLowerCase().trim();
+      guidesSearchIndex.forEach(({ card, searchText }) => {
+        const matches = !query || searchText.includes(query);
+        card.classList.toggle("search-hidden", !matches);
+      });
+      if (clearGuideSearch) {
+        clearGuideSearch.hidden = query.length === 0;
+      }
+      updateGuideMeta();
+    }, 150);
   });
 }
 
@@ -180,11 +186,16 @@ function openGuideModal(card) {
     guideModalCategory.textContent = formatCategoryLabel(category);
   }
   if (guideModalBody) {
-    guideModalBody.innerHTML = body ? body.innerHTML : "";
-    // Initialize artifact link tooltips for the new modal content
-    if (typeof window.initArtifactTooltips === "function") {
-      window.initArtifactTooltips(guideModalBody);
+    // Use cloneNode instead of innerHTML for better performance
+    // (avoids serialization/deserialization overhead)
+    guideModalBody.innerHTML = "";
+    if (body) {
+      const clone = body.cloneNode(true);
+      while (clone.firstChild) {
+        guideModalBody.appendChild(clone.firstChild);
+      }
     }
+    // Note: artifact tooltips use event delegation, no initialization needed
   }
 
   guideModal.classList.add("open");

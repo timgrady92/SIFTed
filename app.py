@@ -99,6 +99,65 @@ OUTPUT_ROOTS = parse_path_list(os.environ.get("SIFTED_OUTPUT_ROOTS"), ["/cases"]
 INPUT_ROOTS = parse_path_list(os.environ.get("SIFTED_INPUT_ROOTS"), [])
 SYMBOL_ROOTS = parse_path_list(os.environ.get("SIFTED_SYMBOL_ROOTS"), [])
 
+# Artifact type definitions for case evidence management
+ARTIFACT_TYPES = {
+    "disk_image": {
+        "label": "Disk Image",
+        "extensions": [".dd", ".raw", ".e01", ".ex01", ".aff", ".img", ".dmg"],
+        "icon": "disk",
+    },
+    "memory_dump": {
+        "label": "Memory Dump",
+        "extensions": [".raw", ".mem", ".vmem", ".dmp", ".lime", ".core"],
+        "icon": "memory",
+    },
+    "registry": {
+        "label": "Registry Hive",
+        "extensions": [],
+        "names": ["SYSTEM", "SOFTWARE", "SAM", "SECURITY", "NTUSER.DAT", "UsrClass.dat"],
+        "icon": "registry",
+    },
+    "event_log": {
+        "label": "Event Log",
+        "extensions": [".evtx", ".evt"],
+        "icon": "log",
+    },
+    "artifact_file": {
+        "label": "Artifact File",
+        "extensions": [".pf", ".lnk", ".db", ".sqlite", ".dat"],
+        "icon": "file",
+    },
+    "other": {
+        "label": "Other",
+        "extensions": [],
+        "icon": "generic",
+    },
+}
+
+
+def detect_artifact_type(path):
+    """Auto-detect artifact type from file extension or name."""
+    if not path:
+        return "other"
+    basename = os.path.basename(path)
+    basename_upper = basename.upper()
+    ext = os.path.splitext(path)[1].lower()
+
+    # Check registry hives by name first (they often have no extension)
+    registry_info = ARTIFACT_TYPES.get("registry", {})
+    for name in registry_info.get("names", []):
+        if basename_upper == name.upper() or basename_upper.endswith(name.upper()):
+            return "registry"
+
+    # Check extensions for each type
+    for type_key, type_info in ARTIFACT_TYPES.items():
+        if type_key == "registry":
+            continue
+        if ext in type_info.get("extensions", []):
+            return type_key
+
+    return "other"
+
 
 def shell_join(command):
     try:
@@ -701,6 +760,20 @@ def load_cases():
         if not case.get("slug"):
             base = case.get("image_path") or case.get("name", "case")
             case["slug"] = slugify(os.path.basename(base))
+            updated = True
+
+        # Migrate old cases to artifacts array format
+        if "artifacts" not in case:
+            case["artifacts"] = []
+            if case.get("image_path"):
+                case["artifacts"].append({
+                    "id": uuid.uuid4().hex[:8],
+                    "type": detect_artifact_type(case["image_path"]),
+                    "path": case["image_path"],
+                    "label": os.path.basename(case["image_path"]),
+                    "hash": case.get("file_hash", ""),
+                    "added_at": case.get("created_at", ""),
+                })
             updated = True
 
     if updated:
@@ -2265,6 +2338,20 @@ def cases():
         cases = load_cases()
         slug_source = image_path or name
         case_slug = slugify(os.path.basename(slug_source))
+        created_at = datetime.now(timezone.utc).isoformat()
+
+        # Build artifacts array from initial image_path
+        artifacts = []
+        if image_path:
+            artifacts.append({
+                "id": uuid.uuid4().hex[:8],
+                "type": detect_artifact_type(image_path),
+                "path": image_path,
+                "label": os.path.basename(image_path),
+                "hash": file_hash,
+                "added_at": created_at,
+            })
+
         cases.append(
             {
                 "id": uuid.uuid4().hex,
@@ -2274,7 +2361,8 @@ def cases():
                 "slug": case_slug,
                 "file_hash": file_hash,
                 "hash_error": hash_error,
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": created_at,
+                "artifacts": artifacts,
             }
         )
         save_cases(cases)
@@ -2303,7 +2391,15 @@ def cases():
         groups.sort(key=lambda item: item["tool"])
         grouped_runs[case_id] = groups
 
-    return render_template("cases.html", cases=cases, runs_by_case=grouped_runs)
+    # Build artifact type labels for template
+    artifact_type_labels = {k: v.get("label", k) for k, v in ARTIFACT_TYPES.items()}
+
+    return render_template(
+        "cases.html",
+        cases=cases,
+        runs_by_case=grouped_runs,
+        artifact_type_labels=artifact_type_labels,
+    )
 
 
 @app.route("/case/<case_id>/results")
@@ -2372,6 +2468,115 @@ def case_results(case_id):
         result_files=all_result_files,
         stats=stats,
     )
+
+
+@app.route("/api/case/<case_id>")
+def get_case(case_id):
+    """Get case details including artifacts."""
+    cases = load_cases()
+    for case in cases:
+        if case.get("id") == case_id:
+            return jsonify({"case": case})
+    return jsonify({"error": "Case not found."}), 404
+
+
+@app.route("/api/case/<case_id>/artifacts", methods=["POST"])
+def add_artifact(case_id):
+    """Add an artifact to a case."""
+    payload = request.get_json() or {}
+    artifact_path = payload.get("path", "").strip()
+    artifact_type = payload.get("type", "").strip()
+    label = payload.get("label", "").strip()
+
+    if not artifact_path:
+        return jsonify({"error": "Artifact path is required."}), 400
+
+    normalized_path = normalize_path(artifact_path)
+    if not os.path.exists(normalized_path):
+        return jsonify({"error": "Artifact path not found."}), 400
+
+    cases = load_cases()
+    case = None
+    for c in cases:
+        if c.get("id") == case_id:
+            case = c
+            break
+
+    if not case:
+        return jsonify({"error": "Case not found."}), 404
+
+    # Auto-detect type if not provided
+    if not artifact_type:
+        artifact_type = detect_artifact_type(normalized_path)
+
+    # Use filename as label if not provided
+    if not label:
+        label = os.path.basename(normalized_path)
+
+    # Compute hash for the artifact
+    artifact_hash = ""
+    if os.path.isfile(normalized_path):
+        try:
+            artifact_hash = compute_sha256(normalized_path)
+        except OSError:
+            pass
+
+    artifact = {
+        "id": uuid.uuid4().hex[:8],
+        "type": artifact_type,
+        "path": normalized_path,
+        "label": label,
+        "hash": artifact_hash,
+        "added_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if "artifacts" not in case:
+        case["artifacts"] = []
+    case["artifacts"].append(artifact)
+
+    # Update image_path for backward compatibility (use first artifact if empty)
+    if not case.get("image_path"):
+        case["image_path"] = normalized_path
+
+    save_cases(cases)
+    return jsonify({"success": True, "artifact": artifact})
+
+
+@app.route("/api/case/<case_id>/artifacts/<artifact_id>", methods=["DELETE"])
+def remove_artifact(case_id, artifact_id):
+    """Remove an artifact from a case."""
+    cases = load_cases()
+    case = None
+    for c in cases:
+        if c.get("id") == case_id:
+            case = c
+            break
+
+    if not case:
+        return jsonify({"error": "Case not found."}), 404
+
+    artifacts = case.get("artifacts", [])
+    original_count = len(artifacts)
+    case["artifacts"] = [a for a in artifacts if a.get("id") != artifact_id]
+
+    if len(case["artifacts"]) == original_count:
+        return jsonify({"error": "Artifact not found."}), 404
+
+    save_cases(cases)
+    return jsonify({"success": True})
+
+
+@app.route("/api/artifact-types")
+def get_artifact_types():
+    """Get available artifact types for UI dropdowns."""
+    types = []
+    for key, info in ARTIFACT_TYPES.items():
+        types.append({
+            "id": key,
+            "label": info.get("label", key),
+            "icon": info.get("icon", "generic"),
+        })
+    return jsonify({"types": types})
 
 
 @app.route("/api/case/<case_id>/search")

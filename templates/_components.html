@@ -55,14 +55,23 @@
               <button class="ghost" id="openBrowser">Browse</button>
             {% endif %}
           </div>
-          <label class="input-stack">
-            {{ source_label }}
-            <input
-              id="imagePath"
-              type="text"
-              placeholder="{{ source_placeholder }}"
-            />
-          </label>
+          <div class="source-selector">
+            <label class="input-stack artifact-select-stack">
+              <span>Select from case</span>
+              <select id="artifactSelect" class="artifact-select">
+                <option value="">-- Select artifact or enter path below --</option>
+              </select>
+            </label>
+            <span class="source-or">or</span>
+            <label class="input-stack source-manual">
+              <span>{{ source_label }}</span>
+              <input
+                id="imagePath"
+                type="text"
+                placeholder="{{ source_placeholder }}"
+              />
+            </label>
+          </div>
           {% if source_hint %}
             <p class="source-hint">{{ source_hint }}</p>
           {% endif %}
@@ -610,6 +619,47 @@
         </label>
         <button class="action" id="useManualPath">Use path</button>
       </div>
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro add_artifact_modal() %}
+  <div class="artifact-modal" id="addArtifactModal" aria-hidden="true">
+    <div class="artifact-modal-surface">
+      <div class="artifact-modal-header">
+        <h3>Add Artifact</h3>
+        <button class="ghost" id="closeArtifactModal" type="button">Close</button>
+      </div>
+      <form id="addArtifactForm" class="artifact-modal-form">
+        <input type="hidden" id="artifactCaseId" value="" />
+        <label class="input-stack">
+          Artifact path
+          <div class="input-row">
+            <input id="artifactPath" type="text" placeholder="/cases/evidence/file.raw" required />
+            <button class="ghost" id="browseArtifact" type="button">Browse</button>
+          </div>
+        </label>
+        <label class="input-stack">
+          Artifact type
+          <select id="artifactType">
+            <option value="">Auto-detect</option>
+            <option value="disk_image">Disk Image</option>
+            <option value="memory_dump">Memory Dump</option>
+            <option value="registry">Registry Hive</option>
+            <option value="event_log">Event Log</option>
+            <option value="artifact_file">Artifact File</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label class="input-stack">
+          Label (optional)
+          <input id="artifactLabel" type="text" placeholder="Auto-generated from filename" />
+        </label>
+        <div class="artifact-modal-actions">
+          <button class="ghost" id="cancelArtifact" type="button">Cancel</button>
+          <button class="action" type="submit">Add Artifact</button>
+        </div>
+      </form>
     </div>
   </div>
 {% endmacro %}

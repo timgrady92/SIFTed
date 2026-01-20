@@ -7,7 +7,17 @@
     "slug": "challenge-raw",
     "file_hash": "80366d7ec64a5529c95c2f523f4281a5f11efbad33ecb19f73525470c1407b23",
     "hash_error": "",
-    "created_at": "2026-01-10T06:17:42.614211+00:00"
+    "created_at": "2026-01-10T06:17:42.614211+00:00",
+    "artifacts": [
+      {
+        "id": "92d74061",
+        "type": "disk_image",
+        "path": "/cases/Challenge/Challenge.raw",
+        "label": "Challenge.raw",
+        "hash": "80366d7ec64a5529c95c2f523f4281a5f11efbad33ecb19f73525470c1407b23",
+        "added_at": "2026-01-10T06:17:42.614211+00:00"
+      }
+    ]
   },
   {
     "id": "096879297fa948ad9e8c8634a2f64379",
@@ -17,6 +27,16 @@
     "slug": "sift-mem",
     "file_hash": "ce0d782f61ef37b77e8e47f1efdc9a0f8bd3d1da097774961a791571bdbc6f79",
     "hash_error": "",
-    "created_at": "2026-01-10T07:43:05.509560+00:00"
+    "created_at": "2026-01-10T07:43:05.509560+00:00",
+    "artifacts": [
+      {
+        "id": "16cff52d",
+        "type": "memory_dump",
+        "path": "/cases/SIFT/sift.mem",
+        "label": "sift.mem",
+        "hash": "ce0d782f61ef37b77e8e47f1efdc9a0f8bd3d1da097774961a791571bdbc6f79",
+        "added_at": "2026-01-10T07:43:05.509560+00:00"
+      }
+    ]
   }
 ]

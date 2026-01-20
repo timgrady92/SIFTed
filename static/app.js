@@ -1,5 +1,6 @@
 const initCaseContext = () => {
   const caseSelect = document.getElementById("caseSelect");
+  const artifactSelect = document.getElementById("artifactSelect");
   const imagePath = document.getElementById("imagePath");
   const outputPath = document.getElementById("outputPath");
   const caseChips = Array.from(document.querySelectorAll(".chip[data-case-id]"));
@@ -10,6 +11,16 @@ const initCaseContext = () => {
 
   let autoImage = "";
   let autoOutput = "";
+  let cachedArtifacts = {};
+
+  const ARTIFACT_TYPE_LABELS = {
+    disk_image: "Disk Image",
+    memory_dump: "Memory Dump",
+    registry: "Registry Hive",
+    event_log: "Event Log",
+    artifact_file: "Artifact File",
+    other: "Other",
+  };
 
   const buildDefaultOutput = (caseId) => {
     if (!caseId) {
@@ -26,12 +37,78 @@ const initCaseContext = () => {
     return `/cases/${slug}/${caseSelect.dataset.tool || "tool"}/${stamp}`;
   };
 
+  const populateArtifactSelect = (artifacts) => {
+    if (!artifactSelect) return;
+    artifactSelect.innerHTML = '<option value="">-- Select artifact or enter path below --</option>';
+
+    if (!artifacts || artifacts.length === 0) {
+      artifactSelect.innerHTML = '<option value="">No artifacts in this case</option>';
+      return;
+    }
+
+    // Group artifacts by type
+    const grouped = {};
+    artifacts.forEach((artifact) => {
+      const type = artifact.type || "other";
+      if (!grouped[type]) {
+        grouped[type] = [];
+      }
+      grouped[type].push(artifact);
+    });
+
+    // Create optgroups for each type
+    Object.entries(grouped).forEach(([type, typeArtifacts]) => {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = ARTIFACT_TYPE_LABELS[type] || type;
+      typeArtifacts.forEach((artifact) => {
+        const option = document.createElement("option");
+        option.value = artifact.path;
+        option.textContent = artifact.label || artifact.path;
+        option.title = artifact.path;
+        optgroup.appendChild(option);
+      });
+      artifactSelect.appendChild(optgroup);
+    });
+  };
+
+  const fetchCaseArtifacts = async (caseId) => {
+    if (!caseId) {
+      populateArtifactSelect([]);
+      return;
+    }
+
+    // Check cache first
+    if (cachedArtifacts[caseId]) {
+      populateArtifactSelect(cachedArtifacts[caseId]);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/case/${caseId}`);
+      if (!response.ok) {
+        populateArtifactSelect([]);
+        return;
+      }
+      const data = await response.json();
+      const artifacts = data.case?.artifacts || [];
+      cachedArtifacts[caseId] = artifacts;
+      populateArtifactSelect(artifacts);
+    } catch (error) {
+      populateArtifactSelect([]);
+    }
+  };
+
   const updateCaseContext = () => {
     const caseId = caseSelect.value;
     if (!caseId) {
+      populateArtifactSelect([]);
       return;
     }
     const tool = caseSelect.dataset.tool || "tool";
+
+    // Fetch and populate artifacts for this case
+    fetchCaseArtifacts(caseId);
+
     if (outputPath) {
       const nextOutput = buildDefaultOutput(caseId);
       if (!outputPath.value.trim() || outputPath.value.trim() === autoOutput) {
@@ -61,10 +138,27 @@ const initCaseContext = () => {
 
   caseSelect.addEventListener("change", updateCaseContext);
 
+  // Handle artifact selection
+  if (artifactSelect && imagePath) {
+    artifactSelect.addEventListener("change", () => {
+      const selectedPath = artifactSelect.value;
+      if (selectedPath) {
+        imagePath.value = selectedPath;
+        autoImage = selectedPath;
+        const event = new Event("change", { bubbles: true });
+        imagePath.dispatchEvent(event);
+      }
+    });
+  }
+
   if (imagePath) {
     imagePath.addEventListener("input", () => {
       if (imagePath.value.trim() !== autoImage) {
         autoImage = "";
+        // Clear artifact selection when manually typing
+        if (artifactSelect) {
+          artifactSelect.value = "";
+        }
       }
     });
   }
@@ -77,12 +171,17 @@ const initCaseContext = () => {
     });
   }
 
-  caseChips.forEach((chip) => {
-    chip.addEventListener("click", () => {
-      caseSelect.value = chip.dataset.caseId || "";
-      updateCaseContext();
+  // Use event delegation instead of individual listeners
+  const chipContainer = document.querySelector(".chip-grid");
+  if (chipContainer) {
+    chipContainer.addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-case-id]");
+      if (chip) {
+        caseSelect.value = chip.dataset.caseId || "";
+        updateCaseContext();
+      }
     });
-  });
+  }
 };
 
 initCaseContext();
@@ -177,28 +276,28 @@ const refreshJobs = async () => {
     updateJobPill([]);
     return;
   }
-  const updated = [];
-  for (const job of jobs) {
-    try {
-      const response = await fetch(`/api/run/${job.id}/status`);
-      if (!response.ok) {
-        if (response.status !== 404) {
-          updated.push(job);
+  // Fetch all job statuses in parallel for better performance
+  const results = await Promise.all(
+    jobs.map(async (job) => {
+      try {
+        const response = await fetch(`/api/run/${job.id}/status`);
+        if (!response.ok) {
+          return response.status !== 404 ? job : null;
         }
-        continue;
+        const data = await response.json();
+        const status = data.status || job.status;
+        const completedAt = status === "running" ? null : Date.now();
+        return {
+          ...job,
+          status,
+          completedAt: job.completedAt || completedAt,
+        };
+      } catch (error) {
+        return job;
       }
-      const data = await response.json();
-      const status = data.status || job.status;
-      const completedAt = status === "running" ? null : Date.now();
-      updated.push({
-        ...job,
-        status,
-        completedAt: job.completedAt || completedAt,
-      });
-    } catch (error) {
-      updated.push(job);
-    }
-  }
+    })
+  );
+  const updated = results.filter(Boolean);
   const pruned = updated.filter((job) => {
     // Prune jobs that have been "running" for more than 1 hour (likely stale)
     if (job.status === "running" && job.startedAt) {
@@ -301,11 +400,15 @@ const renderJobs = (runs) => {
   if (!list) {
     return;
   }
-  list.innerHTML = "";
   if (!runs.length) {
+    list.replaceChildren();
     list.textContent = "No active jobs.";
     return;
   }
+  // Use DocumentFragment to batch DOM operations and reduce reflows
+  const fragment = document.createDocumentFragment();
+  const pendingTails = [];
+
   runs.forEach((run) => {
     const card = document.createElement("div");
     card.className = "job-card";
@@ -361,12 +464,18 @@ const renderJobs = (runs) => {
     });
 
     card.append(header, caseLine, imageLine, outputLine, command, toggle, output);
-    list.appendChild(card);
+    fragment.appendChild(card);
 
     if (jobState.expanded.has(run.id)) {
-      fetchTail(run.id, output);
+      pendingTails.push({ runId: run.id, output });
     }
   });
+
+  // Single DOM operation to replace all children
+  list.replaceChildren(fragment);
+
+  // Fetch tails after DOM update to avoid blocking render
+  pendingTails.forEach(({ runId, output }) => fetchTail(runId, output));
 };
 
 window.registerActiveJob = (job) => {
@@ -392,12 +501,14 @@ window.registerActiveJob = (job) => {
 };
 
 refreshJobs();
-setInterval(refreshJobs, 5000);
 setupJobsDrawer();
 
+// Consolidated polling interval - only one interval for both job refresh and drawer updates
+const POLL_INTERVAL_MS = 5000;
 setInterval(() => {
+  refreshJobs();
   const drawer = document.getElementById("activeJobsDrawer");
   if (drawer && drawer.classList.contains("open")) {
     loadActiveJobs();
   }
-}, 5000);
+}, POLL_INTERVAL_MS);

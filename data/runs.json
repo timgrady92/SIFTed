@@ -461,5 +461,18 @@
     "storage_path": "/cases/challenge-raw/artifact-triage/20260113-073134/timeline.plaso",
     "exit_code": 0,
     "summary": "Timeline written to /cases/challenge-raw/artifact-triage/20260113-073134/timeline.csv"
+  },
+  {
+    "id": "24cb7b516cc14f1093b0037f29b2b9ec",
+    "tool": "foremost",
+    "case_id": "096879297fa948ad9e8c8634a2f64379",
+    "image_path": "/cases/SIFT/sift.mem",
+    "output_path": "/cases/sift-mem/foremost/20260120-035823",
+    "command": "foremost -i /cases/SIFT/sift.mem -o /cases/sift-mem/foremost/20260120-035823 -t jpg,pdf -c /tmp/sifted-foremost-gpnio_u0.conf -v",
+    "log_path": "/cases/sift-mem/foremost/20260120-035823.log",
+    "status": "success",
+    "created_at": "2026-01-20T03:58:25.467631+00:00",
+    "exit_code": 0,
+    "summary": "jpg: 80 | pdf: 28"
   }
 ]

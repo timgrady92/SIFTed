@@ -96,10 +96,15 @@ body {
 .noise {
   position: fixed;
   inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
   pointer-events: none;
-  mix-blend-mode: screen;
-  opacity: 0.35;
+  opacity: 0.06;
+  /* Static 2x2 noise pattern - much faster than SVG feTurbulence filter */
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVQIW2NkYGD4z8DAwMgAABEKAQNJ6iu7AAAAAElFTkSuQmCC");
+  background-repeat: repeat;
+  background-size: 2px 2px;
+  /* Isolate from paint operations on rest of page */
+  contain: strict;
+  z-index: 9999;
 }
 
 /* ==============================================
@@ -2155,7 +2160,7 @@ main {
   align-items: center;
   justify-content: center;
   padding: var(--space-xl);
-  z-index: 100;
+  z-index: 1100;
   opacity: 0;
   visibility: hidden;
   transition:
@@ -3542,6 +3547,272 @@ main {
 }
 
 /* ==============================================
+   ARTIFACT MANAGEMENT - Case Evidence Files
+   ============================================== */
+
+.case-artifacts {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(var(--neon-teal-rgb), 0.1);
+}
+
+.case-artifacts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.case-artifacts-header h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-main);
+  letter-spacing: 0.02em;
+}
+
+.add-artifact-btn {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+}
+
+.artifact-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.artifact-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.artifact-type-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.artifact-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.artifact-chip {
+  --chip-border: rgba(var(--neon-teal-rgb), 0.4);
+  --chip-bg: rgba(var(--neon-teal-rgb), 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--chip-border);
+  background: var(--chip-bg);
+  font-size: 0.75rem;
+  color: var(--text-main);
+  transition:
+    border-color var(--duration-fast) var(--ease-out-expo),
+    background var(--duration-fast) var(--ease-out-expo);
+}
+
+.artifact-chip:hover {
+  --chip-border: rgba(var(--neon-teal-rgb), 0.6);
+  --chip-bg: rgba(var(--neon-teal-rgb), 0.12);
+}
+
+.artifact-chip-label {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: rgba(var(--neon-pink-rgb), 0.15);
+  color: var(--neon-pink);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+  transition:
+    opacity var(--duration-fast) var(--ease-out-expo),
+    background var(--duration-fast) var(--ease-out-expo);
+}
+
+.artifact-remove:hover {
+  opacity: 1;
+  background: rgba(var(--neon-pink-rgb), 0.25);
+}
+
+.artifacts-empty {
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+/* Artifact group colors by type */
+.artifact-group[data-type="disk_image"] .artifact-chip {
+  --chip-border: rgba(var(--neon-teal-rgb), 0.5);
+  --chip-bg: rgba(var(--neon-teal-rgb), 0.1);
+}
+
+.artifact-group[data-type="memory_dump"] .artifact-chip {
+  --chip-border: rgba(var(--neon-pink-rgb), 0.5);
+  --chip-bg: rgba(var(--neon-pink-rgb), 0.1);
+}
+
+.artifact-group[data-type="registry"] .artifact-chip {
+  --chip-border: rgba(var(--neon-green-rgb), 0.5);
+  --chip-bg: rgba(var(--neon-green-rgb), 0.1);
+}
+
+.artifact-group[data-type="event_log"] .artifact-chip {
+  --chip-border: rgba(var(--neon-amber-rgb), 0.5);
+  --chip-bg: rgba(var(--neon-amber-rgb), 0.1);
+}
+
+/* ==============================================
+   ARTIFACT MODAL
+   ============================================== */
+
+.artifact-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--duration-normal) var(--ease-out-expo),
+    visibility var(--duration-normal) var(--ease-out-expo);
+}
+
+.artifact-modal.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.artifact-modal-surface {
+  width: 100%;
+  max-width: 480px;
+  margin: 16px;
+  padding: 24px;
+  background: var(--bg-elevated);
+  border: 1px solid rgba(var(--neon-teal-rgb), 0.25);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevated);
+  transform: translateY(20px) scale(0.95);
+  transition: transform var(--duration-normal) var(--ease-out-expo);
+}
+
+.artifact-modal.open .artifact-modal-surface {
+  transform: translateY(0) scale(1);
+}
+
+.artifact-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.artifact-modal-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.artifact-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.artifact-modal-form .input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.artifact-modal-form .input-row input {
+  flex: 1;
+}
+
+.artifact-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* ==============================================
+   SOURCE SELECTOR - Tool page artifact dropdown
+   ============================================== */
+
+.source-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.source-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.source-or::before,
+.source-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(var(--neon-teal-rgb), 0.15);
+}
+
+.artifact-select-stack {
+  flex: 1;
+}
+
+.artifact-select {
+  width: 100%;
+}
+
+.artifact-select optgroup {
+  font-weight: 600;
+  color: var(--neon-teal);
+  background: var(--bg-dark);
+}
+
+.artifact-select option {
+  font-weight: 400;
+  color: var(--text-main);
+  padding: 4px 8px;
+}
+
+.source-manual {
+  flex: 1;
+}
+
+/* ==============================================
    TOGGLE ICON SYSTEM - CSS-based Icons
    ============================================== */
 
@@ -4219,12 +4490,33 @@ body.modal-open {
 }
 
 .sidebar-tab:hover {
-  background: rgba(56, 242, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .sidebar-tab.active {
   background: rgba(56, 242, 255, 0.1);
   border-color: rgba(56, 242, 255, 0.25);
+}
+
+/* Section-specific tab colors */
+.sidebar-tab[data-sidebar-tab="artifacts"].active {
+  background: rgba(56, 242, 255, 0.1);
+  border-color: rgba(56, 242, 255, 0.25);
+}
+
+.sidebar-tab[data-sidebar-tab="registry"].active {
+  background: rgba(167, 139, 250, 0.1);
+  border-color: rgba(167, 139, 250, 0.25);
+}
+
+.sidebar-tab[data-sidebar-tab="persistence"].active {
+  background: rgba(251, 146, 60, 0.1);
+  border-color: rgba(251, 146, 60, 0.25);
+}
+
+.sidebar-tab[data-sidebar-tab="events"].active {
+  background: rgba(255, 79, 216, 0.1);
+  border-color: rgba(255, 79, 216, 0.25);
 }
 
 .sidebar-tab-label {
@@ -4240,11 +4532,27 @@ body.modal-open {
   color: var(--neon-teal);
 }
 
+.sidebar-tab[data-sidebar-tab="artifacts"].active .sidebar-tab-label {
+  color: #38f2ff;
+}
+
+.sidebar-tab[data-sidebar-tab="registry"].active .sidebar-tab-label {
+  color: #a78bfa;
+}
+
+.sidebar-tab[data-sidebar-tab="persistence"].active .sidebar-tab-label {
+  color: #fb923c;
+}
+
+.sidebar-tab[data-sidebar-tab="events"].active .sidebar-tab-label {
+  color: #ff4fd8;
+}
+
 .sidebar-tab-count {
   font-size: 0.65rem;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   color: var(--text-muted);
-  background: rgba(56, 242, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
   padding: 2px 6px;
   border-radius: 10px;
   min-width: 24px;
@@ -4254,6 +4562,26 @@ body.modal-open {
 .sidebar-tab.active .sidebar-tab-count {
   background: rgba(56, 242, 255, 0.2);
   color: var(--neon-teal);
+}
+
+.sidebar-tab[data-sidebar-tab="artifacts"].active .sidebar-tab-count {
+  background: rgba(56, 242, 255, 0.2);
+  color: #38f2ff;
+}
+
+.sidebar-tab[data-sidebar-tab="registry"].active .sidebar-tab-count {
+  background: rgba(167, 139, 250, 0.2);
+  color: #a78bfa;
+}
+
+.sidebar-tab[data-sidebar-tab="persistence"].active .sidebar-tab-count {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fb923c;
+}
+
+.sidebar-tab[data-sidebar-tab="events"].active .sidebar-tab-count {
+  background: rgba(255, 79, 216, 0.2);
+  color: #ff4fd8;
 }
 
 /* Sidebar content area */
@@ -5746,10 +6074,131 @@ body:has(.guides-toggle) .glossary-toggle {
 
 /* Collapsible category */
 .ref-category {
-  border: 1px solid rgba(56, 242, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid rgba(56, 242, 255, 0.4);
   border-radius: 8px;
   overflow: hidden;
   flex-shrink: 0;
+}
+
+/* ============================================
+   CATEGORY COLOR SCHEME - Unique colors per section
+   ============================================ */
+
+/* ARTIFACTS TAB - 11 categories */
+.ref-category[data-category="execution"] {
+  border-left-color: #fb923c;
+}
+
+.ref-category[data-category="fileAccess"] {
+  border-left-color: #60a5fa;
+}
+
+.ref-category[data-category="persistence"] {
+  border-left-color: #f87171;
+}
+
+.ref-category[data-category="accountActivity"] {
+  border-left-color: #a78bfa;
+}
+
+.ref-category[data-category="network"] {
+  border-left-color: #4ade80;
+}
+
+.ref-category[data-category="externalDevices"] {
+  border-left-color: #fbbf24;
+}
+
+.ref-category[data-category="browserEmail"] {
+  border-left-color: #22d3ee;
+}
+
+.ref-category[data-category="fileSystem"] {
+  border-left-color: #38f2ff;
+}
+
+.ref-category[data-category="logs"] {
+  border-left-color: #94a3b8;
+}
+
+.ref-category[data-category="security"] {
+  border-left-color: #ff4fd8;
+}
+
+.ref-category[data-category="timeline"] {
+  border-left-color: #818cf8;
+}
+
+/* REGISTRY TAB - 6 categories */
+.ref-category[data-category="useractivity"] {
+  border-left-color: #38bdf8;
+}
+
+.ref-category[data-category="devices"] {
+  border-left-color: #fbbf24;
+}
+
+.ref-category[data-category="shell"] {
+  border-left-color: #2dd4bf;
+}
+
+/* PERSISTENCE TAB - 6 categories */
+.ref-category[data-category="registry"] {
+  border-left-color: #fb923c;
+}
+
+.ref-category[data-category="filesystem"] {
+  border-left-color: #4ade80;
+}
+
+.ref-category[data-category="wmi"] {
+  border-left-color: #e879f9;
+}
+
+.ref-category[data-category="scheduled"] {
+  border-left-color: #38bdf8;
+}
+
+.ref-category[data-category="linux"] {
+  border-left-color: #fbbf24;
+}
+
+.ref-category[data-category="macos"] {
+  border-left-color: #94a3b8;
+}
+
+/* WIN EVENTS TAB - 8 categories */
+.ref-category[data-category="authentication"] {
+  border-left-color: #ff4fd8;
+}
+
+.ref-category[data-category="logonTypes"] {
+  border-left-color: #38f2ff;
+}
+
+.ref-category[data-category="process"] {
+  border-left-color: #a3e635;
+}
+
+.ref-category[data-category="objectAccess"] {
+  border-left-color: #fbbf24;
+}
+
+.ref-category[data-category="accountMgmt"] {
+  border-left-color: #60a5fa;
+}
+
+.ref-category[data-category="rdp"] {
+  border-left-color: #fb923c;
+}
+
+.ref-category[data-category="powershell"] {
+  border-left-color: #818cf8;
+}
+
+.ref-category[data-category="defender"] {
+  border-left-color: #f87171;
 }
 
 .ref-category-header {
@@ -5797,6 +6246,250 @@ body:has(.guides-toggle) .glossary-toggle {
 
 .ref-category.expanded .ref-category-header {
   border-bottom: 1px solid rgba(56, 242, 255, 0.1);
+}
+
+/* Category preview badges - visible when collapsed */
+.category-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px 12px;
+  border-top: 1px solid rgba(56, 242, 255, 0.06);
+}
+
+.ref-category.expanded .category-preview {
+  display: none;
+}
+
+.category-preview-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-main);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Category-specific badge colors */
+.ref-category[data-category="execution"] .category-preview-badge {
+  background: rgba(251, 146, 60, 0.15);
+  color: #fb923c;
+  border-color: rgba(251, 146, 60, 0.25);
+}
+
+.ref-category[data-category="fileAccess"] .category-preview-badge {
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+  border-color: rgba(96, 165, 250, 0.25);
+}
+
+.ref-category[data-category="persistence"] .category-preview-badge {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.25);
+}
+
+.ref-category[data-category="accountActivity"] .category-preview-badge {
+  background: rgba(167, 139, 250, 0.15);
+  color: #a78bfa;
+  border-color: rgba(167, 139, 250, 0.25);
+}
+
+.ref-category[data-category="network"] .category-preview-badge {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.25);
+}
+
+.ref-category[data-category="externalDevices"] .category-preview-badge {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+.ref-category[data-category="browserEmail"] .category-preview-badge {
+  background: rgba(34, 211, 238, 0.15);
+  color: #22d3ee;
+  border-color: rgba(34, 211, 238, 0.25);
+}
+
+.ref-category[data-category="fileSystem"] .category-preview-badge {
+  background: rgba(56, 242, 255, 0.15);
+  color: #38f2ff;
+  border-color: rgba(56, 242, 255, 0.25);
+}
+
+.ref-category[data-category="logs"] .category-preview-badge {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+.ref-category[data-category="security"] .category-preview-badge {
+  background: rgba(255, 79, 216, 0.15);
+  color: #ff4fd8;
+  border-color: rgba(255, 79, 216, 0.25);
+}
+
+.ref-category[data-category="timeline"] .category-preview-badge {
+  background: rgba(129, 140, 248, 0.15);
+  color: #818cf8;
+  border-color: rgba(129, 140, 248, 0.25);
+}
+
+/* Registry category badge colors */
+.ref-category[data-category="useractivity"] .category-preview-badge {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.25);
+}
+
+.ref-category[data-category="devices"] .category-preview-badge {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+.ref-category[data-category="shell"] .category-preview-badge {
+  background: rgba(45, 212, 191, 0.15);
+  color: #2dd4bf;
+  border-color: rgba(45, 212, 191, 0.25);
+}
+
+.category-preview-badge--event {
+  background: rgba(255, 79, 216, 0.1);
+  color: var(--neon-pink);
+  border-color: rgba(255, 79, 216, 0.2);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Event category-specific badge colors */
+.ref-category[data-category="authentication"] .category-preview-badge--event {
+  background: rgba(255, 79, 216, 0.12);
+  color: #ff4fd8;
+  border-color: rgba(255, 79, 216, 0.25);
+}
+
+.ref-category[data-category="logonTypes"] .category-preview-badge--event {
+  background: rgba(56, 242, 255, 0.12);
+  color: #38f2ff;
+  border-color: rgba(56, 242, 255, 0.25);
+}
+
+.ref-category[data-category="process"] .category-preview-badge--event {
+  background: rgba(163, 230, 53, 0.12);
+  color: #a3e635;
+  border-color: rgba(163, 230, 53, 0.25);
+}
+
+.ref-category[data-category="objectAccess"] .category-preview-badge--event {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.25);
+}
+
+.ref-category[data-category="accountMgmt"] .category-preview-badge--event {
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+  border-color: rgba(96, 165, 250, 0.25);
+}
+
+.ref-category[data-category="rdp"] .category-preview-badge--event {
+  background: rgba(251, 146, 60, 0.12);
+  color: #fb923c;
+  border-color: rgba(251, 146, 60, 0.25);
+}
+
+.ref-category[data-category="powershell"] .category-preview-badge--event {
+  background: rgba(129, 140, 248, 0.12);
+  color: #818cf8;
+  border-color: rgba(129, 140, 248, 0.25);
+}
+
+.ref-category[data-category="defender"] .category-preview-badge--event {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.25);
+}
+
+.category-preview-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(167, 139, 250, 0.5);
+}
+
+.category-preview-dot--registry {
+  background: rgba(56, 189, 248, 0.6);
+}
+
+.category-preview-dot--persistence {
+  background: rgba(251, 146, 60, 0.6);
+}
+
+/* Registry category-specific dots */
+.ref-category[data-category="useractivity"] .category-preview-dot {
+  background: rgba(56, 189, 248, 0.6);
+}
+
+.ref-category[data-category="execution"] .category-preview-dot {
+  background: rgba(251, 146, 60, 0.6);
+}
+
+.ref-category[data-category="persistence"] .category-preview-dot {
+  background: rgba(248, 113, 113, 0.6);
+}
+
+.ref-category[data-category="network"] .category-preview-dot {
+  background: rgba(74, 222, 128, 0.6);
+}
+
+.ref-category[data-category="devices"] .category-preview-dot {
+  background: rgba(251, 191, 36, 0.6);
+}
+
+.ref-category[data-category="shell"] .category-preview-dot {
+  background: rgba(45, 212, 191, 0.6);
+}
+
+/* Persistence category-specific dots */
+.ref-category[data-category="registry"] .category-preview-dot {
+  background: rgba(251, 146, 60, 0.6);
+}
+
+.ref-category[data-category="filesystem"] .category-preview-dot {
+  background: rgba(74, 222, 128, 0.6);
+}
+
+.ref-category[data-category="wmi"] .category-preview-dot {
+  background: rgba(232, 121, 249, 0.6);
+}
+
+.ref-category[data-category="scheduled"] .category-preview-dot {
+  background: rgba(56, 189, 248, 0.6);
+}
+
+.ref-category[data-category="linux"] .category-preview-dot {
+  background: rgba(251, 191, 36, 0.6);
+}
+
+.ref-category[data-category="macos"] .category-preview-dot {
+  background: rgba(148, 163, 184, 0.6);
+}
+
+.category-preview-more {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  align-self: center;
 }
 
 /* Simple row layout */
@@ -5925,6 +6618,78 @@ body:has(.guides-toggle) .glossary-toggle {
   font-size: 0.7rem;
   background: rgba(56, 242, 255, 0.1);
   color: var(--neon-teal);
+}
+
+/* Category-specific artifact icon colors */
+.ref-category[data-category="execution"] .artifact-row-icon {
+  background: rgba(251, 146, 60, 0.12);
+  color: #fb923c;
+}
+
+.ref-category[data-category="fileAccess"] .artifact-row-icon {
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+}
+
+.ref-category[data-category="persistence"] .artifact-row-icon {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+}
+
+.ref-category[data-category="accountActivity"] .artifact-row-icon {
+  background: rgba(167, 139, 250, 0.12);
+  color: #a78bfa;
+}
+
+.ref-category[data-category="network"] .artifact-row-icon {
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+}
+
+.ref-category[data-category="externalDevices"] .artifact-row-icon {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+}
+
+.ref-category[data-category="browserEmail"] .artifact-row-icon {
+  background: rgba(34, 211, 238, 0.12);
+  color: #22d3ee;
+}
+
+.ref-category[data-category="fileSystem"] .artifact-row-icon {
+  background: rgba(56, 242, 255, 0.12);
+  color: #38f2ff;
+}
+
+.ref-category[data-category="logs"] .artifact-row-icon {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+}
+
+.ref-category[data-category="security"] .artifact-row-icon {
+  background: rgba(255, 79, 216, 0.12);
+  color: #ff4fd8;
+}
+
+.ref-category[data-category="timeline"] .artifact-row-icon {
+  background: rgba(129, 140, 248, 0.12);
+  color: #818cf8;
+}
+
+/* Registry category icon colors */
+.ref-category[data-category="useractivity"] .artifact-row-icon {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+}
+
+.ref-category[data-category="devices"] .artifact-row-icon {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+}
+
+.ref-category[data-category="shell"] .artifact-row-icon {
+  background: rgba(45, 212, 191, 0.12);
+  color: #2dd4bf;
 }
 
 .artifact-row.active .artifact-row-icon {
@@ -6768,11 +7533,32 @@ body:has(.guides-toggle) .glossary-toggle {
     scroll-behavior: auto !important;
   }
 
-  .scanline {
-    animation: none;
+  .scanline,
+  .grid-bg,
+  .run-status-pill[data-status="running"]::before {
+    animation: none !important;
   }
 
-  .run-status-pill[data-status="running"]::before {
+  /* Disable expensive text-shadow glows */
+  .hero-text h1 {
+    text-shadow: none;
+  }
+
+  /* Simplify box-shadows for better performance */
+  .card,
+  .tool-card,
+  .case-card,
+  .guide-card {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Disable blur filters */
+  .scanline::after {
+    filter: none;
+  }
+
+  /* Disable background animations */
+  .landing-page::before {
     animation: none;
   }
 }

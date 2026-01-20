@@ -2062,23 +2062,32 @@ const buildDetailMarkup = (data) => {
   return html;
 };
 
+// Cache for icon labels to avoid repeated string operations
+const iconLabelCache = new Map();
+
 const getGlossaryIconLabel = (name, artifactId) => {
+  const cacheKey = artifactId || name || "";
+  if (iconLabelCache.has(cacheKey)) {
+    return iconLabelCache.get(cacheKey);
+  }
+
+  let label = "??";
   if (name) {
     const cleaned = name.replace(/\([^)]*\)/g, " ");
     const words = cleaned.split(/[^a-zA-Z0-9]+/).filter(Boolean);
     if (words.length === 1) {
       const word = words[0];
-      return (word.slice(0, 2) || word).toUpperCase();
-    }
-    if (words.length > 1) {
+      label = (word.slice(0, 2) || word).toUpperCase();
+    } else if (words.length > 1) {
       const initials = words.map((word) => word[0]).join("");
-      return (initials.slice(0, 2) || initials).toUpperCase();
+      label = (initials.slice(0, 2) || initials).toUpperCase();
     }
+  } else if (artifactId) {
+    label = artifactId.replace(/[^a-zA-Z0-9]+/g, "").slice(0, 2).toUpperCase();
   }
-  if (artifactId) {
-    return artifactId.replace(/[^a-zA-Z0-9]+/g, "").slice(0, 2).toUpperCase();
-  }
-  return "??";
+
+  iconLabelCache.set(cacheKey, label);
+  return label;
 };
 
 const applyGlossaryIconLabels = () => {
@@ -2311,6 +2320,7 @@ const initSidebarSections = () => {
 
   const tabContainer = sidebar.querySelector("[data-sidebar-tabs]");
   const tabs = Array.from(sidebar.querySelectorAll("[data-sidebar-tab]"));
+  const sidebarContent = sidebar.querySelector("[data-sidebar-content]");
   const glossaryGrid = sidebar.querySelector("[data-glossary-grid]");
   const refContent = sidebar.querySelector("[data-sidebar-ref-content]");
   const searchInput = sidebar.querySelector("[data-glossary-search]");
@@ -2364,12 +2374,20 @@ const initSidebarSections = () => {
       if (filtered.length === 0) return;
 
       const isExpanded = query ? true : false;
+      const previewBadges = filtered.slice(0, 5).map((id) => {
+        const icon = getGlossaryIconLabel(artifactData[id]?.name, id);
+        return `<span class="category-preview-badge">${icon}</span>`;
+      }).join("");
+      const hasMore = filtered.length > 5;
       html += `
         <div class="ref-category ${isExpanded ? "expanded" : ""}" data-category="${catId}">
           <button class="ref-category-header" type="button">
             <span class="ref-category-title">${escapeHtml(category.name)}</span>
             <span class="ref-category-count">${filtered.length}</span>
           </button>
+          <div class="category-preview">
+            ${previewBadges}${hasMore ? '<span class="category-preview-more">...</span>' : ''}
+          </div>
           <div class="ref-list artifact-list">
             ${filtered.map((id) => {
               const data = artifactData[id];
@@ -2403,12 +2421,17 @@ const initSidebarSections = () => {
       if (filtered.length === 0) return;
 
       const isExpanded = query ? true : false;
+      const previewDots = Math.min(filtered.length, 6);
+      const hasMore = filtered.length > 6;
       html += `
         <div class="ref-category ${isExpanded ? "expanded" : ""}" data-category="${groupId}">
           <button class="ref-category-header" type="button">
             <span class="ref-category-title">${escapeHtml(group.category)}</span>
             <span class="ref-category-count">${filtered.length}</span>
           </button>
+          <div class="category-preview">
+            ${Array(previewDots).fill('<span class="category-preview-dot category-preview-dot--registry"></span>').join("")}${hasMore ? '<span class="category-preview-more">...</span>' : ''}
+          </div>
           <div class="ref-list">
             ${filtered.map((item) => `
               <div class="ref-row">
@@ -2438,12 +2461,17 @@ const initSidebarSections = () => {
       if (filtered.length === 0) return;
 
       const isExpanded = query ? true : false;
+      const previewDots = Math.min(filtered.length, 6);
+      const hasMore = filtered.length > 6;
       html += `
         <div class="ref-category ${isExpanded ? "expanded" : ""}" data-category="${groupId}">
           <button class="ref-category-header" type="button">
             <span class="ref-category-title">${escapeHtml(group.category)}</span>
             <span class="ref-category-count">${filtered.length}</span>
           </button>
+          <div class="category-preview">
+            ${Array(previewDots).fill('<span class="category-preview-dot category-preview-dot--persistence"></span>').join("")}${hasMore ? '<span class="category-preview-more">...</span>' : ''}
+          </div>
           <div class="ref-list">
             ${filtered.map((item) => `
               <div class="ref-row">
@@ -2474,12 +2502,19 @@ const initSidebarSections = () => {
       if (filtered.length === 0) return;
 
       const isExpanded = query ? true : false;
+      const previewBadges = filtered.slice(0, 4).map((item) =>
+        `<span class="category-preview-badge category-preview-badge--event">${escapeHtml(item.id)}</span>`
+      ).join("");
+      const hasMore = filtered.length > 4;
       html += `
         <div class="ref-category ${isExpanded ? "expanded" : ""}" data-category="${groupId}">
           <button class="ref-category-header" type="button">
             <span class="ref-category-title">${escapeHtml(group.category)}</span>
             <span class="ref-category-count">${filtered.length}</span>
           </button>
+          <div class="category-preview">
+            ${previewBadges}${hasMore ? '<span class="category-preview-more">...</span>' : ''}
+          </div>
           <div class="ref-list event-grid">
             ${filtered.map((item) => `
               <div class="event-row">
@@ -2649,14 +2684,15 @@ const initSidebarSections = () => {
     if (!data || !detailPane || !detailContent) return;
 
     detailContent.innerHTML = buildDetailMarkup(data);
+    detailContent.scrollTop = 0;
     detailPane.hidden = false;
-    if (glossaryGrid) glossaryGrid.style.display = "none";
-    if (refContent) refContent.style.display = "none";
+    if (sidebarContent) sidebarContent.style.display = "none";
   };
 
   // Hide artifact detail in sidebar
   const hideSidebarDetail = () => {
     if (detailPane) detailPane.hidden = true;
+    if (sidebarContent) sidebarContent.style.display = "";
     renderSidebarSection(activeSidebarSection, searchInput?.value || "");
   };
 
@@ -2794,35 +2830,53 @@ const tooltipContent = document.getElementById("artifactTooltipContent");
 
 let tooltipTimeout = null;
 
-const showTooltip = (element, artifactId) => {
-  const data = artifactData[artifactId];
-  if (!data || !tooltip || !tooltipContent) {
-    return;
-  }
+// Cache for tooltip HTML content to avoid regenerating on every hover
+const tooltipCache = new Map();
 
-  tooltipContent.innerHTML = `
+const getTooltipHtml = (artifactId) => {
+  if (tooltipCache.has(artifactId)) {
+    return tooltipCache.get(artifactId);
+  }
+  const data = artifactData[artifactId];
+  if (!data) return null;
+
+  const html = `
     <h4>${escapeHtml(data.name)}</h4>
     <p><span class="tooltip-label">What:</span> ${escapeHtml(data.what)}</p>
     <p><span class="tooltip-label">Why:</span> ${escapeHtml(data.why)}</p>
   `;
+  tooltipCache.set(artifactId, html);
+  return html;
+};
 
+const showTooltip = (element, artifactId) => {
+  const html = getTooltipHtml(artifactId);
+  if (!html || !tooltip || !tooltipContent) {
+    return;
+  }
+
+  tooltipContent.innerHTML = html;
+
+  // Single layout read - batch all measurements together
   const rect = element.getBoundingClientRect();
-  const tooltipRect = tooltip.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
 
+  // Calculate position (tooltip is 320px wide, ~150px tall)
   let left = rect.left + (rect.width / 2) - 160;
   let top = rect.bottom + 8;
 
-  // Keep tooltip in viewport
+  // Keep tooltip in viewport - use cached viewport dimensions
   if (left < 10) left = 10;
-  if (left + 320 > window.innerWidth - 10) {
-    left = window.innerWidth - 330;
+  if (left + 320 > viewportWidth - 10) {
+    left = viewportWidth - 330;
   }
-  if (top + 150 > window.innerHeight) {
+  if (top + 150 > viewportHeight) {
     top = rect.top - 150;
   }
 
-  tooltip.style.left = `${left}px`;
-  tooltip.style.top = `${top}px`;
+  // Batch all style writes together
+  tooltip.style.cssText = `left:${left}px;top:${top}px`;
   tooltip.hidden = false;
 
   requestAnimationFrame(() => {
@@ -2839,49 +2893,62 @@ const hideTooltip = () => {
   }
 };
 
-// Initialize tooltips for artifact links within a container
-// container defaults to document if not provided
-const initArtifactTooltips = (container = document) => {
-  // When initializing a specific container (not document), clear stale init markers
-  // This handles the case where innerHTML was copied from elements that had the attribute
-  // but the new DOM elements don't have the event listeners
-  if (container !== document) {
-    const staleLinks = Array.from(container.querySelectorAll(".artifact-link[data-tooltip-init]"));
-    staleLinks.forEach((link) => {
-      delete link.dataset.tooltipInit;
-    });
-  }
+// Event delegation for artifact link tooltips - uses single document listener
+// instead of per-element listeners for better performance
+let tooltipDelegationInitialized = false;
+let currentHoveredLink = null;
 
-  // Now find and initialize links that haven't been initialized
-  const links = Array.from(container.querySelectorAll(".artifact-link:not([data-tooltip-init])"));
+const initTooltipDelegation = () => {
+  if (tooltipDelegationInitialized) return;
+  tooltipDelegationInitialized = true;
 
-  links.forEach((link) => {
-    link.dataset.tooltipInit = "true";
+  // Single mouseenter handler using event delegation
+  document.addEventListener("mouseover", (event) => {
+    const link = event.target.closest(".artifact-link");
+    if (!link || link === currentHoveredLink) return;
 
-    link.addEventListener("mouseenter", () => {
-      clearTimeout(tooltipTimeout);
-      tooltipTimeout = setTimeout(() => {
-        showTooltip(link, link.dataset.artifact);
-      }, 200);
-    });
+    currentHoveredLink = link;
+    clearTimeout(tooltipTimeout);
+    tooltipTimeout = setTimeout(() => {
+      showTooltip(link, link.dataset.artifact);
+    }, 200);
+  });
 
-    link.addEventListener("mouseleave", () => {
-      clearTimeout(tooltipTimeout);
-      tooltipTimeout = setTimeout(hideTooltip, 100);
-    });
+  // Single mouseleave handler using event delegation
+  document.addEventListener("mouseout", (event) => {
+    const link = event.target.closest(".artifact-link");
+    if (!link) return;
 
-    // Click to open sidebar and show detail
-    link.addEventListener("click", (event) => {
-      event.preventDefault();
-      hideTooltip();
-      openSidebar();
-      sidebarApi?.showDetail(link.dataset.artifact);
-    });
+    // Check if we're moving to another element within the same link
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget && link.contains(relatedTarget)) return;
+
+    currentHoveredLink = null;
+    clearTimeout(tooltipTimeout);
+    tooltipTimeout = setTimeout(hideTooltip, 100);
+  });
+
+  // Single click handler using event delegation
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest(".artifact-link");
+    if (!link) return;
+
+    event.preventDefault();
+    hideTooltip();
+    openSidebar();
+    sidebarApi?.showDetail(link.dataset.artifact);
   });
 };
 
-// Initialize tooltips for all existing artifact links
-initArtifactTooltips();
+// Initialize event delegation immediately
+initTooltipDelegation();
+
+// Legacy function kept for compatibility - now a no-op since delegation handles everything
+const initArtifactTooltips = (container = document) => {
+  // Event delegation handles all artifact links automatically
+  // This function is kept for backward compatibility with code that calls it
+  // (e.g., guide modal initialization)
+};
 
 // Expose globally for use by other scripts (e.g., guide modal)
 window.initArtifactTooltips = initArtifactTooltips;

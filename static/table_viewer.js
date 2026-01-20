@@ -161,26 +161,34 @@
       return data;
     }
 
-    return [...data].sort((a, b) => {
-      const valA = a[colIndex] || "";
-      const valB = b[colIndex] || "";
+    // Pre-process sort values to avoid repeated parsing in comparator
+    const processed = data.map(row => {
+      const val = row[colIndex] || "";
+      const num = parseFloat(val);
+      return {
+        row,
+        numeric: num,
+        isNumeric: !isNaN(num),
+        lower: val.toLowerCase()
+      };
+    });
 
-      // Try numeric comparison first
-      const numA = parseFloat(valA);
-      const numB = parseFloat(valB);
+    // Determine if column is numeric (majority of values are numeric)
+    const numericCount = processed.filter(p => p.isNumeric).length;
+    const isNumericColumn = numericCount > processed.length * 0.5;
 
-      if (!isNaN(numA) && !isNaN(numB)) {
-        return direction === "asc" ? numA - numB : numB - numA;
+    processed.sort((a, b) => {
+      if (isNumericColumn && a.isNumeric && b.isNumeric) {
+        return direction === "asc" ? a.numeric - b.numeric : b.numeric - a.numeric;
       }
 
-      // Fall back to string comparison
-      const strA = valA.toLowerCase();
-      const strB = valB.toLowerCase();
-
-      if (strA < strB) return direction === "asc" ? -1 : 1;
-      if (strA > strB) return direction === "asc" ? 1 : -1;
+      // String comparison
+      if (a.lower < b.lower) return direction === "asc" ? -1 : 1;
+      if (a.lower > b.lower) return direction === "asc" ? 1 : -1;
       return 0;
     });
+
+    return processed.map(p => p.row);
   }
 
   function sortAndRender() {
@@ -191,7 +199,8 @@
 
   function renderRows(rowsData, highlightTerm = "") {
     const hiddenCols = getHiddenColumns();
-    tableBody.innerHTML = "";
+    // Use DocumentFragment to batch DOM operations
+    const fragment = document.createDocumentFragment();
 
     rowsData.forEach((row) => {
       const tr = document.createElement("tr");
@@ -211,8 +220,11 @@
         }
         tr.appendChild(td);
       });
-      tableBody.appendChild(tr);
+      fragment.appendChild(tr);
     });
+
+    // Single DOM operation to replace all rows
+    tableBody.replaceChildren(fragment);
     updateRowCountDisplay();
     updateColumnCount();
     updateColumnToggleLabel();
@@ -365,54 +377,70 @@
   }
 
   function applyAllFilters() {
-    // Start with all data
-    let result = [...allRowsData];
+    // Pre-compute filter values for better performance
+    const hasGlobalSearch = !!globalSearchTerm;
+    const filterEntries = Object.entries(columnFilters).map(([colIdx, filter]) => ({
+      idx: parseInt(colIdx, 10),
+      operator: filter.operator,
+      value: filter.value.toLowerCase(),
+      numValue: parseFloat(filter.value)
+    }));
+    const hasColumnFilters = filterEntries.length > 0;
 
-    // Apply global search
-    if (globalSearchTerm) {
-      result = result.filter(row => {
-        return row.some(cell =>
+    // Single pass through all data with all filter checks combined
+    const result = allRowsData.filter(row => {
+      // Global search check
+      if (hasGlobalSearch) {
+        const matchesGlobal = row.some(cell =>
           (cell || "").toLowerCase().includes(globalSearchTerm)
         );
-      });
-    }
+        if (!matchesGlobal) return false;
+      }
 
-    // Apply column filters
-    Object.entries(columnFilters).forEach(([colIdx, filter]) => {
-      const idx = parseInt(colIdx, 10);
-      result = result.filter(row => {
-        const cellValue = (row[idx] || "").toLowerCase();
-        const filterValue = filter.value.toLowerCase();
+      // Column filters check - all must pass
+      if (hasColumnFilters) {
+        for (const filter of filterEntries) {
+          const cellValue = (row[filter.idx] || "").toLowerCase();
+          let passes = true;
 
-        switch (filter.operator) {
-          case "contains":
-            return cellValue.includes(filterValue);
-          case "equals":
-            return cellValue === filterValue;
-          case "starts":
-            return cellValue.startsWith(filterValue);
-          case "ends":
-            return cellValue.endsWith(filterValue);
-          case "gt":
-            const numA = parseFloat(row[idx]);
-            const numFilterA = parseFloat(filter.value);
-            return !isNaN(numA) && !isNaN(numFilterA) && numA > numFilterA;
-          case "lt":
-            const numB = parseFloat(row[idx]);
-            const numFilterB = parseFloat(filter.value);
-            return !isNaN(numB) && !isNaN(numFilterB) && numB < numFilterB;
-          case "empty":
-            return !row[idx] || row[idx].trim() === "";
-          case "notempty":
-            return row[idx] && row[idx].trim() !== "";
-          default:
-            return true;
+          switch (filter.operator) {
+            case "contains":
+              passes = cellValue.includes(filter.value);
+              break;
+            case "equals":
+              passes = cellValue === filter.value;
+              break;
+            case "starts":
+              passes = cellValue.startsWith(filter.value);
+              break;
+            case "ends":
+              passes = cellValue.endsWith(filter.value);
+              break;
+            case "gt":
+              const numA = parseFloat(row[filter.idx]);
+              passes = !isNaN(numA) && !isNaN(filter.numValue) && numA > filter.numValue;
+              break;
+            case "lt":
+              const numB = parseFloat(row[filter.idx]);
+              passes = !isNaN(numB) && !isNaN(filter.numValue) && numB < filter.numValue;
+              break;
+            case "empty":
+              passes = !row[filter.idx] || row[filter.idx].trim() === "";
+              break;
+            case "notempty":
+              passes = row[filter.idx] && row[filter.idx].trim() !== "";
+              break;
+          }
+
+          if (!passes) return false;
         }
-      });
+      }
+
+      return true;
     });
 
     filteredRowsData = result;
-    isFiltered = globalSearchTerm || Object.keys(columnFilters).length > 0;
+    isFiltered = hasGlobalSearch || hasColumnFilters;
 
     // Re-apply sorting
     const dataToRender = sortData(filteredRowsData, currentSortCol, currentSortDir);
@@ -508,8 +536,39 @@
 
   // ==================== COLUMN VISIBILITY ====================
 
+  // Use CSS-based column hiding instead of per-cell hidden attribute
+  // This is much more performant for large tables
+  let columnStyleSheet = null;
+  const hiddenColumns = new Set();
+
+  function initColumnStyleSheet() {
+    if (columnStyleSheet) return;
+    const style = document.createElement("style");
+    style.id = "table-column-visibility";
+    document.head.appendChild(style);
+    columnStyleSheet = style.sheet;
+  }
+
+  function updateColumnVisibilityCSS() {
+    if (!columnStyleSheet) return;
+
+    // Clear existing rules
+    while (columnStyleSheet.cssRules.length > 0) {
+      columnStyleSheet.deleteRule(0);
+    }
+
+    // Add rules for hidden columns
+    hiddenColumns.forEach((colIndex) => {
+      const rule = `#dataTable [data-col-index="${colIndex}"] { display: none; }`;
+      columnStyleSheet.insertRule(rule, columnStyleSheet.cssRules.length);
+    });
+  }
+
   function setupColumnToggle() {
     if (!columnToggleBtn || !columnDropdown) return;
+
+    // Initialize the dynamic stylesheet for column visibility
+    initColumnStyleSheet();
 
     columnToggleBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -565,25 +624,31 @@
   }
 
   function toggleColumn(colIndex, visible) {
-    // Toggle header
-    const th = dataTable.querySelector(`thead th[data-col-index="${colIndex}"]`);
-    if (th) th.hidden = !visible;
-
-    // Toggle all cells in that column
-    const cells = dataTable.querySelectorAll(`td[data-col-index="${colIndex}"]`);
-    cells.forEach((cell) => {
-      cell.hidden = !visible;
-    });
+    // Use CSS-based hiding instead of per-cell attribute manipulation
+    if (visible) {
+      hiddenColumns.delete(colIndex);
+    } else {
+      hiddenColumns.add(colIndex);
+    }
+    updateColumnVisibilityCSS();
   }
 
   function setAllColumns(visible) {
     if (!columnDropdownList) return;
     const checkboxes = columnDropdownList.querySelectorAll('input[type="checkbox"]');
+
+    // Batch update hidden columns set
+    hiddenColumns.clear();
     checkboxes.forEach((cb) => {
       const colIndex = parseInt(cb.dataset.colIndex, 10);
       cb.checked = visible;
-      toggleColumn(colIndex, visible);
+      if (!visible) {
+        hiddenColumns.add(colIndex);
+      }
     });
+
+    // Single CSS update for all columns
+    updateColumnVisibilityCSS();
     updateColumnCount();
     updateColumnToggleLabel();
   }
@@ -600,16 +665,8 @@
   }
 
   function getHiddenColumns() {
-    const hidden = new Set();
-    if (columnDropdownList) {
-      const checkboxes = columnDropdownList.querySelectorAll('input[type="checkbox"]');
-      checkboxes.forEach((cb) => {
-        if (!cb.checked) {
-          hidden.add(parseInt(cb.dataset.colIndex, 10));
-        }
-      });
-    }
-    return hidden;
+    // Return the cached set directly - no need to query DOM
+    return new Set(hiddenColumns);
   }
 
   function updateColumnCount() {

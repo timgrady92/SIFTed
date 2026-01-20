@@ -104,6 +104,39 @@
                 {% if case.summary %}
                   <p class="case-summary">{{ case.summary }}</p>
                 {% endif %}
+
+                <div class="case-artifacts" data-case-id="{{ case.id }}">
+                  <div class="case-artifacts-header">
+                    <h4>Evidence Artifacts</h4>
+                    <button class="ghost add-artifact-btn" data-case-id="{{ case.id }}" type="button">
+                      + Add Artifact
+                    </button>
+                  </div>
+                  {% if case.artifacts %}
+                    <div class="artifact-groups">
+                      {% set artifacts_by_type = {} %}
+                      {% for artifact in case.artifacts %}
+                        {% set _ = artifacts_by_type.setdefault(artifact.type, []).append(artifact) %}
+                      {% endfor %}
+                      {% for type_key, type_artifacts in artifacts_by_type.items() %}
+                        <div class="artifact-group" data-type="{{ type_key }}">
+                          <span class="artifact-type-label">{{ artifact_type_labels.get(type_key, type_key) }}</span>
+                          <div class="artifact-chips">
+                            {% for artifact in type_artifacts %}
+                              <span class="artifact-chip" data-artifact-id="{{ artifact.id }}" title="{{ artifact.path }}">
+                                <span class="artifact-chip-label">{{ artifact.label }}</span>
+                                <button class="artifact-remove" type="button" data-artifact-id="{{ artifact.id }}" title="Remove artifact">&times;</button>
+                              </span>
+                            {% endfor %}
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <p class="case-empty artifacts-empty">No artifacts yet. Add evidence files to this case.</p>
+                  {% endif %}
+                </div>
+
                 {% if runs_by_case.get(case.id) %}
                   <div class="case-runs">
                     {% for group in runs_by_case.get(case.id) %}
@@ -175,16 +208,17 @@
       </section>
     </main>
 
-    {% from "_components.html" import browse_drawer %}
+    {% from "_components.html" import browse_drawer, add_artifact_modal %}
     {{ browse_drawer() }}
+    {{ add_artifact_modal() }}
     {% from "_components.html" import glossary_sidebar, guides_sidebar, active_jobs_drawer %}
     {{ glossary_sidebar() }}
     {{ guides_sidebar() }}
     {{ active_jobs_drawer() }}
     <footer></footer>
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
-    <script src="{{ url_for('static', filename='glossary.js') }}"></script>
-    <script src="{{ url_for('static', filename='cases.js') }}"></script>
-    <script src="{{ url_for('static', filename='guides-sidebar.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='glossary.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='cases.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='guides-sidebar.js') }}"></script>
   </body>
 </html>
