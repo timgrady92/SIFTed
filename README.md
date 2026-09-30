@@ -1,12 +1,10 @@
 # SIFTed
 
+> **Note**: Full disclosure, this version of the application is purely developed using a mixture of Claude Code and Codex. I would love to get this concept in front of a dedicated team of developers. The mission statement of this design is simple: allow junior DFIR analysts to meaningfully contribute on day one of the job while getting exposure to the concepts. Best case: the analyst outgrows the tool within six months.
+
 > **Note**: Tool integration is currently in development. Workflows are being introduced slowly and methodically after rigorous testing. Existing workflows should be treated as experimental at best.
 
 **Training wheels for forensic analysts.**
-
-SIFTed is a guided interface for SANS SIFT workstation workflows. It lets junior analysts contribute meaningful work on day one while building the knowledge to outgrow it.
-
-## Philosophy
 
 Most forensic tools assume you already know what you're doing. SIFTed assumes you're learning.
 
@@ -87,12 +85,6 @@ Glossary terms are linked throughout guides and tool interfaces. See an artifact
 
 The sidebar keeps the glossary one click away from any screen. Search by name, category, or keyword. Build familiarity through repetition until the sidebar stays closed because you already know the answer.
 
-## The Goal
-
-SIFTed is scaffolding. Scaffolding comes down.
-
-When an analyst can run the underlying tools directly, explain what each one does, and build their own workflows without guidance—they've outgrown the training wheels. That's the win.
-
 ## Workflows
 
 | Category | Tools | What It Does |
@@ -104,6 +96,8 @@ When an analyst can run the underlying tools directly, explain what each one doe
 | Artifact Parsing | Eric Zimmermann tools | Parse Windows artifacts: Prefetch, Amcache, LNK files, Jump Lists, Event Logs, MFT |
 
 ## Quick Start
+
+Deploy the official SANS SIFT workstation and execute the commands below.
 
 ```bash
 python -m venv .venv
@@ -135,7 +129,3 @@ For production, run via WSGI:
 ```bash
 gunicorn --bind 0.0.0.0:5000 wsgi:app
 ```
-
-## License
-
-MIT
