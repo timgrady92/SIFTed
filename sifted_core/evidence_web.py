@@ -1,5 +1,7 @@
-"""An optional evidence-first interface over the existing forensic workflows."""
-from pathlib import Path
+"""An integrated evidence workspace over the native adapters and durable queue."""
+
+import os
+import stat
 
 from flask import Blueprint, jsonify, redirect, render_template, request, url_for
 
@@ -7,8 +9,10 @@ from .context import runtime_repository, runtime_settings
 from .evidence_workspace import identify, partition_choices, resolve_actions, select_input, validate_context, workspace_inputs
 from .presentation import ARTIFACT_TYPES
 from .storage import StoreError
-from .tool_base import ValidationError, allowed, executable, normalize
+from .tool_base import Plan, ValidationError, allowed, executable, normalize
+from .terminal import recipe
 from .file_triage import browse
+from .workflow_catalog import WORKFLOWS
 
 
 evidence = Blueprint("evidence", __name__)
@@ -40,8 +44,12 @@ def tool_reason(tool):
     return None
 
 
+def input_payload(item, case_id):
+    return {"case_id": case_id, "source_path": item["path"], "workspace_input": item["key"]}
+
+
 def disk_journey(selected, observed, runs, partitions, case_id, key):
-    """Project preparation from successful runs; never store parallel workflow state."""
+    """Derive preparation and native action payloads from successful, matching runs."""
     successful = [run for run in runs if run["status"] == "success" and selected.get("hash") == run.get("input_sha256")]
     geometries = {(p["offset_sector"], p["sector_size"]): dict(p) for p in partitions}
     for run in successful:
@@ -51,6 +59,7 @@ def disk_journey(selected, observed, runs, partitions, case_id, key):
             geometries.setdefault(geometry, {"offset_sector": geometry[0], "sector_size": geometry[1], "description": "Examined filesystem"})
     if observed["kind"] == "filesystem" and not geometries:
         geometries[(0, None)] = {"offset_sector": 0, "sector_size": None, "description": "Filesystem image"}
+    mapping = next((run for run in successful if run["tool"] == "mmls"), None)
     cards = []
     for geometry, card in geometries.items():
         matching = [run for run in successful if run["tool"] in {"fsstat", "fls"}
@@ -61,22 +70,18 @@ def disk_journey(selected, observed, runs, partitions, case_id, key):
                           and not run["plan"]["parameters"].get("directory_inode")
                           and not run["plan"]["parameters"].get("deleted_only")), None)
         context = inventory or stat
-        params = {"case_id": case_id, "source_path": selected["path"], "workspace_input": key,
-                  "offset_sector": geometry[0], "sector_size": geometry[1], "workspace_tab": "analysis"}
+        params = {**input_payload(selected, case_id), "offset_sector": geometry[0], "sector_size": geometry[1]}
         if context:
-            params.update(context_run_id=context["id"], workspace_context=context["id"])
-        elif card.get("actions"):
-            # Preserve the verified partition-map context on preparation actions.
-            card["stat_url"] = card["actions"][0]["url"]
-            card["inventory_url"] = card["actions"][1]["url"]
-        card.setdefault("stat_url", url_for("web.additional_workflow", tool_id="fsstat", **params))
-        card.setdefault("inventory_url", url_for("web.additional_workflow", tool_id="fls", recursive="true", **params))
-        card.update(stat_run_id=stat["id"] if stat else None, inventory_run_id=inventory["id"] if inventory else None,
+            params["context_run_id"] = context["id"]
+        elif mapping and geometry in {(p["offset_sector"], p["sector_size"]) for p in partitions}:
+            params["context_run_id"] = mapping["id"]
+        card.update(stat_payload=params, inventory_payload={**params, "recursive": True},
+                    stat_run_id=stat["id"] if stat else None, inventory_run_id=inventory["id"] if inventory else None,
                     stat_reason=tool_reason("fsstat"), inventory_reason=tool_reason("fls"),
                     entry_count=inventory["analysis"]["entry_count"] if inventory else 0,
                     triage_url=url_for("evidence.case_workspace", case_id=case_id, input=key, tab="triage", context_run_id=inventory["id"]) if inventory else None,
-                    stat_result_url=url_for("web.workflow_analysis", run_id=stat["id"], case_id=case_id, workspace_input=key) if stat else None,
-                    blocks=[{"label": label, "url": url_for("web.additional_workflow", tool_id=tool, **params), "reason": tool_reason(tool)}
+                    blocks=[{"tool": tool, "label": label, "payload": params, "reason": tool_reason(tool),
+                             "fields": [f for f in WORKFLOWS[tool]["fields"] if f["name"] not in {"offset_sector", "sector_size"}]}
                             for tool, label in (("blkstat", "Check block allocation"), ("blkcat", "Read a block"), ("blkls", "Sample unallocated blocks"), ("blkcalc", "Map a block address"))] if context else [])
         cards.append(card)
     return cards
@@ -94,27 +99,40 @@ def triage_view(context, selected, case_id, key):
                         scope=request.args.get("scope", "directory"), offset=request.args.get("offset", 0, type=int))
     except ValidationError as exc:
         return {"error": str(exc)}
-    common = {"case_id": case_id, "input": key, "tab": "triage", "context_run_id": context["id"]}
+    navigation = {"case_id": case_id, "input": key, "tab": "triage", "context_run_id": context["id"]}
     result.update(metadata_reason=tool_reason("istat"), extract_reason=tool_reason("icat"))
     filters = {"directory": directory, "q": result["query"], "kind": result["kind"], "state": result["state"], "scope": result["scope"]}
-    result["root_url"] = url_for("evidence.case_workspace", **common)
+    result["root_url"] = url_for("evidence.case_workspace", **navigation)
     for crumb in result["breadcrumbs"]:
-        crumb["url"] = url_for("evidence.case_workspace", directory=crumb["id"], **common)
-    result["previous_url"] = url_for("evidence.case_workspace", offset=max(0, result["offset"] - 100), **common, **filters) if result["offset"] else None
-    result["next_url"] = url_for("evidence.case_workspace", offset=result["offset"] + 100, **common, **filters) if result["offset"] + len(result["rows"]) < result["total"] else None
+        crumb["url"] = url_for("evidence.case_workspace", directory=crumb["id"], **navigation)
+    result["previous_url"] = url_for("evidence.case_workspace", offset=max(0, result["offset"] - 100), **navigation, **filters) if result["offset"] else None
+    result["next_url"] = url_for("evidence.case_workspace", offset=result["offset"] + 100, **navigation, **filters) if result["offset"] + len(result["rows"]) < result["total"] else None
     geometry = {name: context["plan"]["parameters"][name] for name in ("offset_sector", "sector_size") if name in context["plan"]["parameters"]}
     for row in result["rows"]:
-        params = {"case_id": case_id, "source_path": selected["path"], "workspace_input": key,
-                  "context_run_id": context["id"], "workspace_context": context["id"], "entry_id": row["id"],
-                  "workspace_tab": "triage", "workspace_directory": directory, "workspace_query": result["query"],
-                  "workspace_kind": result["kind"], "workspace_state": result["state"], "workspace_scope": result["scope"],
-                  "workspace_offset": result["offset"], **geometry}
-        row["metadata_url"] = url_for("web.additional_workflow", tool_id="istat", metadata_address=row["address"], **params)
+        params = {**input_payload(selected, case_id), "context_run_id": context["id"], "entry_id": row["id"], **geometry}
+        row["metadata_payload"] = {**params, "metadata_address": row["address"]}
         if row["kind"] == "directory" and row["parent"] is not None:
-            row["directory_url"] = url_for("evidence.case_workspace", directory=row["id"], **common) if result["recursive"] and not row["ambiguous_path"] else url_for("web.additional_workflow", tool_id="fls", directory_inode=row["address"], recursive="true", **params)
+            if result["recursive"] and not row["ambiguous_path"]:
+                row["directory_url"] = url_for("evidence.case_workspace", directory=row["id"], **navigation)
+            else:
+                row["listing_payload"] = {**params, "directory_inode": row["address"], "recursive": True}
         if row["kind"] == "file" and row["name"] not in {"", ".", "..", "_sifted"} and "\\" not in row["name"]:
-            row["extract_url"] = url_for("web.additional_workflow", tool_id="icat", metadata_address=row["address"], entry_name=row["name"], recover_deleted="true" if row["deleted"] else "false", **params)
+            row["extract_payload"] = {**params, "metadata_address": row["address"], "entry_name": row["name"], "recover_deleted": bool(row["deleted"])}
     return result
+
+
+def workspace_actions(selected, observed, runs, case_id, context=None):
+    values = resolve_actions(selected, observed, runtime_settings(), runs, context)
+    for action in values:
+        action["payload"] = {**input_payload(selected, case_id), **action["parameters"]}
+        action["fields"] = [field for field in WORKFLOWS.get(action["tool"], {}).get("fields", [])
+                            if field["name"] not in action["parameters"]]
+        # Advanced standalone entry points remain available for A/B evaluation.
+        endpoint = {"volatility": "web.volatility", "foremost": "web.foremost", "scalpel": "web.scalpel",
+                    "artifact-triage": "web.artifact_timeline", "bulk-extractor": "web.bulk_extractor"}.get(action["tool"])
+        if endpoint:
+            action["url"] = url_for(endpoint, **action["payload"])
+    return values
 
 
 def workspace(case_id):
@@ -134,40 +152,19 @@ def workspace(case_id):
     context_id = request.args.get("context_run_id", "")
     context = validate_context(repo.run(context_id), selected, case_id) if context_id and selected else None
     selected_runs = [r for r in runs if selected and normalize(r["source_path"]) == normalize(selected["path"])]
-    for run in selected_runs[:50]:
-        run["result_files"] = [item for item in repo.artifacts(run["id"])
-                               if allowed(item["path"], settings.output_roots) and Path(item["path"]).is_file()][:12]
-        run["result_url"] = url_for("web.workflow_analysis", run_id=run["id"], case_id=case_id,
-                                    workspace_input=key) if run.get("analysis") else None
-    actions = resolve_actions(selected, observed, settings, runs, context) if selected else []
-    for action in actions:
-        endpoint = {"strings": "web.strings_tool", "artifact-triage": "web.artifact_timeline",
-                    "bulk-extractor": "web.bulk_extractor", "eric-zimmerman": "web.eric_zimmerman"}.get(action["tool"])
-        if not endpoint:
-            endpoint = "web.additional_workflow" if action["tool"] in {"mmls", "fsstat", "fls", "xxd", "head", "pdfinfo", "pdftotext"} else "web." + action["tool"]
-        parameters = dict(action["parameters"])
-        if endpoint == "web.additional_workflow":
-            parameters["tool_id"] = action["tool"]
-        action["url"] = url_for(endpoint, case_id=case_id, source_path=selected["path"],
-                                workspace_input=key, workspace_context=context_id or None, **parameters)
-        if action["result_run_id"]:
-            result = repo.run(action["result_run_id"])
-            action["result_url"] = url_for("web.workflow_analysis", run_id=result["id"], case_id=case_id, workspace_input=key)
+    actions = workspace_actions(selected, observed, runs, case_id, context) if selected else []
     maps = [r for r in selected_runs if r["tool"] == "mmls" and r["status"] == "success"
             and selected.get("hash") == r.get("input_sha256")]
     partitions = partition_choices(maps[0], repo, settings) if maps else []
-    for partition in partitions:
-        partition["actions"] = [{"label": label, "url": url_for(
-            "web.additional_workflow", tool_id=tool, case_id=case_id, source_path=selected["path"],
-            workspace_input=key, context_run_id=maps[0]["id"], offset_sector=partition["offset_sector"],
-            sector_size=partition["sector_size"], recursive="true" if tool == "fls" else None,
-            workspace_tab="analysis")} for tool, label in (("fsstat", "Describe filesystem"), ("fls", "Build file inventory"))]
+    if maps and maps[0].get("analysis", {}).get("sector_size") in {512, 1024, 2048, 4096}:
+        mapping = next(action for action in actions if action["id"] == "mmls")
+        mapping["payload"]["sector_size"] = maps[0]["analysis"]["sector_size"]
     is_disk = bool(observed and observed["kind"] in {"disk", "filesystem", "ewf", "container"})
-    tab = request.args.get("tab", "analysis" if is_disk else "tools")
-    if tab not in {"analysis", "triage", "derived", "tools"}:
+    tab = request.args.get("tab", "analysis")
+    if tab not in {"overview", "analysis", "triage", "derived", "activity"}:
         raise ValidationError("Choose an available workspace tab.")
-    if not is_disk and selected and tab in {"analysis", "triage"}:
-        raise ValidationError("Disk analysis and filesystem triage require disk or filesystem evidence.")
+    if not is_disk and selected and tab == "triage":
+        raise ValidationError("Filesystem triage requires disk or filesystem evidence.")
     journey = disk_journey(selected, observed, selected_runs, partitions, case_id, key) if is_disk else []
     if tab == "triage" and not context:
         inventories = [card for card in journey if card["inventory_run_id"]]
@@ -186,16 +183,33 @@ def workspace(case_id):
         descendants.update(normalize(item["path"]) for item in found)
         found_keys = {item["key"] for item in found}
         pending = [item for item in pending if item["key"] not in found_keys]
-    for item in derived:
-        item["url"] = url_for("evidence.case_workspace", case_id=case_id, input=item["key"], tab="tools")
     input_offset = max(0, request.args.get("input_offset", 0, type=int))
-    return {"case": case, "inputs": inputs[input_offset:input_offset + 100], "input_offset": input_offset,
+    result = {"case": case, "inputs": inputs[input_offset:input_offset + 100], "input_offset": input_offset,
             "input_count": len(inputs), "selected": selected, "observed": observed, "actions": actions,
             "runs": selected_runs[:50], "run_count": len(selected_runs), "parent_input": parent_input,
             "context": context, "types": ARTIFACT_TYPES, "partitions": partitions,
             "is_disk": is_disk, "tab": tab, "journey": journey, "triage": triage, "derived": derived,
             "completed_count": sum(r["status"] == "success" for r in selected_runs),
             "active_count": sum(r["status"] in {"running", "queued"} for r in selected_runs)}
+    examination_key = request.args.get("examine", "")
+    item = next((item for item in derived if item["key"] == examination_key), None)
+    if examination_key and not item:
+        raise ValidationError("Choose a captured file from this evidence.")
+    result["examination"] = None
+    if item:
+        observed_file = identify(item, settings)
+        result["examination"] = {"input": item, "observed": observed_file,
+                                 "actions": workspace_actions(item, observed_file, runs, case_id)}
+    paths = {normalize(selected["path"])} if selected else set()
+    paths.update(normalize(item["path"]) for item in derived)
+    activity = [run for run in runs if normalize(run["source_path"]) in paths]
+    result["activity"] = activity[:100]
+    result["activity_count"] = len(activity)
+    result["active"] = [{"runId": run["id"], "tool": run["tool"],
+                         "next": "triage" if run["tool"] == "fls" and run["plan"]["parameters"].get("recursive")
+                         else "derived" if run["tool"] in {"icat", "blkcat", "blkls"} else ""}
+                        for run in activity if run["status"] in {"queued", "running"}]
+    return result
 
 
 @evidence.get("/case/<case_id>/workspace")
@@ -206,6 +220,50 @@ def case_workspace(case_id):
 @evidence.get("/api/case/<case_id>/workspace")
 def workspace_api(case_id):
     return jsonify(workspace(case_id))
+
+
+@evidence.get("/api/case/<case_id>/workspace/view")
+def workspace_view(case_id):
+    model = workspace(case_id)
+    return jsonify(html=render_template("_evidence_workspace.html", workspace=model),
+                   active=model["active"])
+
+
+@evidence.get("/api/case/<case_id>/workspace/run/<run_id>")
+def workspace_run(case_id, run_id):
+    """Read bounded, published reports for this evidence and its descendants only."""
+    model = workspace(case_id)
+    run = runtime_repository().run(run_id)
+    paths = {normalize(item["path"]) for item in model["derived"]}
+    if model["selected"]:
+        paths.add(normalize(model["selected"]["path"]))
+    if not run or run["case_id"] != case_id or normalize(run["source_path"]) not in paths:
+        raise ValidationError("Run does not belong to this evidence workspace.")
+    files = [item for item in runtime_repository().artifacts(run_id) if item.get("complete")]
+    material_paths = {normalize(item["path"]) for item in model["derived"]}
+    reports = [item for item in files if item["name"].lower().endswith((".txt", ".csv", ".json", ".jsonl"))
+               and not item["name"].startswith("_sifted/") and normalize(item["path"]) not in material_paths]
+    name = request.args.get("report", reports[0]["name"] if reports else "")
+    report = next((item for item in reports if item["name"] == name), None)
+    content, truncated = "", False
+    if name and not report:
+        raise ValidationError("Choose a published report from this run.")
+    if report:
+        if not allowed(report["path"], runtime_settings().output_roots):
+            raise ValidationError("This published report is outside the configured result roots.")
+        try:
+            descriptor = os.open(report["path"], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(descriptor, "rb") as handle:
+                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                    raise ValidationError("This published report is no longer a regular file.")
+                data = handle.read(128 * 1024 + 1)
+            truncated = len(data) > 128 * 1024
+            content = data[:128 * 1024].decode("utf-8", errors="replace")
+        except OSError:
+            raise ValidationError("This published report is no longer available.")
+    return jsonify(html=render_template("_evidence_result.html", run=run, reports=reports[:100],
+                                       report=name, content=content, truncated=truncated),
+                   **recipe(Plan.from_dict(run["plan"]), runtime_settings()))
 
 
 @evidence.post("/case/<case_id>/evidence/<artifact_id>/type")

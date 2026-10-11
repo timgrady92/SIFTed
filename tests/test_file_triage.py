@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from sifted_core.worker import Worker
-from test_evidence_workspace import workspace_runtime as workspace_runtime, payload, view, register
+from test_evidence_workspace import workspace_runtime as workspace_runtime, view, register
 from test_integrated_tools import integrated as integrated
 
 
@@ -35,7 +35,7 @@ def test_directory_search_filters_pagination_and_reopening_do_not_queue_work(wor
     assert len(triage['rows']) == 100 and triage['total'] == 206 and triage['next_url']
     second = client.get(triage['next_url'].replace('/case/', '/api/case/', 1)).json['triage']
     assert second['offset'] == 100 and len(second['rows']) == 100
-    assert 'workspace_offset=100' in second['rows'][0]['metadata_url']
+    assert second['rows'][0]['metadata_payload']['entry_id'] == second['rows'][0]['id']
     third = client.get(second['next_url'].replace('/case/', '/api/case/', 1)).json['triage']
     assert third['offset'] == 200 and len(third['rows']) == 6 and not third['next_url']
     nested = triage['rows'][0]
@@ -52,7 +52,7 @@ def test_directory_search_filters_pagination_and_reopening_do_not_queue_work(wor
     assert b'name &lt;script&gt;.txt' in html and b'name <script>.txt' not in html
     deleted = view(client, case, key, tab='triage', state='deleted', scope='filesystem')['triage']
     assert deleted['total'] == 1 and deleted['rows'][0]['reallocated']
-    assert 'recover_deleted=true' in deleted['rows'][0]['extract_url']
+    assert deleted['rows'][0]['extract_payload']['recover_deleted'] is True
     assert view(client, case, key, tab='triage', q="' OR 1=1 --", scope='filesystem')['triage']['total'] == 0
     assert len(repo.runs()) == 1
 
@@ -65,7 +65,7 @@ def test_selected_entry_cannot_be_retargeted(workspace_runtime, changes):
     app, client, repo, settings, source, outputs, case, key = workspace_runtime
     triage = view(client, case, key, tab='triage', context_run_id=run['id'])['triage']
     row = next(row for row in triage['rows'] if row['deleted'])
-    response = client.post('/api/icat/run', json={**payload({'url': row['extract_url']}), **changes})
+    response = client.post('/api/icat/run', json={**row['extract_payload'], **changes})
     assert response.status_code == 400, response.json
     assert len(repo.runs()) == 1
 
@@ -74,7 +74,7 @@ def test_tampered_inventory_is_rejected_in_view_enqueue_and_execution(workspace_
     run = inventory(workspace_runtime)
     app, client, repo, settings, source, outputs, case, key = workspace_runtime
     row = next(row for row in view(client, case, key, tab='triage')['triage']['rows'] if row['kind'] == 'file')
-    data = payload({'url': row['extract_url']})
+    data = row['extract_payload']
     created = client.post('/api/icat/run', json=data)
     assert created.status_code == 202
     index = Path(run['output_path'])/'inventory.sqlite3'
@@ -130,7 +130,7 @@ def test_guided_directory_and_file_actions_retain_selection_in_provenance(worksp
     app, client, repo, settings, source, outputs, case, key = workspace_runtime
     triage = view(client, case, key, tab='triage')['triage']
     directory = next(row for row in triage['rows'] if row['kind'] == 'directory')
-    metadata = payload({'url': directory['metadata_url']})
+    metadata = directory['metadata_payload']
     created = client.post('/api/istat/run', json=metadata)
     assert created.status_code == 202, created.json
     Worker(repo, settings).run_once()
@@ -176,7 +176,7 @@ def test_derived_files_stay_with_selected_evidence_and_link_back_to_source(works
     inventory(workspace_runtime)
     app, client, repo, settings, source, outputs, case, key = workspace_runtime
     row = next(row for row in view(client, case, key, tab='triage')['triage']['rows'] if row['kind'] == 'file')
-    created = client.post('/api/icat/run', json=payload({'url': row['extract_url']}))
+    created = client.post('/api/icat/run', json=row['extract_payload'])
     Worker(repo, settings).run_once()
     derived = view(client, case, key, tab='derived')['derived']
     assert len(derived) == 1 and derived[0]['source_run_id'] == created.json['run_id']
@@ -208,8 +208,8 @@ def test_duplicate_directory_paths_require_a_listing_by_metadata_address(workspa
     triage = view(client, case, key, tab='triage')['triage']
     assert len(triage['rows']) == 2
     for row in triage['rows']:
-        assert row['ambiguous_path'] and '/workflow/fls?' in row['directory_url']
-        values = payload({'url': row['directory_url']})
+        assert row['ambiguous_path'] and not row.get('directory_url')
+        values = row['listing_payload']
         assert values['directory_inode'] == row['address'] and values['entry_id'] == row['id']
         assert client.post('/api/fls/preview', json=values).status_code == 200
         assert 'Several directory entries' in view(client, case, key, tab='triage', directory=row['id'])['triage']['error']

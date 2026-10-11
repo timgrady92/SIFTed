@@ -1,6 +1,5 @@
 """Artifact suitability, isolated selection, result reuse and guided execution."""
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -28,15 +27,7 @@ def view(client, case, key, **args):
 
 
 def payload(action):
-    values = {k: v[0] for k, v in parse_qs(urlparse(action['url']).query).items()
-              if k != 'tool_id' and (not k.startswith('workspace_') or k == 'workspace_input')}
-    for name in ('offset_sector', 'sector_size', 'entry_id'):
-        if name in values:
-            values[name] = int(values[name])
-    for name in ('recursive', 'deleted_only', 'recover_deleted'):
-        if name in values:
-            values[name] = values[name] == 'true'
-    return values
+    return dict(action['payload'])
 
 
 @pytest.fixture
@@ -131,8 +122,8 @@ def test_guided_partition_inventory_extraction_and_result_reuse(workspace_runtim
     assert mapped['partitions'][0]['offset_sector'] == 2048
     action = next(a for a in mapped['actions'] if a['id'] == 'mmls')
     assert action['result_run_id'] == created.json['run_id']
-    assert client.get(action['result_url']).status_code == 200
-    inventory = payload(mapped['partitions'][0]['actions'][1])
+    assert client.get(f'/api/case/{case}/workspace/run/{action["result_run_id"]}', query_string={'input': key}).status_code == 200
+    inventory = mapped['journey'][0]['inventory_payload']
     preview = client.post('/api/fls/preview', json=inventory)
     assert preview.status_code == 200 and '-o 2048' in preview.json['terminal_command']
     forged = {**inventory, 'offset_sector': 4096}
@@ -148,7 +139,7 @@ def test_guided_partition_inventory_extraction_and_result_reuse(workspace_runtim
     assert payload(fls)['context_run_id'] == context
     triage = view(client, case, key, tab='triage', context_run_id=context)
     selected_file = next(row for row in triage['triage']['rows'] if row['address'] == '42-128-1')
-    extract = payload({'url': selected_file['extract_url']})
+    extract = selected_file['extract_payload']
     assert extract['recover_deleted'] and extract['entry_id'] == selected_file['id']
     response = client.post('/api/icat/run', json=extract)
     assert response.status_code == 202, response.json
@@ -157,8 +148,9 @@ def test_guided_partition_inventory_extraction_and_result_reuse(workspace_runtim
     derived = [x for x in data['inputs'] if x['origin'] == 'derived']
     assert len(derived) == 1 and derived[0]['artifact_kind'] == 'extracted_file'
     new_key = derived[0]['key']
-    data = view(client, case, new_key)
-    xxd = next(a for a in data['actions'] if a['id'] == 'xxd')
+    data = view(client, case, key, tab='derived', examine=new_key)
+    assert data['selected']['key'] == key
+    xxd = next(a for a in data['examination']['actions'] if a['id'] == 'xxd')
     response = client.post('/api/xxd/run', json=payload(xxd))
     assert response.status_code == 202, response.json
     worker.run_once()
@@ -173,7 +165,7 @@ def test_tampered_partition_map_cannot_guide_execution(workspace_runtime):
     created = client.post('/api/mmls/run', json={'case_id': case, 'source_path': str(source), 'workspace_input': key})
     Worker(repo, settings).run_once()
     mapped = view(client, case, key)
-    data = payload(mapped['partitions'][0]['actions'][1])
+    data = mapped['journey'][0]['inventory_payload']
     run = repo.run(created.json['run_id'])
     (Path(run['output_path'])/'mmls.csv').write_text('tampered')
     assert not view(client, case, key)['partitions']
@@ -206,8 +198,8 @@ def test_completed_basic_examinations_reopen_without_reexecuting(workspace_runti
     Worker(repo, settings).run_once()
     action = next(a for a in view(client, case, key)['actions'] if a['id'] == 'xxd')
     assert action['result_run_id'] == created.json['run_id']
-    page = client.get(action['result_url'])
-    assert page.status_code == 200 and b'xxd.txt' in page.data and b'Return to evidence workspace' in page.data
+    page = client.get(f'/api/case/{case}/workspace/run/{action["result_run_id"]}', query_string={'input': key})
+    assert page.status_code == 200 and 'xxd.txt' in page.json['html'] and '00000000' in page.json['html']
     assert len(repo.runs()) == 1
 
 
@@ -232,7 +224,7 @@ def test_all_zimmerman_families_are_contextually_accessible(zimmerman_runtime, p
     assert parser in {a['id'] for a in result['actions']}, result['observed']
     action = next(a for a in result['actions'] if a['id'] == parser)
     assert action['enabled'], action['reason']
-    assert parse_qs(urlparse(action['url']).query)['tool_id'] == [parser]
+    assert action['payload']['tool_id'] == parser
     data = payload(action)
     data['tool_id'] = parser
     response = client.post('/api/eric-zimmerman/run', json=data)
@@ -287,3 +279,42 @@ def test_workspace_volatility_inputs_exclude_saved_config_and_plugin_report(memo
     derived = [x for x in view(client, case, key)['inputs'] if x['origin'] == 'derived']
     assert len(derived) == 1 and derived[0]['label'].endswith('/same-name.bin')
     assert not any(x['label'].endswith(('result.json', 'config.json')) for x in derived)
+
+
+def test_inline_reports_are_bounded_escaped_and_scoped_to_evidence(workspace_runtime):
+    import sys
+    app, client, repo, settings, source, outputs, case, key = workspace_runtime
+    script = source.parent / 'report tool.py'
+    script.write_text("print('<script>alert(1)</script>' + 'A' * 140000)")
+    settings.binaries['xxd'] = [sys.executable, str(script)]
+    created = client.post('/api/xxd/run', json=next(a['payload'] for a in view(client, case, key)['actions'] if a['id'] == 'xxd'))
+    assert created.status_code == 202
+    Worker(repo, settings).run_once()
+    run_id = created.json['run_id']
+    endpoint = f'/api/case/{case}/workspace/run/{run_id}'
+    response = client.get(endpoint, query_string={'input': key})
+    assert response.status_code == 200
+    html = response.json['html']
+    assert '&lt;script&gt;' in html and '<script>' not in html and 'first 128 KiB' in html
+    assert len(html) < 140000
+    assert str(source) in response.json['terminal_command']
+    assert client.get(endpoint, query_string={'input': key, 'report': str(source)}).status_code == 400
+    other = source.parent / 'unrelated.txt'
+    other.write_text('unrelated evidence')
+    registered = client.post(f'/api/case/{case}/artifacts', json={'path': str(other)}).json['artifact']
+    assert client.get(endpoint, query_string={'input': 'e:' + registered['id']}).status_code == 400
+    other_case, other_key = register(client, repo, other)
+    assert client.get(f'/api/case/{other_case}/workspace/run/{run_id}', query_string={'input': other_key}).status_code == 400
+    report = Path(repo.run(run_id)['output_path']) / 'xxd.txt'
+    report.unlink()
+    report.symlink_to(other)
+    assert client.get(endpoint, query_string={'input': key}).status_code == 400
+
+
+def test_inline_fragments_and_invalid_captured_file_do_not_enqueue(workspace_runtime):
+    app, client, repo, settings, source, outputs, case, key = workspace_runtime
+    for tab in ('overview', 'analysis', 'triage', 'derived', 'activity'):
+        response = client.get(f'/api/case/{case}/workspace/view', query_string={'input': key, 'tab': tab})
+        assert response.status_code == 200 and response.json['html'] and response.json['active'] == []
+    assert client.get(f'/api/case/{case}/workspace/view', query_string={'input': key, 'tab': 'derived', 'examine': 'd:999'}).status_code == 400
+    assert repo.runs() == []

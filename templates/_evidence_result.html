@@ -1,0 +1,7 @@
+<div class="workspace-heading"><h3>{{ run.plan.parameters.parser_id|default(run.tool) }} · {{ run.status }}</h3><span class="helper">{{ run.created_at }}</span></div>
+{% if run.error %}<p>{{ run.error }}</p>{% endif %}
+{% if reports %}
+<label>Report<select id="operationReport" data-run="{{ run.id }}">{% for item in reports %}<option value="{{ item.name }}" {% if report == item.name %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></label>
+<pre class="workspace-report">{{ content }}</pre>{% if truncated %}<p class="helper">Showing the first 128 KiB. The complete report is available below.</p>{% endif %}
+<details><summary>Complete reports and provenance</summary>{% for item in reports %}<p><a target="_blank" rel="noopener" href="{{ url_for('web.view_file', path=item.path) }}">{{ item.name }}</a></p>{% endfor %}<p><a target="_blank" rel="noopener" href="{{ url_for('web.run_log',run_id=run.id) }}">Execution log</a></p><p>Run {{ run.id }}</p><p>{{ run.source_path }}</p><p>{{ run.output_path }}</p></details>
+{% elif run.status == 'success' %}<p>Captured content is available in Derived files.</p>{% endif %}

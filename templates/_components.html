@@ -115,7 +115,7 @@
     </div>
   </nav>
   {% if request.args.get('workspace_input') and request.args.get('case_id') %}
-    <div class="workspace-return"><a class="ghost" href="{{ url_for('evidence.case_workspace', case_id=request.args.get('case_id'), input=request.args.get('workspace_input'), context_run_id=request.args.get('workspace_context'), tab=request.args.get('workspace_tab'), directory=request.args.get('workspace_directory'), q=request.args.get('workspace_query'), kind=request.args.get('workspace_kind'), state=request.args.get('workspace_state'), scope=request.args.get('workspace_scope'), offset=request.args.get('workspace_offset')) }}">← Return to evidence workspace</a></div>
+    <div class="workspace-return"><a class="ghost" href="{{ url_for('evidence.case_workspace', case_id=request.args.get('case_id'), input=request.args.get('workspace_input')) }}">← Return to evidence workspace</a></div>
   {% endif %}
 {% endmacro %}
 

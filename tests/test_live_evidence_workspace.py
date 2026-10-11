@@ -41,14 +41,14 @@ def test_native_workspace_real_ewf_case_evidence(tmp_path):
         return result
 
     run('mmls', {'source_path': str(source), 'case_id': case, 'workspace_input': key})
-    chosen = view(client, case, key)['partitions'][0]
-    run('fsstat', payload(chosen['actions'][0]))
+    chosen = view(client, case, key)['journey'][0]
+    run('fsstat', chosen['stat_payload'])
     card = view(client, case, key)['journey'][0]
-    inventory = run('fls', payload({'url': card['inventory_url']}))
+    inventory = run('fls', card['inventory_payload'])
     triage = view(client, case, key, tab='triage', context_run_id=inventory['id'], scope='filesystem', kind='file', state='allocated')['triage']
     assert triage['total'] > 0
-    entry = next(row for row in triage['rows'] if row.get('extract_url'))
-    extracted = run('icat', payload({'url': entry['extract_url']}))
+    entry = next(row for row in triage['rows'] if row.get('extract_payload'))
+    extracted = run('icat', entry['extract_payload'])
     material = next(item for item in view(client, case, key, tab='derived')['derived'] if item['source_run_id'] == extracted['id'])
     expected = subprocess.run(['icat', '-b', str(chosen['sector_size']), '-o', str(chosen['offset_sector']),
                                *image_sources(str(source)), entry['address']], check=True, capture_output=True).stdout
@@ -89,13 +89,14 @@ def test_native_workspace_partition_to_identified_pdf(tmp_path, sector_size):
     partitions = view(client, case, key)['partitions']
     chosen = next(p for p in partitions if p['offset_sector'] == disk['offset'])
     assert chosen['sector_size'] == sector_size
-    data = payload(chosen['actions'][1])
+    assert next(a for a in view(client, case, key)['actions'] if a['id'] == 'mmls')['payload']['sector_size'] == sector_size
+    data = next(card for card in view(client, case, key)['journey'] if card['offset_sector'] == chosen['offset_sector'])['inventory_payload']
     inventory = run('fls', {**data, 'recursive': True})
     triage = view(client, case, key, tab='triage', context_run_id=inventory['id'])['triage']
     nested = next(row for row in triage['rows'] if row['name'] == 'nested')
     triage = view(client, case, key, tab='triage', context_run_id=inventory['id'], directory=nested['id'])['triage']
     document = next(row for row in triage['rows'] if row['name'] == 'known.pdf')
-    extracted = run('icat', payload({'url': document['extract_url']}))
+    extracted = run('icat', document['extract_payload'])
     material = next(x for x in view(client, case, key)['inputs'] if x.get('source_run_id') == extracted['id'])
     assert Path(material['path']).read_bytes() == pdf_bytes()
     result = view(client, case, material['key'])
@@ -106,7 +107,7 @@ def test_native_workspace_partition_to_identified_pdf(tmp_path, sector_size):
     assert repo.input(rendered['id'])['source_run_id'] == extracted['id']
     action = next(a for a in view(client, case, material['key'])['actions'] if a['id'] == 'pdftotext')
     assert action['result_run_id'] == rendered['id']
-    assert client.get(action['result_url']).status_code == 200
+    assert client.get(f'/api/case/{case}/workspace/run/{action["result_run_id"]}', query_string={'input': key}).status_code == 200
     assert len(repo.runs()) == 4
 
 
@@ -136,4 +137,4 @@ def test_native_workspace_memory_action_on_public_windows_image(installed_memory
     result = view(client, case, key)
     assert next(a for a in result['actions'] if a['id'] == 'volatility')['result_run_id'] == run['id']
     assert len(result['inputs']) == 1  # Plugin reports and saved configs are not extracted evidence.
-    assert client.get(next(a for a in result['actions'] if a['id'] == 'volatility')['result_url']).status_code == 200
+    assert client.get(f'/api/case/{case}/workspace/run/{run["id"]}', query_string={'input': key}).status_code == 200

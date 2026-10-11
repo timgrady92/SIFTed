@@ -320,62 +320,75 @@ def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tm
             base = f'http://127.0.0.1:{server.server_port}'
             workspace_url = base + f'/case/{case}/workspace?' + urlencode({'input': key})
             page.goto(workspace_url)
-            assert page.get_by_role('link', name='Map disk', exact=True).count() == 1
+            assert page.get_by_role('button', name='Map disk', exact=True).count() == 1
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path/'workspace-mobile.png'), full_page=True)
-            page.get_by_role('link', name='Map disk', exact=True).click()
-            page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
-            assert page.locator('#caseSelect').input_value() == case
-            assert page.locator('#sourcePath').input_value() == str(source)
+            page.get_by_text('Disk sector size', exact=True).click()
+            page.get_by_role('button', name='Map with selected sector size', exact=True).click()
+            page.select_option('[data-field="sector_size"]', '4096')
+            page.wait_for_function("!document.querySelector('#copyOperation').disabled && document.querySelector('#operationCommand').textContent.includes('-b 4096')")
+            assert repo.runs() == []
+            page.click('#closeOperation')
             with page.expect_request('**/api/mmls/run') as submitted:
-                page.click('#runWorkflow')
+                page.get_by_role('button', name='Map disk', exact=True).click()
             assert submitted.value.post_data_json['workspace_input'] == key
-            page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            page.reload()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('progress')")
+            page.evaluate("window.workspaceDocument = 'kept through the journey'")
+            page.route('**/api/run/*/status', lambda route: route.abort(), times=1)
             worker.run_once()
-            page.wait_for_selector('#runResultsLinks a[href*="/analysis"]')
-            page.click('#runResultsLinks a[href*="/analysis"]')
-            page.get_by_role('link', name='← Return to evidence workspace').click()
-            page.locator('.evidence-filesystem details').first.evaluate('(element) => element.open = true')
-            page.locator('.evidence-filesystem a', has_text='Build file inventory').click()
-            page.wait_for_function("document.querySelector('#commandPreview').textContent.includes('-o 2048')")
-            page.click('#runWorkflow')
-            page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
+            page.get_by_role('button', name='Analyze filesystem', exact=True).wait_for()
+            page.get_by_role('button', name='Analyze filesystem', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             worker.run_once()
-            page.wait_for_selector('#runResultsLinks a[href*="/analysis"]')
-            page.click('#runResultsLinks a[href*="/analysis"]')
-            page.get_by_role('link', name='← Return to evidence workspace').click()
-            page.get_by_role('link', name='Explore files', exact=True).click()
+            page.get_by_role('button', name='Build file inventory', exact=True).first.wait_for()
+            page.get_by_role('button', name='Build file inventory', exact=True).first.click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            worker.run_once()
+            page.wait_for_selector('#triageFilters')
             page.fill('input[name="q"]', 'spaces')
             page.select_option('select[name="state"]', 'deleted')
             page.get_by_role('button', name='Filter entries').click()
+            page.wait_for_function("document.querySelectorAll('[data-triage-entry]').length === 1")
             assert page.locator('[data-triage-entry]').count() == 1
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path/'triage-mobile.png'), full_page=True)
-            page.get_by_role('link', name='Recover file', exact=True).click()
-            page.wait_for_function("document.querySelector('#commandPreview').textContent.includes('42-128-1')")
-            page.click('#runWorkflow')
-            page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
+            page.get_by_role('button', name='Inspect metadata', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             worker.run_once()
-            page.wait_for_selector('#runResultsLinks a[href*="/analysis"]')
-            page.click('#runResultsLinks a[href*="/analysis"]')
-            page.get_by_role('link', name='← Return to evidence workspace').click()
+            page.wait_for_function("document.querySelector('#operationResult').textContent.includes('Filesystem metadata')")
+            page.get_by_role('button', name='Recover file', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            assert '42-128-1' in page.locator('#operationCommand').text_content()
+            worker.run_once()
+            page.wait_for_selector('[data-examine]')
+            page.get_by_role('button', name='Triage', exact=True).click()
+            page.wait_for_selector('#triageFilters')
             assert page.locator('input[name="q"]').input_value() == 'spaces'
             assert page.locator('select[name="state"]').input_value() == 'deleted'
             assert page.locator('[data-triage-entry]').count() == 1
-            page.get_by_role('link', name='Derived files', exact=True).click()
-            page.get_by_role('link', name='Examine file', exact=True).click()
-            page.locator('[data-evidence-action="xxd"] a').click()
-            page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
-            assert parse_qs(urlparse(page.url).query)['workspace_input'][0].startswith('d:')
-            assert page.locator('#sourcePath').input_value() != str(source)
-            page.click('#runWorkflow')
-            page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
+            page.locator('[data-workspace-tab="derived"]').click()
+            page.get_by_role('button', name='Examine file', exact=True).click()
+            page.locator('[data-evidence-action="xxd"] [data-workspace-tool]').click()
+            page.wait_for_function("!document.querySelector('#copyOperation').disabled")
+            assert parse_qs(urlparse(page.url).query)['input'][0] == key
+            assert parse_qs(urlparse(page.url).query)['examine'][0].startswith('d:')
+            assert 'deleted file with spaces.txt' in page.locator('#operationCommand').inner_text()
+            page.click('#runOperation')
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             worker.run_once()
-            page.wait_for_selector('#runResultsLinks a[href*="/analysis"]')
-            page.click('#runResultsLinks a[href*="/analysis"]')
-            page.get_by_role('link', name='← Return to evidence workspace').click()
-            assert page.locator('[data-evidence-action="xxd"] a', has_text='View latest successful result').count() == 1
-            assert len(repo.runs()) == 4 and all(r['status'] == 'success' for r in repo.runs())
+            page.wait_for_selector('[data-evidence-action="xxd"] [data-workspace-result]')
+            assert len(repo.runs()) == 6 and all(r['status'] == 'success' for r in repo.runs())
+            assert urlparse(page.url).path == urlparse(workspace_url).path
+            assert page.evaluate('window.workspaceDocument') == 'kept through the journey'
+            page.reload()
+            page.wait_for_selector('[data-evidence-action="xxd"] [data-workspace-result]')
+            page.locator('[data-evidence-action="xxd"] [data-workspace-result]').click()
+            page.wait_for_function("document.querySelector('#operationResult').textContent.includes('00000000')")
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            page.set_viewport_size({'width': 1440, 'height': 1000})
+            page.screenshot(path=str(tmp_path/'workspace-desktop.png'), full_page=True)
             assert not errors
             browser.close()
     finally:
@@ -406,18 +419,58 @@ def test_evidence_workspace_prefills_specific_zimmerman_parser(zimmerman_runtime
             page.on('pageerror', lambda error: errors.append(str(error)))
             base = f'http://127.0.0.1:{server.server_port}'
             page.goto(base + f'/case/{case}/workspace?' + urlencode({'input': key}))
-            page.locator('[data-evidence-action="sqlecmd"] a').click()
-            page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
-            assert page.locator('.ez-tool-card.active').get_attribute('data-tool-id') == 'sqlecmd'
-            assert page.locator('#sourcePath').input_value() == str(source)
-            assert page.locator('#caseSelect').input_value() == case
-            page.click('#runEzTool')
-            page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
+            page.locator('[data-evidence-action="sqlecmd"] [data-workspace-tool]').click()
+            page.wait_for_function("!document.querySelector('#copyOperation').disabled")
+            assert str(source) in page.locator('#operationCommand').inner_text()
+            page.click('#runOperation')
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             Worker(repo, app.config['SETTINGS']).run_once()
-            page.wait_for_function("document.querySelector('#runStatus').dataset.tone === 'success'")
-            page.get_by_role('link', name='← Return to evidence workspace').click()
-            assert page.locator('[data-evidence-action="sqlecmd"] a', has_text='View latest successful result').count() == 1
+            page.wait_for_selector('[data-evidence-action="sqlecmd"] [data-workspace-result]')
             assert not errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.browser
+def test_workspace_jobs_follow_their_evidence_and_can_be_cancelled(workspace_runtime):
+    app, client, repo, settings, source, outputs, case, key = workspace_runtime
+    second = source.parent / 'second disk.img'
+    second.write_bytes(source.read_bytes())
+    registered = client.post(f'/api/case/{case}/artifacts', json={'path': str(second), 'type': 'disk_image'}).json['artifact']
+    second_key = 'e:' + registered['id']
+    server = make_server('127.0.0.1', 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():
+                pytest.skip('Chromium is not installed.')
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            page.goto(f'http://127.0.0.1:{server.server_port}/case/{case}/workspace?' + urlencode({'input': key}))
+            page.get_by_role('button', name='Map disk', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            page.select_option('#workspaceInput', second_key)
+            page.wait_for_function('(key) => document.querySelector("#workspaceInput").value === key && location.search.includes(encodeURIComponent(key))', arg=second_key)
+            Worker(repo, settings).run_once()
+            page.reload()
+            page.get_by_role('button', name='Map disk', exact=True).wait_for()
+            assert page.locator('[data-filesystem-offset]').count() == 0
+            page.get_by_role('button', name='Map disk', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            page.click('#cancelOperation')
+            page.wait_for_function("document.querySelector('#operationStatus').dataset.tone === 'error'")
+            assert sorted(run['status'] for run in repo.runs()) == ['cancelled', 'success']
+            assert page.locator('[data-filesystem-offset]').count() == 0
+            page.select_option('#workspaceInput', key)
+            page.wait_for_selector('[data-filesystem-offset]')
+            assert parse_qs(urlparse(page.url).query)['input'] == [key]
+            assert len(repo.runs()) == 2 and not errors
             browser.close()
     finally:
         server.shutdown()

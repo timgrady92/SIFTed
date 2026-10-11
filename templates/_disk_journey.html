@@ -1,34 +1,29 @@
-<section class="card block" aria-label="Disk investigation">
-  <p class="eyebrow">01 · Map disk</p><h2>Locate the filesystems</h2>
-  {% set mapping = workspace.actions|selectattr('id', 'equalto', 'mmls')|first %}
-  {% if workspace.partitions %}<p>{{ workspace.partitions|length }} allocated regions in the latest verified partition map.</p>
-  {% elif workspace.observed.kind == 'filesystem' %}<p>This evidence starts with a filesystem. Begin its examination below.</p>
-  {% else %}<p>Map the disk to locate partition starts before browsing its files.</p>{% endif %}
-  {% if mapping.result_run_id %}<a class="ghost" href="{{ mapping.result_url }}">View partition map</a>
-  {% elif mapping.enabled %}<a class="action" href="{{ mapping.url }}">Map disk</a>
-  {% else %}<p class="helper">{{ mapping.reason }}</p>{% endif %}
-  <p class="helper">Partition offsets are disk sectors; file metadata addresses and filesystem blocks use different coordinates.</p>
-</section>
-<section aria-label="Filesystem preparation">
-  <p class="eyebrow">02 · Prepare filesystem</p><h2>Prepare each filesystem for triage</h2>
-  {% for card in workspace.journey %}
-  <article class="card block evidence-filesystem" data-filesystem-offset="{{ card.offset_sector }}">
-    <h3>{{ card.description }}</h3><p class="helper">Start {{ card.offset_sector }} disk sectors · {{ card.sector_size or 'auto-detected' }} bytes per sector</p>
-    <ol class="preparation-state">
-      <li data-complete="{{ 'true' if card.stat_run_id else 'false' }}">Filesystem structure {{ 'recorded' if card.stat_run_id else 'not yet examined' }}</li>
-      <li data-complete="{{ 'true' if card.inventory_run_id else 'false' }}">{{ (card.entry_count|string + ' names indexed') if card.inventory_run_id else 'File inventory not yet built' }}</li>
-    </ol>
-    {% if card.inventory_run_id %}<p class="eyebrow">03 · Investigate</p><a class="action" href="{{ card.triage_url }}">Explore files</a>
-    {% elif card.stat_run_id and not card.inventory_reason %}<a class="action" href="{{ card.inventory_url }}">Build file inventory</a>
-    {% elif not card.stat_run_id and not card.stat_reason %}<a class="action" href="{{ card.stat_url }}">Describe filesystem</a>
-    {% elif not card.inventory_reason %}<a class="action" href="{{ card.inventory_url }}">Build file inventory</a>
-    {% else %}<p class="helper">{{ card.inventory_reason }}</p>{% endif %}
-    <details><summary>Preparation options and results</summary><div class="tool-actions">
-      {% if card.stat_result_url %}<a class="ghost" href="{{ card.stat_result_url }}">View filesystem structure</a>{% endif %}
-      {% if not card.stat_reason %}<a class="ghost" href="{{ card.stat_url }}">{{ 'Re-examine filesystem' if card.stat_run_id else 'Describe filesystem' }}</a>{% else %}<p class="helper">{{ card.stat_reason }}</p>{% endif %}
-      {% if not card.inventory_reason %}<a class="ghost" href="{{ card.inventory_url }}">{{ 'Rebuild inventory' if card.inventory_run_id else 'Build file inventory' }}</a>{% else %}<p class="helper">{{ card.inventory_reason }}</p>{% endif %}
-    </div><p class="helper">You can build the inventory directly when filesystem characterization is unavailable. Inventory creation reads names and metadata addresses; it does not extract file contents.</p></details>
-    {% if card.blocks %}<details><summary>Examine filesystem blocks</summary><p class="helper">Follow a data-unit address from filesystem metadata. Allocation describes the current filesystem state and does not establish historical ownership.</p><div class="tool-actions">{% for action in card.blocks %}{% if not action.reason %}<a class="ghost" href="{{ action.url }}">{{ action.label }}</a>{% else %}<p class="helper">{{ action.reason }}</p>{% endif %}{% endfor %}</div></details>{% endif %}
-  </article>
-  {% else %}<section class="card block"><p>Map the disk, then select a filesystem. For an unpartitioned raw acquisition, register it as a filesystem image in the classification details above.</p></section>{% endfor %}
-</section>
+<div class="workspace-heading"><div><h2>Disk analysis</h2><p class="helper">Map the disk, prepare a filesystem, then explore its files.</p></div>
+{% set mapping = workspace.actions|selectattr('id','equalto','mmls')|first %}
+{{ execute('mmls', mapping.payload, 'Refresh map' if mapping.result_run_id else 'Map disk', reason=mapping.reason if not mapping.enabled else '') }}
+</div>
+{% if mapping.result_run_id %}<button type="button" class="ghost" data-workspace-result="{{ mapping.result_run_id }}">View partition map</button>{% endif %}
+<details><summary>Disk sector size</summary><p class="helper">Auto-detection works for most images. Specify the acquisition's sector size when needed; refreshing an existing map retains its recorded sector size.</p>{{ execute('mmls', mapping.payload, 'Map with selected sector size', reason=mapping.reason if not mapping.enabled else '', configure=true, fields=mapping.fields) }}</details>
+{% if not workspace.journey %}
+  <div class="workspace-empty"><h3>Start with the partition map</h3><p>Map this image to locate its filesystems. Each filesystem will appear here with its next analysis step.</p></div>
+  <details><summary>Filesystem image or known partition offset</summary><p>If this image contains a filesystem directly, or you already know its offset, inspect its structure here.</p>{{ execute('fsstat', {'case_id':workspace.case.id,'source_path':workspace.selected.path,'workspace_input':workspace.selected.key}, 'Analyze filesystem', configure=true, fields=workspace.actions|selectattr('id','equalto','fsstat')|map(attribute='fields')|first) }}</details>
+{% endif %}
+{% for card in workspace.journey %}
+<article class="workspace-filesystem" data-filesystem-offset="{{ card.offset_sector }}">
+  <h3>{{ card.description }}</h3><p class="helper">Sector {{ card.offset_sector }} · {{ card.sector_size or 'auto-detected' }} bytes per disk sector</p>
+  <ol class="workspace-preparation"><li class="complete">Filesystem located</li><li class="{{ 'complete' if card.stat_run_id else '' }}">Structure {{ 'analyzed' if card.stat_run_id else 'pending' }}</li><li class="{{ 'complete' if card.inventory_run_id else '' }}">{{ (card.entry_count|string + ' names indexed') if card.inventory_run_id else 'Inventory pending' }}</li></ol>
+  <div class="tool-actions">
+  {% if card.inventory_run_id %}<a class="action" data-workspace-link href="{{ card.triage_url }}">Explore files</a>
+  {% elif card.stat_run_id %}{{ execute('fls',card.inventory_payload,'Build file inventory','triage',card.inventory_reason) }}
+  {% elif not card.stat_reason %}{{ execute('fsstat',card.stat_payload,'Analyze filesystem') }}
+  {% else %}{{ execute('fls',card.inventory_payload,'Build file inventory','triage',card.inventory_reason) }}{% endif %}
+  {% if card.stat_run_id %}<button type="button" class="ghost" data-workspace-result="{{ card.stat_run_id }}">Filesystem details</button>{% endif %}
+  </div>
+  <details><summary>Additional filesystem actions</summary><div class="tool-actions">
+    {{ execute('fsstat',card.stat_payload,'Reanalyze filesystem',reason=card.stat_reason) }}
+    {{ execute('fls',card.inventory_payload,'Rebuild inventory' if card.inventory_run_id else 'Build file inventory','triage',card.inventory_reason) }}
+  </div></details>
+  {% if card.blocks %}<details><summary>Examine filesystem blocks</summary><p class="helper">Use data-unit addresses from filesystem metadata. These are different from disk-sector offsets.</p><div class="tool-actions">{% for block in card.blocks %}{{ execute(block.tool,block.payload,block.label,'derived' if block.tool in ['blkcat','blkls'] else '',block.reason,true,block.fields) }}{% endfor %}</div></details>{% endif %}
+</article>
+{% endfor %}
+<p class="helper">Preparation records structure and names. It does not establish findings or guarantee recovery of deleted content.</p>

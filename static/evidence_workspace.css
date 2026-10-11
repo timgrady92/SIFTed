@@ -1,0 +1,58 @@
+.evidence-workspace { max-width: 1240px; margin: 24px auto; padding: 0 24px 60px; color: var(--text-main); }
+.evidence-workspace *, .evidence-workspace *::before { box-sizing: border-box; }
+.evidence-workspace h1 { font-size: clamp(1.4rem, 4vw, 2.2rem); line-height: 1.3; margin: 10px 0; overflow-wrap: anywhere; }
+.evidence-workspace h2 { font-size: 1.35rem; margin: 0 0 12px; }
+.evidence-workspace h3 { font-size: 1.08rem; margin: 0 0 8px; }
+.evidence-workspace p { margin: 8px 0 16px; overflow-wrap: anywhere; }
+.evidence-workspace .eyebrow { animation: none; }
+.evidence-workspace a { color: var(--neon-teal); }
+.workspace-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.workspace-header { position: relative; margin: 24px 0; padding-right: 280px; }
+.workspace-picker { position: absolute; right: 0; top: 0; max-width: 260px; }
+.evidence-workspace label { display: grid; gap: 6px; min-width: 0; }
+.evidence-workspace input, .evidence-workspace select { width: 100%; max-width: 100%; min-width: 0; color: var(--text-main); background: var(--bg-dark); border: 1px solid var(--border-glow); border-radius: 6px; padding: 10px; font: inherit; }
+.workspace-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--border-glow); margin: 0 0 28px; padding-bottom: 0; }
+.workspace-tabs button { background: transparent; color: var(--text-muted); border: 0; border-bottom: 3px solid transparent; font: inherit; padding: 14px 18px; white-space: nowrap; cursor: pointer; }
+.workspace-tabs .active { color: var(--neon-teal); border-bottom-color: var(--neon-teal); }
+.workspace-tabs span { margin-left: 8px; font-size: .8rem; }
+.workspace-filesystem, .workspace-panel { background: rgba(255,255,255,.025); border: 1px solid rgba(56,242,255,.2); border-radius: 10px; padding: 24px; margin: 20px 0; min-width: 0; }
+.workspace-empty { padding: 48px 20px; text-align: center; }
+.workspace-preparation { display: flex; gap: 24px; flex-wrap: wrap; padding-left: 20px; font-size: .9rem; color: var(--text-muted); margin: 24px 0; }
+.workspace-preparation .complete { color: var(--neon-teal); }
+.evidence-workspace details { margin: 18px 0 8px; }
+.evidence-workspace summary { cursor: pointer; color: var(--text-muted); }
+.workspace-fields, .triage-filters { display: flex; gap: 14px; align-items: end; flex-wrap: wrap; margin: 18px 0; }
+.workspace-fields label, .triage-filters label { flex: 1 1 170px; }
+.workspace-fields input[type=checkbox] { width: auto; justify-self: start; }
+.workspace-report, #operationCommand { white-space: pre-wrap; overflow-wrap: anywhere; background: rgba(0,0,0,.25); padding: 16px; max-height: 460px; overflow: auto; font-size: .85rem; margin: 14px 0; }
+.workspace-examinations article, .workspace-derived-list article, .workspace-activity, .workspace-case { display: flex; gap: 20px; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(56,242,255,.15); padding: 18px 0; overflow-wrap: anywhere; }
+.workspace-examinations article > div, .workspace-derived-list article > div, .workspace-activity > div { min-width: 0; }
+.workspace-examinations .helper { margin-bottom: 0; }
+.workspace-case { text-decoration: none; }
+.evidence-workspace .tool-actions { margin-top: 12px; gap: 10px; }
+.evidence-workspace .action, .evidence-workspace .ghost { font-size: .88rem; padding: 10px 14px; min-height: 42px; }
+.triage-breadcrumbs { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
+.triage-table { width: 100%; border-collapse: collapse; text-align: left; }
+.triage-table th, .triage-table td { padding: 12px 8px; border-bottom: 1px solid rgba(56,242,255,.15); overflow-wrap: anywhere; }
+.triage-table .tool-actions { margin: 0; }
+.evidence-workspace dl { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 16px; }
+.evidence-workspace dd { margin: 0; overflow-wrap: anywhere; }
+#workspaceStatus, #operationStatus { color: var(--neon-teal); }
+#workspaceStatus[data-tone=error], #operationStatus[data-tone=error] { color: var(--neon-pink); }
+[hidden] { display: none !important; }
+@media(max-width: 700px) {
+  .evidence-workspace { padding: 0 16px 40px; }
+  .workspace-header { padding-right: 0; }
+  .workspace-picker { position: static; max-width: none; margin-top: 16px; }
+  .workspace-tabs button { padding: 12px; }
+  .workspace-filesystem, .workspace-panel { padding: 16px; }
+  .workspace-examinations article, .workspace-derived-list article, .workspace-activity { align-items: start; flex-direction: column; gap: 8px; }
+  .workspace-preparation { flex-direction: column; gap: 10px; }
+  .triage-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .triage-table, .triage-table tbody, .triage-table tr { display: block; }
+  .triage-table td { display: grid; grid-template-columns: 105px minmax(0,1fr); gap: 12px; border: 0; padding: 8px 0; }
+  .triage-table tr { border-bottom: 1px solid var(--border-glow); padding: 12px 0; }
+  .triage-table td[data-label]::before { content: attr(data-label); color: var(--text-muted); font-size: .8rem; }
+  .triage-table td[colspan] { display: block; }
+  .evidence-workspace dl { grid-template-columns: minmax(0,1fr); gap: 8px; }
+}
