@@ -355,7 +355,7 @@
       copy.id = "copyTerminal";
       copy.type = "button";
       copy.className = "ghost";
-      copy.textContent = "Copy Bash snippet";
+      copy.textContent = "Copy CLI commands";
       copy.disabled = true;
       copy.addEventListener("click", async () => {
         if (!terminalSnippet) return;
@@ -373,9 +373,9 @@
             const copied = document.execCommand("copy");
             text.remove();
             copy.focus();
-            if (!copied) throw new Error("Copy unavailable; select the snippet manually.");
+            if (!copied) throw new Error("Copy unavailable; select the commands manually.");
           }
-          document.getElementById("terminalCopyStatus").textContent = "Copied the complete snippet.";
+          document.getElementById("terminalCopyStatus").textContent = "Copied the CLI commands.";
         } catch (error) {
           document.getElementById("terminalCopyStatus").textContent = error.message;
         }
@@ -391,7 +391,7 @@
         const url = URL.createObjectURL(new Blob([terminalSnippet], {type: "text/x-shellscript;charset=utf-8"}));
         const link = document.createElement("a");
         link.href = url;
-        link.download = "sift-terminal.sh";
+        link.download = "forensic-commands.sh";
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       });
@@ -405,7 +405,7 @@
       note.id = "commandPreviewNote";
       note.className = "helper";
       element.after(note);
-      element.setAttribute("aria-label", "Complete Bash snippet for the SIFT terminal");
+      element.setAttribute("aria-label", "Native CLI commands for the SIFT terminal");
     }
     return element;
   };

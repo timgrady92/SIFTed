@@ -34,7 +34,7 @@ def create_blueprint(repository_factory, settings_factory):
         return jsonify(error=str(exc)), 404 if str(exc) == "Run not found." else 400
 
     def response_plan(plan):
-        return {"output_path": plan.output_path, **recipe(plan),
+        return {"output_path": plan.output_path, **recipe(plan, settings_factory()),
                 "operation": plan.operation, "parameters": plan.parameters}
 
     @api.post("/api/<tool_id>/preview")

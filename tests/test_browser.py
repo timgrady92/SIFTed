@@ -104,7 +104,7 @@ def test_preview_queue_completion_and_polling_without_event_stream(tmp_path):
             page.fill('#outputPath', str(tmp_path / "results"))
             page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
             assert '-n 4' in ' '.join(page.locator('#commandPreview').inner_text().replace('\\\n', ' ').split())
-            assert page.locator('#commandPreview').inner_text().startswith("bash <<'")
+            assert page.locator('#commandPreview').inner_text().startswith("(\n")
             assert '<staging_output>' not in page.locator('#commandPreview').inner_text()
             # Copy includes every line, even when the displayed block scrolls.
             page.evaluate("() => { window.copiedSnippet = ''; document.execCommand = () => { window.copiedSnippet = document.querySelector('textarea').value; return true; }; }")
@@ -273,7 +273,7 @@ def test_zimmerman_parser_options_queue_and_mapped_sqlite_results(zimmerman_runt
             page.select_option('[data-parser-option="maps"]',['test.smap'])
             page.click('[data-source-mode="manual"]');page.fill('#sourcePath',str(source))
             page.fill('#outputPath',str(outputs/'browser parsed'))
-            page.wait_for_function('document.querySelector("#commandPreview").textContent.includes("sqlite-request.json")')
+            page.wait_for_function('document.querySelector("#commandPreview").textContent.includes("sqlite3 -readonly")')
             page.route('**/api/run/*/events',lambda route:route.abort())
             page.click('#runEzTool')
             try:

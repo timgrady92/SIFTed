@@ -1,4 +1,4 @@
-"""Copied terminal recipes on installed SIFT tools, without a running SIFTed app."""
+"""Analyst CLI commands on native SIFT tools, without a running app or worker."""
 import csv
 import json
 import os
@@ -11,6 +11,7 @@ import pytest
 
 from sifted_core.adapters import compile_plan
 from sifted_core.tool_base import ValidationError
+from sifted_core.terminal import native_argv, recipe
 from test_terminal import paste
 from test_live_tools import installed_runtime as installed_runtime
 from test_live_disk_tools import disk_runtime as disk_runtime
@@ -32,9 +33,11 @@ def terminal_plan(runtime, tool, source=None, **options):
         if "not installed" in str(exc) or "configuration is unavailable" in str(exc):
             pytest.skip(str(exc))
         raise
-    for step in plan.steps:
-        if not shutil.which(step.argv[0]):
-            pytest.skip("Required native command is unavailable: " + step.argv[0])
+    required = (["sqlite3"] if plan.parameters.get("parser_id") == "sqlecmd"
+                else [native_argv(step.argv)[0] for step in plan.steps])
+    for command in required:
+        if not shutil.which(command):
+            pytest.skip("Required native command is unavailable: " + command)
     return plan
 
 
@@ -76,11 +79,10 @@ def test_native_generic_terminal_workflows(installed_runtime, tool, options):
                 rows = list(csv.DictReader(handle))
         assert any("TestCamera" in row.values() for row in rows)
     elif tool == "filetype":
-        with (output / "filetypes.csv").open(newline="") as handle:
-            row = next(csv.DictReader(handle))
-        assert row["Detected Type"] == "image/jpeg" and row["Mismatch"] == "Yes"
+        text = (output / "filetypes.txt").read_text()
+        assert str(source) in text and "image/jpeg" in text
     elif tool == "bulk-extractor":
-        assert "known.user@example.com" in (output / "email.txt").read_text()
+        assert "known.user@example.com" in (output / "features/email.txt").read_text()
     else:
         assert "known-terminal-marker" in (output / "timeline.csv").read_text()
     assert source.read_bytes() == before and runtime[0].runs() == []
@@ -147,11 +149,16 @@ def test_native_carving_terminal_rules_recover_known_bytes(native_carving, tool)
     runtime = native_carving
     plan = terminal_plan(runtime, tool, types=["png", "gif", "pdf", "zip"])
     output = run_terminal(plan)
-    assert (output / "audit.txt").is_file()
+    assert (output / "carved/audit.txt").is_file()
     for kind in ("png", "gif", "pdf", "zip"):
         expected = next(data for k, _, data in runtime[4] if k == kind)
         assert any(p.read_bytes() == expected for p in output.rglob("*." + kind))
-    assert (output.parent / "work" / (tool + ".conf")).read_text() == plan.configs[tool + ".conf"]
+    if tool == "scalpel":
+        rules = (output / "scalpel.conf").read_text()
+        assert "png y" in rules and "zip y" in rules
+        assert "SIFTed" not in rules
+    else:
+        assert "-c" not in recipe(plan)["terminal_command"]
 
 
 @pytest.mark.parametrize("tool,name,data,column,expected", [
@@ -189,8 +196,12 @@ def test_native_zimmerman_terminal_public_artifacts(native_zimmerman, tool, name
         source.rename(folder / name)
         source = folder
     output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id=tool, **options))
-    summary = json.loads((output / "native-summary.json").read_text())
-    assert summary["analysis"]["entry_count"] == count and not summary["validation_errors"]
+    rows = []
+    for path in output.glob("*.csv"):
+        with path.open(newline="", encoding="utf-8-sig") as handle:
+            rows.extend(csv.DictReader(handle))
+    assert len(rows) == count
+    assert not (output / "native-summary.json").exists()
 
 
 def test_native_registry_terminal_replays_logs_on_copies(native_zimmerman):
@@ -198,8 +209,11 @@ def test_native_registry_terminal_replays_logs_on_copies(native_zimmerman):
     source = public_fixture(native_zimmerman, "replay-NTUSER.DAT")
     logs = [public_fixture(native_zimmerman, "replay-NTUSER.DAT." + suffix) for suffix in ("log1", "log2")]
     before = {p: p.read_bytes() for p in [source, *logs]}
-    output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="recmd", batch="UserActivity"))
-    assert "At least one transaction log was applied" in (output / "parser-log.txt").read_text()
+    plan = terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="recmd", batch="UserActivity")
+    result, output = paste(plan)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "At least one transaction log was applied" in result.stdout
+    assert list(output.glob("*.csv"))
     assert all(p.read_bytes() == data for p, data in before.items())
 
 
@@ -219,7 +233,7 @@ def test_native_mft_terminal_on_real_ntfs_metadata(native_zimmerman):
         assert any(row["FileName"] == "$MFT" for row in csv.DictReader(handle))
 
 
-def test_native_sqlite_maps_terminal_on_vanilla_sift(native_zimmerman):
+def test_native_sqlite_inspection_and_query_on_vanilla_sift(native_zimmerman):
     installed(native_zimmerman, "sqlecmd")
     source = native_zimmerman[2] / "formhistory.sqlite"
     with sqlite3.connect(source) as connection:
@@ -227,7 +241,7 @@ def test_native_sqlite_maps_terminal_on_vanilla_sift(native_zimmerman):
         connection.execute("INSERT INTO moz_formhistory VALUES(1,'search','known terminal sqlite marker',2,1704067200000000,1704153600000000,'known-guid')")
     before = source.read_bytes()
     output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="sqlecmd"))
-    with next(output.glob("*.csv")).open(newline="") as handle:
+    with next(output.glob("query*.csv")).open(newline="") as handle:
         row = next(csv.DictReader(handle))
     assert row["Value"] == "known terminal sqlite marker" and row["First Used"] == "2024-01-01 00:00:00"
     assert source.read_bytes() == before
@@ -237,8 +251,12 @@ def test_native_volatility_terminal_offline_banner(installed_memory):
     repo, settings, source, _ = installed_memory
     plan, _, _ = compile_plan("volatility", {"source_path": str(source), "output_path": str(source.parent / "terminal"),
                              "plugins": ["banners.Banners"], "offline": True, "renderer": "jsonl"}, settings, repo, preview=True)
+    code = recipe(plan)["terminal_command"]
+    assert str(settings.volatility_symbols) not in code and "--save-config" not in code
+    assert '.local/share/volatility3/symbols' in code
+    assert code.index('-s "$symbol_dirs"') < code.index('banners.Banners >')
     output = run_terminal(plan)
-    assert "Linux version 6.8.0-sifted-test" in (output / "plugins/banners.Banners/result.jsonl").read_text()
+    assert "Linux version 6.8.0-sifted-test" in (output / "banners.Banners/result.jsonl").read_text()
 
 
 def test_native_volatility_terminal_windows_processes(installed_memory):
@@ -253,5 +271,69 @@ def test_native_volatility_terminal_windows_processes(installed_memory):
                              "plugins": ["windows.pslist.PsList"], "plugin_options": {"windows.pslist.PsList": {"pid": [1812]}},
                              "renderer": "jsonl"}, settings, repo, preview=True)
     output = run_terminal(plan)
-    text = (output / "plugins/windows.pslist.PsList/result.jsonl").read_text()
+    text = (output / "windows.pslist.PsList/result.jsonl").read_text()
     assert "explorer.exe" in text and "1812" in text
+
+
+@pytest.mark.parametrize("tool,name,data,column,expected", [
+    ("lecmd", "known.lnk", shortcut(), "RelativePath", TARGET),
+    ("jlecmd", "known.customDestinations-ms", custom_jump_list(), "RelativePath", TARGET),
+    ("rbcmd", "$IKNOWN", recycle_bin(), "FileName", DELETED_PATH),
+])
+def test_native_cli_parsers_accept_collected_directories(native_zimmerman, tool, name, data, column, expected):
+    installed(native_zimmerman, tool)
+    source = native_zimmerman[2] / "collected artifacts"
+    for folder in (source, source / "nested"):
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / name).write_bytes(data)
+    plan = terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id=tool)
+    code = recipe(plan)["terminal_command"]
+    assert '-d "$evidence"' in code
+    assert "inputs/0000" not in code and "parser-log.txt" not in code
+    output = run_terminal(plan)
+    rows = []
+    for path in output.glob("*.csv"):
+        with path.open(newline="", encoding="utf-8-sig") as handle:
+            rows.extend(csv.DictReader(handle))
+    assert sum(row[column] == expected for row in rows) == 2
+
+
+def test_native_sqlite_cli_handles_multiple_databases_in_a_collection(native_zimmerman):
+    installed(native_zimmerman, "sqlecmd")
+    source = native_zimmerman[2] / "collected databases"
+    originals = {}
+    for index in (1, 2):
+        folder = source / str(index)
+        folder.mkdir(parents=True)
+        database = folder / "formhistory.sqlite"
+        with sqlite3.connect(database) as connection:
+            connection.execute("CREATE TABLE moz_formhistory(id INTEGER,fieldname TEXT,value TEXT,timesUsed INTEGER,firstUsed INTEGER,lastUsed INTEGER,guid TEXT)")
+            connection.execute("INSERT INTO moz_formhistory VALUES(1,'search',?,2,1704067200000000,1704153600000000,'known-guid')", (f"collection marker {index}",))
+        originals[database] = database.read_bytes()
+    output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="sqlecmd"))
+    values = []
+    for path in output.glob("query*.csv"):
+        with path.open(newline="") as handle:
+            values.extend(row["Value"] for row in csv.DictReader(handle))
+    assert sorted(values) == ["collection marker 1", "collection marker 2"]
+    assert len(list(output.glob("schema*.sql"))) == 2
+    assert all(path.read_bytes() == data for path, data in originals.items())
+
+
+def test_native_registry_cli_replays_logs_in_a_collected_directory(native_zimmerman):
+    installed(native_zimmerman, "recmd")
+    source = native_zimmerman[2] / "collected hives"
+    folder = source / "user"
+    folder.mkdir(parents=True)
+    originals = {}
+    for name in ("replay-NTUSER.DAT", "replay-NTUSER.DAT.log1", "replay-NTUSER.DAT.log2"):
+        path = public_fixture(native_zimmerman, name)
+        destination = folder / name
+        path.rename(destination)
+        originals[destination] = destination.read_bytes()
+    plan = terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="recmd", batch="UserActivity")
+    result, output = paste(plan)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "At least one transaction log was applied" in result.stdout
+    assert list(output.glob("*.csv"))
+    assert all(path.read_bytes() == data for path, data in originals.items())

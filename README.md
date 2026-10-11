@@ -30,13 +30,13 @@ No command-line memorization required. No syntax errors. No wasted cycles on typ
 
 Every action teaches:
 
-- **SIFT terminal snippets**: Copy or save a complete Bash workflow using your selected evidence and options. Required directories, rules, maps and private captures are included. Read the flag explanations, reproduce the results directly on SIFT, and eventually build the commands yourself.
+- **Native CLI examples**: Copy or save concise commands for the tools installed on SIFT, using your selected evidence and options. Read the flag explanations and learn how to inspect artifacts independently in the terminal.
 - **Integrated glossary**: Hover over forensic terms for instant definitions. Artifacts, registry keys, persistence mechanisms, Windows event codes—all searchable and contextual.
 - **Investigation guides**: Hypothesis-driven playbooks that frame problems, identify evidence sources, warn about pitfalls, and define exit conditions.
 
 The UI is explicit about what it's doing. Nothing is hidden. Nothing is magic.
 
-Each paste creates a fresh folder beside your chosen output path, keeping previous results intact. If no output is selected, terminal results go under `~/sifted-terminal`. Saved snippets run with `bash sift-terminal.sh` and require the corresponding forensic tools installed on SIFT; the SIFTed application and checkout are not required. SQLite map snippets include the standalone Python executor and selected profiles, using Python 3.11+ and PyYAML. [Terminal workflow validation](docs/terminal-validation.md) describes the checks and the distinction between native reports and the app's case tracking.
+Each paste creates a fresh results folder beside your chosen output path, keeping previous results intact. If no output is selected, results go under `~/forensic-results`. Saved examples run with `bash forensic-commands.sh` and require the corresponding forensic tools installed on SIFT. Commands teach native tool use without embedding SIFTed's orchestration or Python helpers. SQLite examples use `sqlite3` for schema inspection and SQL exports; file identification uses `file` and `find`. [CLI example validation](docs/terminal-validation.md) describes the checks and native output conventions.
 
 ### Structured Output
 
@@ -152,7 +152,7 @@ See [the runtime design](docs/runtime.md) for extension points, recovery, and te
 
 ## Evidence workspace and direct tools
 
-Open `/evidence` or choose **Evidence workspace** from a case to start with a registered input. The workspace recommends actions from content signatures, native tool capabilities, acquisition type and existing results. The original Tools pages and URLs remain available; both interfaces use the same adapters, durable queue, case history and copyable terminal recipes.
+Open `/evidence` or choose **Evidence workspace** from a case to start with a registered input. The workspace recommends actions from content signatures, native tool capabilities, acquisition type and existing results. The original Tools pages and URLs remain available; both interfaces use the same adapters, durable queue, case history and copyable native CLI examples.
 
 Disk workflows carry verified partition starts and sector sizes into filesystem examination. Complete extracted, carved and plugin-produced files appear as new inputs; supporting reports stay with their producing runs. Raw block samples remain labeled blocks and offer identification, byte and string examination. Successful results can be reopened without executing tools again, while failed and partial work remains visible in the run history.
 
