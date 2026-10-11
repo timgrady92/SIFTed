@@ -40,6 +40,8 @@ def test_executable_supervises_both_services_from_any_directory(tmp_path, stop_t
     command = [str(executable)]
     if stop_target != "launcher-term":
         command.extend(["--port", str(port)])
+    if stop_target == "web":
+        command.append("--lan")
     process = subprocess.Popen(command, cwd=tmp_path, env=env,
                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     worker_pid = None
@@ -56,6 +58,8 @@ def test_executable_supervises_both_services_from_any_directory(tmp_path, stop_t
                 pass
             time.sleep(0.05)
         assert worker_pid, process.stderr.read() if process.poll() is not None else "Startup timed out"
+        address = "00000000" if stop_target == "web" else "0100007F"
+        assert f"{address}:{port:04X}" in Path("/proc/net/tcp").read_text()
         children = [int(pid) for pid in Path(f"/proc/{process.pid}/task/{process.pid}/children").read_text().split()]
         web_pid, = [pid for pid in children if pid != worker_pid]
         if stop_target == "launcher-term":
@@ -113,6 +117,16 @@ def test_occupied_web_port_stops_worker(tmp_path):
     assert result.returncode == 1
     assert b"web server exited" in result.stderr
     assert Repository(tmp_path / "runtime.sqlite3").worker_status()["status"] == "offline"
+
+
+def test_help_and_setup_guidance_work_without_installed_dependencies(tmp_path):
+    command = [sys.executable, "-S", "-m", "sifted_core.launcher"]
+    help_result = subprocess.run([*command, "--help"], cwd=ROOT, env=environment(tmp_path),
+                                 capture_output=True, timeout=5)
+    assert help_result.returncode == 0
+    result = subprocess.run(command, cwd=ROOT, env=environment(tmp_path), capture_output=True, timeout=5)
+    assert result.returncode == 1 and b"./sifted setup" in result.stderr
+    assert not (tmp_path / "runtime.sqlite3").exists()
 
 
 def test_spawn_failure_stops_existing_child_and_restores_signals(monkeypatch):
