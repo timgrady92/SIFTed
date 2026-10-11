@@ -8,34 +8,39 @@
   const status = document.getElementById('workspaceStatus');
   const operationStatus = document.getElementById('operationStatus');
   const fields = document.getElementById('operationFields');
+  const options = document.getElementById('operationOptions');
   const runButton = document.getElementById('runOperation');
   const cancelButton = document.getElementById('cancelOperation');
   const copyButton = document.getElementById('copyOperation');
   const command = document.getElementById('operationCommand');
   const result = document.getElementById('operationResult');
   const active = new Map();
-  let operation = null, busy = false, rendering = 0, previewVersion = 0, polling = false, previewTimer;
+  let operation = null, busy = false, rendering = 0, previewVersion = 0, resultVersion = 0;
+  let polling = false, needsRefresh = false, previewTimer, tabs = {};
   const state = () => JSON.parse(document.getElementById('workspaceState').textContent);
   const inputKey = () => state().input;
   const savedKey = () => `sifted-workspace:${caseId}:${inputKey()}`;
+  const at = (attribute, value) => `[${attribute}="${CSS.escape(String(value))}"]`;
+  const scopeKey = () => state().tab === 'derived' ? state().examine
+    : state().tab === 'triage' ? state().context : '';
   function mountOperation() {
-    const content = view.querySelector('.workspace-tab-content');
-    if (content) content.before(panel);
+    const host = operation && view.querySelector(at('data-operation-slot', operation.slot));
+    panel.hidden = !host || operation.dismissed || operation.tab !== state().tab || operation.scope !== scopeKey();
+    if (host && !panel.hidden) host.append(panel); else root.append(panel);
   }
-  let tabs = {};
   function loadTabs() {
     try { tabs = JSON.parse(sessionStorage.getItem(savedKey()) || '{}'); } catch (_) { tabs = {}; }
   }
   function saveTab() {
-    tabs[state().tab] = location.search;
+    tabs[state().tab] = {search: location.search, scroll: window.scrollY};
     try { sessionStorage.setItem(savedKey(), JSON.stringify(tabs)); } catch (_) { /* Storage may be disabled. */ }
   }
   function announce(message, error = false) {
     status.textContent = message;
     status.dataset.tone = error ? 'error' : '';
   }
-  async function json(url, options) {
-    const response = await fetch(url, options);
+  async function json(url, requestOptions) {
+    const response = await fetch(url, requestOptions);
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'The request could not be completed.');
     return data;
@@ -47,51 +52,109 @@
   function seedActive(jobs) {
     for (const job of jobs) if (!active.has(job.runId)) active.set(job.runId, {...job, input: inputKey()});
   }
-  async function render(url = new URL(location.href), historyMode = '') {
+  function focusSelector(element) {
+    if (!element || element === document.body) return null;
+    if (element.id) return '#' + CSS.escape(element.id);
+    for (const name of ['data-inspect-entry', 'data-workspace-tab', 'data-examine', 'data-workspace-result']) {
+      if (element.hasAttribute(name)) return at(name, element.getAttribute(name));
+    }
+    if (element.dataset.workspaceTool) {
+      const slot = element.closest('[data-operation-slot]');
+      return (slot ? at('data-operation-slot', slot.dataset.operationSlot) + ' ' : '') + at('data-workspace-tool', element.dataset.workspaceTool);
+    }
+    if (element.name) return at('name', element.name);
+    return null;
+  }
+  function viewport() {
+    const anchor = [...view.querySelectorAll('[data-triage-entry], [data-operation-slot]')]
+      .find(element => element.getBoundingClientRect().top <= 180 && element.getBoundingClientRect().bottom > 180);
+    return {scroll: window.scrollY, focus: focusSelector(document.activeElement), operationFocus: panel.contains(document.activeElement),
+      anchor: anchor ? at(anchor.hasAttribute('data-triage-entry') ? 'data-triage-entry' : 'data-operation-slot',
+        anchor.dataset.triageEntry || anchor.dataset.operationSlot) : null,
+      top: anchor?.getBoundingClientRect().top,
+      disclosures: new Map([...view.querySelectorAll('[data-disclosure]')].map(element => [element.dataset.disclosure, element.open]))};
+  }
+  async function render(url = new URL(location.href), historyMode = '', navigation = {}) {
     const version = ++rendering;
-    announce('Updating workspace…');
+    view.setAttribute('aria-busy', 'true');
     try {
       const data = await json(endpoint('/view', url));
-      if (version !== rendering) return;
+      if (version !== rendering) return false;
+      const previous = viewport(), previousTab = state().tab, previousInput = inputKey(), previousScope = scopeKey();
+      const draft = navigation.background && view.querySelector('#triageFilters');
+      const draftValues = draft ? new FormData(draft) : null;
+      const selection = draft?.contains(document.activeElement) && document.activeElement.tagName === 'INPUT'
+        ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
       if (historyMode === 'push') history.pushState(null, '', url);
       if (historyMode === 'replace') history.replaceState(null, '', url);
-      const previousInput = inputKey();
-      // Keep the live examination intact when the server refreshes the tab content.
+      // Detach the live form before replacing the fragment, then put it back beside
+      // its originating filesystem, file entry or examination. Polling never scrolls.
       root.append(panel);
       view.innerHTML = data.html;
-      mountOperation();
       if (inputKey() !== previousInput) {
-        panel.hidden = true;
         operation = null;
         ++previewVersion;
+        ++resultVersion;
         active.clear();
         loadTabs();
       }
+      const sameView = previousInput === inputKey() && previousTab === state().tab && previousScope === scopeKey();
+      if (sameView) for (const element of view.querySelectorAll('[data-disclosure]')) {
+        if (previous.disclosures.has(element.dataset.disclosure)) element.open = previous.disclosures.get(element.dataset.disclosure);
+      }
+      mountOperation();
       seedActive(data.active);
+      if (sameView && draftValues) for (const [name, value] of draftValues) {
+        const field = view.querySelector(`#triageFilters ${at('name', name)}`);
+        if (field) field.value = value;
+      }
+      const focus = navigation.focus || (sameView ? previous.focus : null);
+      if (focus) view.querySelector(focus)?.focus({preventScroll: true});
+      if (sameView && previous.operationFocus && panel.hidden) {
+        const host = view.querySelector(at('data-operation-slot', operation?.slot || ''));
+        const next = host?.querySelector('.workspace-next .action, [data-examine], [data-workspace-tool]')
+          || view.querySelector('.workspace-next .action') || view.querySelector('#workspaceTabPanel');
+        next?.focus({preventScroll: true});
+      }
+      if (sameView && selection && document.activeElement.type === 'search') document.activeElement.setSelectionRange(...selection);
+      revealActiveTab();
+      const anchor = sameView && previous.anchor && view.querySelector(previous.anchor);
+      let scroll = anchor ? window.scrollY + anchor.getBoundingClientRect().top - previous.top : previous.scroll;
+      if (!sameView) scroll = navigation.scroll ?? Math.min(previous.scroll, view.querySelector('.workspace-tabs')?.offsetTop || 0);
+      window.scrollTo({top: scroll, behavior: 'instant'});
       saveTab();
       announce('');
-    } catch (error) { if (version === rendering) announce(error.message, true); }
+      return true;
+    } catch (error) {
+      if (version === rendering) announce(error.message, true);
+      return false;
+    } finally { if (version === rendering) view.removeAttribute('aria-busy'); }
+  }
+  function revealActiveTab() {
+    const bar = view.querySelector('.workspace-tabs'), selected = bar?.querySelector('[aria-selected="true"]');
+    if (!selected) return;
+    const bounds = bar.getBoundingClientRect(), tabBounds = selected.getBoundingClientRect();
+    if (tabBounds.right > bounds.right) bar.scrollLeft += tabBounds.right - bounds.right;
+    else if (tabBounds.left < bounds.left) bar.scrollLeft -= bounds.left - tabBounds.left;
   }
   async function navigate(url) {
     saveTab();
+    if (url.search !== location.search) url.searchParams.delete('run');
     await render(url, 'push');
   }
-  async function tab(name, changes = {}) {
+  async function tab(name, changes = {}, focus = false) {
     saveTab();
     const url = new URL(location.href);
-    if (tabs[name]) {
-      const saved = new URLSearchParams(tabs[name]);
-      // Preserve the directory and filters for each tab; keep the root evidence stable.
-      for (const key of ['context_run_id', 'directory', 'q', 'kind', 'state', 'scope', 'offset', 'examine']) {
-        url.searchParams.delete(key);
-        if (saved.has(key)) url.searchParams.set(key, saved.get(key));
-      }
+    const saved = new URLSearchParams(tabs[name]?.search || '');
+    for (const key of ['context_run_id', 'directory', 'q', 'kind', 'state', 'scope', 'offset', 'examine', 'entry', 'run']) {
+      url.searchParams.delete(key);
+      if (saved.has(key) && key !== 'run') url.searchParams.set(key, saved.get(key));
     }
     url.searchParams.set('tab', name);
     for (const [key, value] of Object.entries(changes)) {
       if (value === null) url.searchParams.delete(key); else url.searchParams.set(key, value);
     }
-    await render(url, 'push');
+    await render(url, 'push', {scroll: tabs[name]?.scroll, focus: focus ? `#tab-${name}` : null});
   }
   function payload() {
     const data = {...operation.payload};
@@ -121,11 +184,11 @@
       label.append(field);
       fields.append(label);
     }
+    options.hidden = !specs.length;
   }
   async function preview() {
     if (!operation || operation.runId) return false;
-    const version = ++previewVersion;
-    const target = operation;
+    const version = ++previewVersion, target = operation;
     runButton.disabled = true;
     copyButton.disabled = true;
     try {
@@ -136,6 +199,7 @@
       copyButton.disabled = !data.terminal_ready;
       runButton.disabled = false;
       operationStatus.textContent = '';
+      operationStatus.dataset.tone = '';
       return true;
     } catch (error) {
       if (operation === target && version === previewVersion) {
@@ -146,142 +210,201 @@
       return false;
     }
   }
-  async function openAction(button) {
-    if (busy) return;
-    operation = {tool: button.dataset.workspaceTool, payload: JSON.parse(button.dataset.payload),
-                 next: button.dataset.next, input: inputKey(), label: button.dataset.label};
-    panel.hidden = false;
-    const entry = button.closest('[data-entry-label]');
-    document.getElementById('operationTitle').textContent = entry ? `${operation.label} · ${entry.dataset.entryLabel}` : operation.label;
-    buildFields(JSON.parse(button.dataset.fields || '[]'), operation.payload);
+  function placement(button) {
+    const entry = button?.closest('[data-triage-entry]');
+    return {slot: button?.closest('[data-operation-slot]')?.dataset.operationSlot || (entry ? `entry-${entry.dataset.triageEntry}` : 'tab-result'),
+      tab: state().tab, scope: scopeKey(), input: inputKey(), returnFocus: focusSelector(button)};
+  }
+  function revealOperation() {
+    // Reveal only the start of a newly requested examination, moving down if it
+    // is below the viewport. Updating or completing a job never calls this.
+    const top = panel.getBoundingClientRect().top;
+    if (!panel.hidden && top > innerHeight - 120) window.scrollBy({top: top - innerHeight + 180, behavior: 'instant'});
+    document.getElementById('operationTitle').focus({preventScroll: true});
+  }
+  function resetPanel(title) {
+    ++previewVersion;
+    ++resultVersion;
+    clearTimeout(previewTimer);
+    document.getElementById('operationTitle').textContent = title;
     result.replaceChildren();
-    operationStatus.textContent = 'Preparing examination…';
     command.textContent = '';
-    runButton.hidden = false;
-    cancelButton.hidden = true;
+    copyButton.disabled = true;
+    operationStatus.textContent = '';
     operationStatus.dataset.tone = '';
-    document.getElementById('operationCli').open = button.dataset.configure === 'true';
+    document.getElementById('operationCli').open = false;
+    options.open = false;
+    cancelButton.disabled = false;
+  }
+  async function openAction(button) {
+    if (busy || button.disabled) return;
+    const row = button.closest('[data-triage-entry]');
+    if (row) selectEntry(row.dataset.triageEntry);
+    const values = JSON.parse(button.dataset.payload);
+    const existing = [...active.values()].find(job => job.tool === button.dataset.workspaceTool && job.input === inputKey()
+      && job.payload?.source_path === values.source_path
+      && ['offset_sector', 'sector_size', 'entry_id', 'directory_inode', 'tool_id'].every(name => (job.payload[name] ?? (name === 'tool_id' ? job.payload.parser_id : '') ?? '') === (values[name] ?? '')));
+    if (existing) { await openResult(existing.runId, button); return; }
+    operation = {tool: button.dataset.workspaceTool, payload: values,
+      label: button.dataset.label, ...placement(button)};
+    resetPanel(operation.label);
+    buildFields(JSON.parse(button.dataset.fields || '[]'), operation.payload);
+    options.open = operation.tool.startsWith('blk') || operation.slot === 'disk-options';
+    runButton.hidden = false;
+    runButton.disabled = true;
+    cancelButton.hidden = true;
     runButton.textContent = `Run ${operation.tool}`;
-    if (button.dataset.configure === 'true') {
-      panel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
-      await preview();
-    } else {
+    operationStatus.textContent = 'Preparing examination…';
+    mountOperation();
+    revealOperation();
+    if (button.dataset.configure === 'true') await preview();
+    else {
       busy = true;
       try { if (await preview()) await enqueue(); } finally { busy = false; }
     }
   }
   async function enqueue() {
-    if (!operation || operation.runId) return;
+    if (!operation || operation.runId || runButton.disabled) return;
     const target = operation;
+    const submitted = payload();
     runButton.disabled = true;
     try {
-      const data = await post(`/api/${target.tool}/run`, payload());
+      const data = await post(`/api/${target.tool}/run`, submitted);
       target.runId = data.run_id;
+      target.payload = submitted;
       active.set(data.run_id, target);
       if (operation === target) {
         runButton.hidden = true;
+        options.hidden = true;
         cancelButton.hidden = false;
-        cancelButton.disabled = false;
         fields.querySelectorAll('input,select').forEach(field => { field.disabled = true; });
         operationStatus.textContent = 'Queued. Waiting for the worker…';
-        panel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
         command.textContent = data.terminal_command || command.textContent;
-        const url = new URL(location.href);
-        url.searchParams.set('run', data.run_id);
-        history.replaceState(null, '', url);
+        if (target.tab === state().tab && target.input === inputKey()) {
+          const url = new URL(location.href);
+          url.searchParams.set('run', data.run_id);
+          history.replaceState(null, '', url);
+        }
       }
     } catch (error) {
-      operationStatus.textContent = error.message;
-      operationStatus.dataset.tone = 'error';
-      runButton.disabled = false;
+      if (target === operation) {
+        operationStatus.textContent = error.message;
+        operationStatus.dataset.tone = 'error';
+        runButton.disabled = false;
+      }
     }
   }
-  async function showResult(id, report = '', scroll = true) {
-    const target = operation;
+  async function showResult(id, report = '') {
+    const target = operation, version = ++resultVersion;
     const url = new URL(location.href);
     if (report) url.searchParams.set('report', report); else url.searchParams.delete('report');
     try {
       const data = await json(endpoint(`/run/${encodeURIComponent(id)}`, url));
-      if (target !== operation) return;
+      if (target !== operation || version !== resultVersion) return;
       result.innerHTML = data.html;
-      if (operation?.runId === id) {
-        command.textContent = data.terminal_command || '';
-        document.getElementById('operationNote').textContent = data.terminal_note || '';
-        copyButton.disabled = !data.terminal_ready;
-      }
-      if (scroll) panel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
-    } catch (error) { if (target === operation) operationStatus.textContent = error.message; }
+      command.textContent = data.terminal_command || '';
+      document.getElementById('operationNote').textContent = data.terminal_note || '';
+      copyButton.disabled = !data.terminal_ready;
+    } catch (error) { if (target === operation && version === resultVersion) operationStatus.textContent = error.message; }
   }
-  async function openResult(id) {
-    operation = active.get(id) || {runId: id, input: inputKey()};
-    panel.hidden = false;
-    document.getElementById('operationTitle').textContent = 'Recorded examination';
+  async function openResult(id, button) {
+    const job = active.get(id);
+    operation = {...(job || {}), runId: id, ...placement(button)};
+    resetPanel('Recorded examination');
     fields.replaceChildren();
-    command.textContent = '';
-    copyButton.disabled = true;
+    options.hidden = true;
     runButton.hidden = true;
-    cancelButton.hidden = !active.has(id);
-    operationStatus.textContent = active.has(id) ? 'Job in progress…' : '';
-    result.replaceChildren();
+    cancelButton.hidden = !job;
+    operationStatus.textContent = job ? 'Job in progress…' : '';
+    for (let element = button?.parentElement; element && element !== view; element = element.parentElement) {
+      if (element.tagName === 'DETAILS') element.open = true;
+    }
+    mountOperation();
+    if (button) revealOperation();
+    const url = new URL(location.href); url.searchParams.set('run', id); history.replaceState(null, '', url);
     await showResult(id);
   }
+  function selectEntry(id) {
+    for (const row of view.querySelectorAll('.triage-detail-row')) row.hidden = row.id !== `entry-${id}`;
+    for (const trigger of view.querySelectorAll('[data-inspect-entry]')) trigger.setAttribute('aria-expanded', String(trigger.dataset.inspectEntry === id));
+    const url = new URL(location.href); url.searchParams.set('entry', id); url.searchParams.delete('run'); history.replaceState(null, '', url);
+  }
+  async function inspectEntry(button) {
+    if (busy) return;
+    const id = button.dataset.inspectEntry;
+    selectEntry(id);
+    const entry = document.getElementById(`entry-${id}`);
+    const metadata = entry.querySelector('[data-entry-metadata-action]');
+    if (metadata?.dataset.workspaceResult) await openResult(metadata.dataset.workspaceResult, metadata);
+    else if (metadata) await openAction(metadata);
+    else { operation = null; mountOperation(); }
+  }
   async function poll() {
-    if (polling || document.hidden || !active.size) return;
+    if (polling || document.hidden || (!active.size && !needsRefresh)) return;
     polling = true;
-    let changed = false, next = null, completedPreparation = false;
     try {
       await Promise.all([...active].map(async ([id, job]) => {
         try {
           const data = await json(`/api/run/${encodeURIComponent(id)}/status`);
+          if (job.input !== inputKey()) return;
           if (['queued', 'running'].includes(data.status)) {
             if (operation?.runId === id) operationStatus.textContent = `${data.status === 'queued' ? 'Queued' : 'Running'}${data.current_step ? ` · ${data.current_step}` : '…'}`;
             return;
           }
           active.delete(id);
-          if (job.input !== inputKey()) return;
-          changed = true;
+          needsRefresh = true;
           if (operation?.runId === id) {
             cancelButton.hidden = true;
             operationStatus.textContent = data.status === 'success' ? 'Completed.' : `${data.status}: ${data.error || 'The job did not complete.'}`;
             operationStatus.dataset.tone = data.status === 'success' ? 'success' : 'error';
-            if (data.status === 'success' && job.next) next = {tab: job.next, id, tool: job.tool};
-            completedPreparation = data.status === 'success' && (Boolean(job.next) || ['mmls', 'fsstat'].includes(job.tool));
-            await showResult(id, '', false);
+            if (data.status === 'success' && (['mmls', 'fsstat', 'icat'].includes(job.tool) || (job.tool === 'fls' && !job.payload?.entry_id))) {
+              operation.dismissed = true;
+              const url = new URL(location.href); url.searchParams.delete('run'); history.replaceState(null, '', url);
+            } else await showResult(id);
           }
         } catch (error) { announce(`Job updates unavailable: ${error.message} Retrying automatically.`, true); }
       }));
-      if (next) {
-        const changes = next.tool === 'fls' ? {context_run_id: next.id, directory: null, offset: null, q: null, state: null, kind: null, scope: null} : {};
-        await tab(next.tab, changes);
-      } else if (changed) await render();
-      if (completedPreparation) panel.hidden = true;
+      if (needsRefresh && !view.hasAttribute('aria-busy')) needsRefresh = !(await render(new URL(location.href), '', {background: true}));
     } finally { polling = false; }
   }
   root.addEventListener('click', event => {
     const button = event.target.closest('button,a');
     if (!button) return;
-    if (button.dataset.workspaceTab) { event.preventDefault(); void tab(button.dataset.workspaceTab); }
+    if (button.dataset.workspaceTab) { event.preventDefault(); void tab(button.dataset.workspaceTab, {}, button.getAttribute('role') === 'tab'); }
     else if (button.matches('[data-workspace-link]')) {
       const url = new URL(button.href);
-      if (url.pathname !== location.pathname || url.origin !== location.origin || event.ctrlKey || event.metaKey) return;
+      if (url.pathname !== location.pathname || url.origin !== location.origin || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       event.preventDefault(); void navigate(url);
+    } else if (button.dataset.inspectEntry) { void inspectEntry(button); }
+    else if (button.dataset.closeEntry) {
+      document.getElementById(`entry-${button.dataset.closeEntry}`).hidden = true;
+      const trigger = view.querySelector(at('data-inspect-entry', button.dataset.closeEntry));
+      trigger.setAttribute('aria-expanded', 'false'); trigger.focus({preventScroll: true});
+      if (operation?.slot === `entry-${button.dataset.closeEntry}`) { operation.dismissed = true; mountOperation(); }
+      const url = new URL(location.href); url.searchParams.delete('entry'); url.searchParams.delete('run'); history.replaceState(null, '', url);
     } else if (button.dataset.workspaceTool) { void openAction(button); }
     else if (button.dataset.examine) { void tab('derived', {examine: button.dataset.examine}); }
     else if (button.matches('[data-close-examination]')) { void tab('derived', {examine: null}); }
-    else if (button.dataset.workspaceResult) { void openResult(button.dataset.workspaceResult); }
+    else if (button.dataset.workspaceResult) { void openResult(button.dataset.workspaceResult, button); }
+  });
+  root.addEventListener('keydown', event => {
+    const button = event.target.closest('[role="tab"]');
+    if (!button || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const buttons = [...view.querySelectorAll('[role="tab"]')], index = buttons.indexOf(button);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+    void tab(buttons[next].dataset.workspaceTab, {}, true);
   });
   root.addEventListener('change', event => {
     if (event.target.id === 'workspaceInput') {
-      const url = new URL(location.pathname, location.origin);
-      url.searchParams.set('input', event.target.value);
-      void navigate(url);
+      const url = new URL(location.pathname, location.origin); url.searchParams.set('input', event.target.value); void navigate(url);
     } else if (event.target.id === 'triageFilesystem') {
       const url = new URL(location.href);
-      for (const key of ['directory', 'q', 'kind', 'state', 'scope', 'offset']) url.searchParams.delete(key);
-      if (event.target.value) url.searchParams.set('context_run_id', event.target.value);
-      else url.searchParams.delete('context_run_id');
+      for (const key of ['directory', 'q', 'kind', 'state', 'scope', 'offset', 'entry', 'run']) url.searchParams.delete(key);
+      if (event.target.value) url.searchParams.set('context_run_id', event.target.value); else url.searchParams.delete('context_run_id');
       void navigate(url);
-    } else if (event.target.id === 'operationReport') void showResult(event.target.dataset.run, event.target.value, false);
+    } else if (event.target.matches('#triageFilters select')) event.target.form.requestSubmit();
+    else if (event.target.id === 'operationReport') void showResult(event.target.dataset.run, event.target.value);
   });
   fields.addEventListener('input', () => {
     ++previewVersion;
@@ -294,31 +417,45 @@
     if (event.target.id === 'triageFilters') {
       event.preventDefault();
       const url = new URL(location.href);
-      for (const key of ['directory', 'q', 'kind', 'state', 'scope', 'offset']) url.searchParams.delete(key);
+      for (const key of ['directory', 'q', 'kind', 'state', 'scope', 'offset', 'entry', 'run']) url.searchParams.delete(key);
       for (const [key, value] of new FormData(event.target)) url.searchParams.set(key, value);
       void navigate(url);
     } else if (event.target.id === 'operationForm') {
       event.preventDefault();
-      if (!busy) { busy = true; void enqueue().finally(() => { busy = false; }); }
+      if (!busy && !runButton.disabled) { busy = true; void enqueue().finally(() => { busy = false; }); }
+    } else if (event.target.id === 'evidenceTypeForm') {
+      event.preventDefault();
+      const form = event.target;
+      void (async () => {
+        try {
+          const response = await fetch(form.action, {method: 'POST', body: new FormData(form)});
+          if (!response.ok) throw new Error('The evidence type could not be saved.');
+          await render();
+        } catch (error) { announce(error.message, true); }
+      })();
     }
   });
   document.getElementById('closeOperation').addEventListener('click', () => {
-    panel.hidden = true; operation = null; ++previewVersion;
+    if (operation) operation.dismissed = true;
+    mountOperation(); ++previewVersion;
+    view.querySelector(operation?.returnFocus || '#workspaceTabPanel')?.focus({preventScroll: true});
     const url = new URL(location.href); url.searchParams.delete('run'); history.replaceState(null, '', url);
   });
   cancelButton.addEventListener('click', async () => {
     if (!operation?.runId) return;
+    const target = operation;
     cancelButton.disabled = true;
-    try { const data = await post(`/api/run/${operation.runId}/cancel`, {}); operationStatus.textContent = data.message; }
-    catch (error) { operationStatus.textContent = error.message; cancelButton.disabled = false; }
+    try { const data = await post(`/api/run/${target.runId}/cancel`, {}); if (target === operation) operationStatus.textContent = data.message; }
+    catch (error) { if (target === operation) { operationStatus.textContent = error.message; cancelButton.disabled = false; } }
   });
   copyButton.addEventListener('click', async () => {
     try {
       if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(command.textContent);
       else {
         const textarea = document.createElement('textarea'); textarea.value = command.textContent;
+        textarea.style.position = 'fixed'; textarea.style.opacity = '0';
         document.body.append(textarea); textarea.select();
-        const copied = document.execCommand('copy'); textarea.remove();
+        const copied = document.execCommand('copy'); textarea.remove(); copyButton.focus({preventScroll: true});
         if (!copied) throw new Error('Select the command and copy it manually.');
       }
       operationStatus.textContent = 'Command copied.';
@@ -326,8 +463,16 @@
   });
   window.addEventListener('popstate', () => { void render(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void poll(); });
-  mountOperation(); loadTabs(); saveTab(); seedActive(state().active);
+  loadTabs(); saveTab(); seedActive(state().active); revealActiveTab();
   const recordedRun = new URL(location.href).searchParams.get('run');
-  if (recordedRun) void openResult(recordedRun);
+  if (recordedRun) {
+    const job = active.get(recordedRun), params = job?.payload || {};
+    const source = view.querySelector(at('data-workspace-result', recordedRun))
+      || view.querySelector('.triage-detail-row:not([hidden]) [data-entry-metadata-action]')
+      || (job?.tool === 'mmls' ? view.querySelector('[data-operation-slot="disk-map"] button, [data-operation-slot="disk-options"] button') : null)
+      || view.querySelector(`${at('data-operation-slot', `filesystem-${params.offset_sector}-${params.sector_size || 'auto'}`)} [data-workspace-tool]`)
+      || (job ? view.querySelector(`${at('data-evidence-action', params.parser_id || job.tool)} button`) : null);
+    void openResult(recordedRun, source);
+  }
   setInterval(poll, 1250);
 })();

@@ -20,8 +20,8 @@
   <noscript><p>This workspace needs JavaScript for inline analysis. <a href="/tools">Standalone tools</a> remain available.</p></noscript>
   <div id="workspaceView">{% include '_evidence_workspace.html' %}</div>
   <section id="workspaceOperation" class="workspace-panel" hidden aria-label="Current examination">
-    <div class="workspace-heading"><h2 id="operationTitle">Examination</h2><button class="ghost" id="closeOperation" type="button">Close</button></div>
-    <form id="operationForm"><div id="operationFields" class="workspace-fields"></div>
+    <div class="workspace-heading"><h3 id="operationTitle" tabindex="-1">Examination</h3><button class="workspace-text-button" id="closeOperation" type="button">Close result</button></div>
+    <form id="operationForm"><details id="operationOptions"><summary>Adjust settings</summary><div id="operationFields" class="workspace-fields"></div></details>
       <details id="operationCli"><summary>Run this yourself on SIFT</summary><pre id="operationCommand"></pre><button class="ghost" id="copyOperation" type="button" disabled>Copy command</button><p id="operationNote" class="helper"></p></details>
       <div class="tool-actions"><button class="action" id="runOperation" type="submit" hidden>Run examination</button><button class="ghost" id="cancelOperation" type="button" hidden>Cancel job</button></div>
     </form>

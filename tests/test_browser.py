@@ -303,7 +303,8 @@ from test_evidence_workspace import workspace_runtime as workspace_runtime
 
 
 @pytest.mark.browser
-def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tmp_path):
+@pytest.mark.parametrize("width", [390, 1440])
+def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tmp_path, width):
     app, client, repo, settings, source, outputs, case, key = workspace_runtime
     worker = Worker(repo, settings)
     server = make_server('127.0.0.1', 0, app, threaded=True)
@@ -315,7 +316,7 @@ def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tm
             if not Path(engine.chromium.executable_path).is_file():
                 pytest.skip('Chromium is not installed.')
             browser = engine.chromium.launch(headless=True)
-            page = browser.new_page(viewport={'width': 390, 'height': 844})
+            page = browser.new_page(viewport={'width': width, 'height': 844})
             page.on('pageerror', lambda error: errors.append(str(error)))
             base = f'http://127.0.0.1:{server.server_port}'
             workspace_url = base + f'/case/{case}/workspace?' + urlencode({'input': key})
@@ -323,8 +324,8 @@ def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tm
             assert page.get_by_role('button', name='Map disk', exact=True).count() == 1
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path/'workspace-mobile.png'), full_page=True)
-            page.get_by_text('Disk sector size', exact=True).click()
-            page.get_by_role('button', name='Map with selected sector size', exact=True).click()
+            page.get_by_text('Disk options', exact=True).click()
+            page.get_by_role('button', name='Configure disk map', exact=True).click()
             page.select_option('[data-field="sector_size"]', '4096')
             page.wait_for_function("!document.querySelector('#copyOperation').disabled && document.querySelector('#operationCommand').textContent.includes('-b 4096')")
             assert repo.runs() == []
@@ -339,6 +340,7 @@ def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tm
             page.route('**/api/run/*/status', lambda route: route.abort(), times=1)
             worker.run_once()
             page.get_by_role('button', name='Analyze filesystem', exact=True).wait_for()
+            assert page.get_by_role('button', name='Analyze filesystem', exact=True).evaluate('(element) => element === document.activeElement')
             page.get_by_role('button', name='Analyze filesystem', exact=True).click()
             page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             worker.run_once()
@@ -346,48 +348,65 @@ def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tm
             page.get_by_role('button', name='Build file inventory', exact=True).first.click()
             page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             worker.run_once()
+            page.get_by_role('link', name='Explore files', exact=True).click()
             page.wait_for_selector('#triageFilters')
+            assert not page.locator('.triage-filter-options').get_attribute('open')
             page.fill('input[name="q"]', 'spaces')
+            page.locator('.triage-filter-options summary').click()
             page.select_option('select[name="state"]', 'deleted')
-            page.get_by_role('button', name='Filter entries').click()
             page.wait_for_function("document.querySelectorAll('[data-triage-entry]').length === 1")
             assert page.locator('[data-triage-entry]').count() == 1
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path/'triage-mobile.png'), full_page=True)
-            page.get_by_role('button', name='Inspect metadata', exact=True).click()
+            assert page.get_by_role('button', name='Recover file', exact=True).is_hidden()
+            page.get_by_role('button', name='Inspect deleted file with spaces.txt', exact=True).click()
             page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             worker.run_once()
             page.wait_for_function("document.querySelector('#operationResult').textContent.includes('Filesystem metadata')")
+            assert page.locator('#workspaceOperation').locator('xpath=ancestor::tr').get_attribute('id').startswith('entry-')
+            before_metadata_reopen = len(repo.runs())
+            page.get_by_role('button', name='Close inspection', exact=True).click()
+            page.get_by_role('button', name='Inspect deleted file with spaces.txt', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationResult').textContent.includes('Filesystem metadata')")
+            assert len(repo.runs()) == before_metadata_reopen
             page.get_by_role('button', name='Recover file', exact=True).click()
             page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             assert '42-128-1' in page.locator('#operationCommand').text_content()
             worker.run_once()
-            page.wait_for_selector('[data-examine]')
-            page.get_by_role('button', name='Triage', exact=True).click()
+            page.get_by_role('button', name='Examine captured file', exact=True).wait_for()
+            assert page.locator('[data-active-tab=triage]').count() == 1
+            page.get_by_role('button', name='Examine captured file', exact=True).click()
+            page.get_by_role('tab', name='File triage', exact=True).click()
             page.wait_for_selector('#triageFilters')
             assert page.locator('input[name="q"]').input_value() == 'spaces'
             assert page.locator('select[name="state"]').input_value() == 'deleted'
             assert page.locator('[data-triage-entry]').count() == 1
             page.locator('[data-workspace-tab="derived"]').click()
-            page.get_by_role('button', name='Examine file', exact=True).click()
+            page.wait_for_selector('#derivedExamination')
+            assert page.locator('.workspace-derived-list').count() == 0
             page.locator('[data-evidence-action="xxd"] [data-workspace-tool]').click()
             page.wait_for_function("!document.querySelector('#copyOperation').disabled")
             assert parse_qs(urlparse(page.url).query)['input'][0] == key
             assert parse_qs(urlparse(page.url).query)['examine'][0].startswith('d:')
-            assert 'deleted file with spaces.txt' in page.locator('#operationCommand').inner_text()
+            assert 'deleted file with spaces.txt' in page.locator('#operationCommand').text_content()
+            assert not page.locator('#operationOptions').get_attribute('open')
+            assert not page.locator('#operationCli').get_attribute('open')
             page.click('#runOperation')
             page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             worker.run_once()
-            page.wait_for_selector('[data-evidence-action="xxd"] [data-workspace-result]')
+            page.wait_for_selector('[data-evidence-action="xxd"] [data-workspace-result]', state='attached')
             assert len(repo.runs()) == 6 and all(r['status'] == 'success' for r in repo.runs())
             assert urlparse(page.url).path == urlparse(workspace_url).path
             assert page.evaluate('window.workspaceDocument') == 'kept through the journey'
             page.reload()
+            page.wait_for_function("document.querySelector('#operationResult').textContent.includes('00000000')")
+            page.click('#closeOperation')
             page.wait_for_selector('[data-evidence-action="xxd"] [data-workspace-result]')
             page.locator('[data-evidence-action="xxd"] [data-workspace-result]').click()
             page.wait_for_function("document.querySelector('#operationResult').textContent.includes('00000000')")
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.set_viewport_size({'width': 1440, 'height': 1000})
+            page.evaluate('window.scrollTo(0, 0)')
             page.screenshot(path=str(tmp_path/'workspace-desktop.png'), full_page=True)
             assert not errors
             browser.close()
@@ -421,11 +440,11 @@ def test_evidence_workspace_prefills_specific_zimmerman_parser(zimmerman_runtime
             page.goto(base + f'/case/{case}/workspace?' + urlencode({'input': key}))
             page.locator('[data-evidence-action="sqlecmd"] [data-workspace-tool]').click()
             page.wait_for_function("!document.querySelector('#copyOperation').disabled")
-            assert str(source) in page.locator('#operationCommand').inner_text()
+            assert str(source) in page.locator('#operationCommand').text_content()
             page.click('#runOperation')
             page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             Worker(repo, app.config['SETTINGS']).run_once()
-            page.wait_for_selector('[data-evidence-action="sqlecmd"] [data-workspace-result]')
+            page.wait_for_selector('[data-evidence-action="sqlecmd"] [data-workspace-result]', state='attached')
             assert not errors
             browser.close()
     finally:
@@ -471,6 +490,74 @@ def test_workspace_jobs_follow_their_evidence_and_can_be_cancelled(workspace_run
             page.wait_for_selector('[data-filesystem-offset]')
             assert parse_qs(urlparse(page.url).query)['input'] == [key]
             assert len(repo.runs()) == 2 and not errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize('width', [390, 1440])
+def test_workspace_inspection_keeps_position_drafts_and_keyboard_context(workspace_runtime, width, tmp_path):
+    from test_file_triage import inventory
+    inventory(workspace_runtime, records=[f'r/r {100+i}: item{i:03}.txt' for i in range(95)])
+    app, client, repo, settings, source, outputs, case, key = workspace_runtime
+    worker = Worker(repo, settings)
+    server = make_server('127.0.0.1', 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': width, 'height': 900})
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            page.goto(f'http://127.0.0.1:{server.server_port}/case/{case}/workspace?' + urlencode({'input': key, 'tab': 'triage'}))
+            selected = page.get_by_role('button', name='Inspect item070.txt', exact=True)
+            selected.scroll_into_view_if_needed()
+            before = page.evaluate('scrollY')
+            selected.click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            assert page.evaluate('scrollY') >= before - 2  # Never jump above the selected entry.
+            queued = page.evaluate('scrollY')
+            worker.run_once()
+            page.wait_for_selector('.triage-detail-row:not([hidden]) [data-workspace-result]', state='attached')
+            assert abs(page.evaluate('scrollY') - queued) < 3
+            assert page.locator('#workspaceOperation').locator('xpath=ancestor::tr').get_attribute('id') == page.locator('.triage-detail-row:not([hidden])').get_attribute('id')
+            page.screenshot(path=str(tmp_path / f'inline-inspection-{width}.png'))
+            # A completed background job must not erase a draft query or steal focus.
+            page.get_by_role('button', name='Inspect item071.txt', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            query = page.locator('#triageFilters input[name=q]')
+            query.fill('unfinished search')
+            query.focus()
+            worker.run_once()
+            page.wait_for_selector('.triage-detail-row:not([hidden]) [data-workspace-result]', state='attached')
+            assert query.input_value() == 'unfinished search'
+            assert query.evaluate('(element) => document.activeElement === element')
+            # Manual keyboard navigation retains a usable tab stop and exposes the active tab on mobile.
+            page.locator('#tab-triage').focus()
+            page.keyboard.press('ArrowRight')
+            page.wait_for_selector('[data-active-tab=derived]')
+            assert page.locator('#tab-derived').evaluate('(element) => element === document.activeElement && element.getAttribute("aria-selected") === "true"')
+            bounds = page.locator('#tab-derived').bounding_box()
+            assert bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= width
+            page.keyboard.press('ArrowLeft')
+            page.wait_for_selector('[data-active-tab=triage]')
+            assert page.locator('.triage-detail-row:not([hidden])').count() == 1
+            # Returning to an existing entry reads its report without another job.
+            count = len(repo.runs())
+            page.get_by_role('button', name='Inspect item071.txt', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationResult').textContent.includes('known bytes')")
+            assert len(repo.runs()) == count
+            page.locator('#tab-activity').click()
+            page.wait_for_selector('[data-active-tab=activity]')
+            page.go_back()
+            page.wait_for_selector('[data-active-tab=triage]')
+            assert page.locator('.triage-detail-row:not([hidden])').count() == 1
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert not errors
             browser.close()
     finally:
         server.shutdown()

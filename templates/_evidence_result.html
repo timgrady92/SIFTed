@@ -1,7 +1,9 @@
-<div class="workspace-heading"><h3>{{ run.plan.parameters.parser_id|default(run.tool) }} · {{ run.status }}</h3><span class="helper">{{ run.created_at }}</span></div>
+<div class="workspace-result-meta"><strong>{{ run.plan.parameters.parser_id|default(run.tool) }}</strong><span class="workspace-badge">{{ run.status }}</span><time datetime="{{ run.created_at }}">{{ run.created_at[:19]|replace("T", " ") }} UTC</time></div>
 {% if run.error %}<p>{{ run.error }}</p>{% endif %}
+{% if run.status == 'success' and run.tool == 'fls' %}<a class="action" data-workspace-link href="{{ url_for('evidence.case_workspace', case_id=workspace.case.id, input=workspace.selected.key, tab='triage', context_run_id=run.id) }}">Explore this listing</a>{% endif %}
+{% if captured %}<div class="tool-actions">{% for item in captured %}<button class="action" type="button" data-examine="{{ item.key }}">Examine {{ item.label }}</button>{% endfor %}</div>{% endif %}
 {% if reports %}
-<label>Report<select id="operationReport" data-run="{{ run.id }}">{% for item in reports %}<option value="{{ item.name }}" {% if report == item.name %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></label>
+{% if reports|length > 1 %}<label>Report<select id="operationReport" data-run="{{ run.id }}">{% for item in reports %}<option value="{{ item.name }}" {% if report == item.name %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></label>{% else %}<p class="helper">{{ report }}</p>{% endif %}
 <pre class="workspace-report">{{ content }}</pre>{% if truncated %}<p class="helper">Showing the first 128 KiB. The complete report is available below.</p>{% endif %}
 <details><summary>Complete reports and provenance</summary>{% for item in reports %}<p><a target="_blank" rel="noopener" href="{{ url_for('web.view_file', path=item.path) }}">{{ item.name }}</a></p>{% endfor %}<p><a target="_blank" rel="noopener" href="{{ url_for('web.run_log',run_id=run.id) }}">Execution log</a></p><p>Run {{ run.id }}</p><p>{{ run.source_path }}</p><p>{{ run.output_path }}</p></details>
 {% elif run.status == 'success' %}<p>Captured content is available in Derived files.</p>{% endif %}

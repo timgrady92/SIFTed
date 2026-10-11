@@ -158,7 +158,7 @@ def test_missing_native_tools_leave_inventory_browsable_and_offer_direct_prepara
     triage = view(client, case, key, tab='triage')['triage']
     assert triage['rows'] and triage['metadata_reason'] and triage['extract_reason']
     html = client.get(f'/case/{case}/workspace', query_string={'input': key, 'tab': 'triage'}).data
-    assert b'File extraction unavailable' in html and b'disabled>Extract file' in html
+    assert triage['extract_reason'].encode() in html and b'disabled title=' in html
     card = view(client, case, key)['journey'][0]
     assert card['stat_reason'] and not card['inventory_reason'] and card['triage_url']
 
@@ -213,3 +213,24 @@ def test_duplicate_directory_paths_require_a_listing_by_metadata_address(workspa
         assert values['directory_inode'] == row['address'] and values['entry_id'] == row['id']
         assert client.post('/api/fls/preview', json=values).status_code == 200
         assert 'Several directory entries' in view(client, case, key, tab='triage', directory=row['id'])['triage']['error']
+
+
+def test_entry_inspection_reuses_only_work_from_the_same_inventory(workspace_runtime):
+    first = inventory(workspace_runtime)
+    app, client, repo, settings, source, outputs, case, key = workspace_runtime
+    selected = next(row for row in view(client, case, key, tab='triage')['triage']['rows'] if row['kind'] == 'file')
+    worker = Worker(repo, settings)
+    metadata = client.post('/api/istat/run', json=selected['metadata_payload']).json['run_id']
+    worker.run_once()
+    captured = client.post('/api/icat/run', json=selected['extract_payload']).json['run_id']
+    worker.run_once()
+    old_view = view(client, case, key, tab='triage', context_run_id=first['id'])
+    reopened = next(row for row in old_view['triage']['rows'] if row['id'] == selected['id'])
+    assert reopened['metadata_run_id'] == metadata
+    assert reopened['captured_key'] == next(item['key'] for item in old_view['derived'] if item['source_run_id'] == captured)
+    assert all(not row['metadata_run_id'] and not row['captured_key'] for row in old_view['triage']['rows'] if row['id'] != selected['id'])
+    # The same numerical entry ID in another inventory is a different selection.
+    second = inventory(workspace_runtime)
+    new_view = view(client, case, key, tab='triage', context_run_id=second['id'])
+    assert all(not row['metadata_run_id'] and not row['captured_key'] for row in new_view['triage']['rows'])
+    assert len(repo.runs()) == 4

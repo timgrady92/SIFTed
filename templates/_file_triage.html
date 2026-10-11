@@ -1,38 +1,52 @@
 <section class="workspace-triage" aria-label="File triage">
-  <p class="eyebrow">Find → inspect → extract → examine</p><h2>File triage</h2>
+  <header class="workspace-stage-heading"><p class="workspace-step">Step 2 of 3</p><h2>Find and inspect files</h2><p class="helper">Browse or search the inventory. Inspect an entry, then capture its content for examination.</p></header>
   {% set triage = workspace.triage %}
   {% set prepared = workspace.journey|selectattr('inventory_run_id')|list %}
-  {% if prepared|length > 1 %}<label>Filesystem<select id="triageFilesystem"><option value="">Choose a prepared filesystem</option>{% for card in prepared %}<option value="{{ card.inventory_run_id }}" {% if workspace.context and workspace.context.id == card.inventory_run_id %}selected{% endif %}>{{ card.description }} · sector {{ card.offset_sector }} · {{ card.sector_size or 'auto' }} bytes per sector</option>{% endfor %}</select></label>{% endif %}
-  {% if not triage %}<p>Choose a prepared filesystem to browse its inventory.</p><div class="tool-actions">
-    {% for card in workspace.journey if card.triage_url %}<a data-workspace-link class="action" href="{{ card.triage_url }}">Explore files at sector {{ card.offset_sector }}</a>{% endfor %}
-    <a data-workspace-link class="ghost" href="{{ url_for('evidence.case_workspace', case_id=workspace.case.id, input=workspace.selected.key, tab='analysis') }}">Prepare a filesystem</a></div>
-  {% elif triage.error %}<p class="run-status" data-tone="error">{{ triage.error }}</p><a data-workspace-link class="ghost" href="{{ url_for('evidence.case_workspace', case_id=workspace.case.id, input=workspace.selected.key, tab='analysis') }}">Return to filesystem preparation</a>
+  {% if prepared|length > 1 %}<label class="workspace-filesystem-picker">Filesystem<select id="triageFilesystem"><option value="">Choose a prepared filesystem</option>{% for card in prepared %}<option value="{{ card.inventory_run_id }}" {% if workspace.context and workspace.context.id == card.inventory_run_id %}selected{% endif %}>{{ card.description }} · sector {{ card.offset_sector }}</option>{% endfor %}</select></label>{% endif %}
+  {% if not triage %}<div class="workspace-start"><h3>{{ 'Choose a filesystem' if prepared else 'Prepare a filesystem first' }}</h3><p>{{ 'Select a prepared filesystem above to browse its files.' if prepared else 'Build a file inventory in Analysis to begin triage.' }}</p>{% if not prepared %}<button class="action" type="button" data-workspace-tab="analysis">Go to Analysis</button>{% endif %}</div>
+  {% elif triage.error %}<p class="run-status" data-tone="error">{{ triage.error }}</p><button class="ghost" type="button" data-workspace-tab="analysis">Return to Analysis</button>
   {% else %}
-  <p class="helper">Filesystem at sector {{ workspace.context.plan.parameters.offset_sector }} · {{ triage.counts.total }} names · {{ triage.counts.deleted }} deleted entries · {{ triage.counts.reallocated }} reallocated entries</p>
-  {% if triage.metadata_reason %}<p class="helper">Metadata inspection unavailable: {{ triage.metadata_reason }}</p>{% endif %}
-  {% if triage.extract_reason %}<p class="helper">File extraction unavailable: {{ triage.extract_reason }}</p>{% endif %}
+  <p class="helper">Sector {{ workspace.context.plan.parameters.offset_sector }} · {{ triage.counts.total }} names · {{ triage.counts.deleted }} deleted · {{ triage.counts.reallocated }} reallocated</p>
   {% if triage.unparsed_lines %}<p class="run-status">{{ triage.unparsed_lines }} listing lines could not be interpreted. This inventory may be incomplete; inspect the original listing.</p>{% endif %}
   {% if triage.deleted_only %}<p class="run-status">This inventory includes deleted entries only.</p>{% endif %}
-  {% if triage.directory_inode %}<p class="helper">This listing starts at metadata address {{ triage.directory_inode }}, rather than the filesystem root.</p>{% endif %}
-  <nav class="triage-breadcrumbs" aria-label="Directory location"><a data-workspace-link href="{{ triage.root_url }}">{{ 'Listing root' if triage.directory_inode else 'Filesystem root' }}</a>{% for crumb in triage.breadcrumbs %}<span aria-hidden="true">/</span><a data-workspace-link href="{{ crumb.url }}">{{ crumb.name }}</a>{% endfor %}</nav>
-  <form class="triage-filters" id="triageFilters" method="get">
-    <input type="hidden" name="input" value="{{ workspace.selected.key }}" /><input type="hidden" name="tab" value="triage" /><input type="hidden" name="context_run_id" value="{{ triage.run_id }}" />
-    {% if triage.directory %}<input type="hidden" name="directory" value="{{ triage.directory }}" />{% endif %}
-    <label>Search names<input type="search" name="q" value="{{ triage.query }}" maxlength="256" placeholder="Filename or path" /></label>
-    <label>Search scope<select name="scope"><option value="directory" {% if triage.scope == 'directory' %}selected{% endif %}>Current directory</option><option value="filesystem" {% if triage.scope == 'filesystem' %}selected{% endif %}>Entire inventory</option></select></label>
-    <label>Entry type<select name="kind">{% for value, label in [('', 'All entries'), ('file', 'Files'), ('directory', 'Directories'), ('other', 'Other entries')] %}<option value="{{ value }}" {% if triage.kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-    <label>Listing state<select name="state">{% for value, label in [('', 'All states'), ('allocated', 'Not marked deleted'), ('deleted', 'Deleted'), ('reallocated', 'Reallocated')] %}<option value="{{ value }}" {% if triage.state == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-    <button class="action" type="submit">Filter entries</button><a data-workspace-link class="ghost" href="{{ triage.root_url }}">Reset</a>
+  {% if triage.directory_inode %}<p class="helper">This listing starts at metadata address {{ triage.directory_inode }}.</p>{% endif %}
+  <form id="triageFilters" method="get">
+    <input type="hidden" name="input" value="{{ workspace.selected.key }}"><input type="hidden" name="tab" value="triage"><input type="hidden" name="context_run_id" value="{{ triage.run_id }}">
+    {% if triage.directory %}<input type="hidden" name="directory" value="{{ triage.directory }}">{% endif %}
+    <div class="triage-search"><label>Search names<input type="search" name="q" value="{{ triage.query }}" maxlength="256" placeholder="Filename or path"></label><button class="action" type="submit">Search</button></div>
+    <details class="triage-filter-options" data-disclosure="triage-filters" {% if triage.kind or triage.state or triage.scope != 'directory' %}open{% endif %}><summary>Filters{% if triage.kind or triage.state or triage.scope != 'directory' %} · applied{% endif %}</summary><div class="triage-filters">
+      <label>Search scope<select name="scope"><option value="directory" {% if triage.scope == 'directory' %}selected{% endif %}>Current directory</option><option value="filesystem" {% if triage.scope == 'filesystem' %}selected{% endif %}>Entire inventory</option></select></label>
+      <label>Entry type<select name="kind">{% for value, label in [('', 'All entries'), ('file', 'Files'), ('directory', 'Directories'), ('other', 'Other entries')] %}<option value="{{ value }}" {% if triage.kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+      <label>Listing state<select name="state">{% for value, label in [('', 'All states'), ('allocated', 'Not marked deleted'), ('deleted', 'Deleted'), ('reallocated', 'Reallocated')] %}<option value="{{ value }}" {% if triage.state == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    </div></details>
   </form>
-  <p role="status">{{ triage.total }} matching entries{% if triage.total %} · showing {{ triage.offset + 1 }}–{{ triage.offset + triage.rows|length }}{% endif %}</p>
-  <div class="file-table-container"><table class="file-table triage-table"><thead><tr><th>Name / path</th><th>Type</th><th>Metadata address</th><th>Listing state</th><th>Investigate</th></tr></thead><tbody>
-    {% for row in triage.rows %}<tr data-triage-entry="{{ row.id }}" data-entry-label="{{ row.path }}">
-      <td data-label="Name / path">{% if row.directory_url or row.listing_payload %}{% if row.listing_payload %}{{ execute('fls',row.listing_payload,row.name,'triage') }}{% else %}<a data-workspace-link href="{{ row.directory_url }}">{{ row.path if triage.scope == 'filesystem' else row.name }}</a>{% endif %}{% if row.ambiguous_path %}<span class="helper">Duplicate path · open a listing by metadata address</span>{% endif %}{% else %}{{ row.path if triage.scope == 'filesystem' else row.name }}{% endif %}</td>
-      <td data-label="Type">{{ row.kind }}</td><td data-label="Metadata address">{{ row.address }}</td><td data-label="Listing state">{{ 'Deleted' if row.deleted else 'Not marked deleted' }}{% if row.reallocated %} · Reallocated{% endif %}</td>
-      <td data-label="Investigate"><div class="tool-actions">{% if not triage.metadata_reason %}{{ execute('istat',row.metadata_payload,'Inspect metadata') }}{% else %}<button class="ghost" disabled>Inspect metadata</button>{% endif %}{% if row.extract_payload %}{% if not triage.extract_reason %}{{ execute('icat',row.extract_payload,'Recover file' if row.deleted else 'Extract file','derived') }}{% else %}<button class="ghost" disabled>Extract file</button>{% endif %}{% endif %}</div></td>
-    </tr>{% else %}<tr><td colspan="5">No matching entries. Adjust the filters or search the entire inventory.</td></tr>{% endfor %}
-  </tbody></table></div>
+  <div class="workspace-heading"><nav class="triage-breadcrumbs" aria-label="Directory location"><a data-workspace-link href="{{ triage.root_url }}">{{ 'Listing root' if triage.directory_inode else 'Filesystem root' }}</a>{% for crumb in triage.breadcrumbs %}<span aria-hidden="true">/</span><a data-workspace-link href="{{ crumb.url }}">{{ crumb.name }}</a>{% endfor %}</nav>{% if triage.query or triage.kind or triage.state or triage.scope != 'directory' %}<a data-workspace-link href="{{ triage.root_url }}">Clear search and filters</a>{% endif %}</div>
+  <p class="helper" role="status">{{ triage.total }} {{ 'entry' if triage.total == 1 else 'entries' }}{% if triage.total %} · showing {{ triage.offset + 1 }}–{{ triage.offset + triage.rows|length }}{% endif %}</p>
+  <table class="triage-table"><thead><tr><th>Name / path</th><th>Type</th><th>Listing state</th><th><span class="workspace-sr-only">Inspect entry</span></th></tr></thead><tbody>
+    {% for row in triage.rows %}
+    <tr data-triage-entry="{{ row.id }}" data-entry-label="{{ row.path }}">
+      <td data-label="Name / path">{% if row.listing_payload %}{{ execute('fls',row.listing_payload,row.name) }}{% elif row.directory_url %}<a data-workspace-link href="{{ row.directory_url }}">{{ row.path if triage.scope == 'filesystem' else row.name }}</a>{% else %}{{ row.path if triage.scope == 'filesystem' else row.name }}{% endif %}{% if row.ambiguous_path %}<span class="helper">Duplicate path · opens a listing by metadata address</span>{% endif %}</td>
+      <td data-label="Type">{{ row.kind }}</td><td data-label="Listing state"><span class="workspace-state {{ 'deleted' if row.deleted else '' }}">{{ 'Deleted' if row.deleted else 'Not marked deleted' }}</span>{% if row.reallocated %} · Reallocated{% endif %}</td>
+      <td class="triage-entry-action"><button class="ghost" type="button" data-inspect-entry="{{ row.id }}" aria-label="Inspect {{ row.name }}" aria-expanded="{{ 'true' if triage.selected_entry == row.id else 'false' }}" aria-controls="entry-{{ row.id }}">Inspect</button></td>
+    </tr>
+    <tr class="triage-detail-row" id="entry-{{ row.id }}" {% if triage.selected_entry != row.id %}hidden{% endif %}><td colspan="4">
+      <section class="triage-inspector" data-operation-slot="entry-{{ row.id }}" data-entry-label="{{ row.path }}" aria-label="Inspection of {{ row.name }}">
+        <div class="workspace-heading"><div><h3>{{ row.name }}</h3><p class="helper">Metadata address {{ row.address }}{% if row.reallocated %} · Reallocated{% endif %}</p></div><button class="workspace-text-button" type="button" data-close-entry="{{ row.id }}">Close inspection</button></div>
+        {% if row.deleted %}<p class="helper">This name is marked deleted. Recovery may be incomplete{% if row.reallocated %}; its metadata has been reallocated{% endif %}.</p>{% endif %}
+        <div class="tool-actions">
+          {% if row.captured_key %}<button class="action" type="button" data-examine="{{ row.captured_key }}">Examine captured file</button>
+          {% elif row.extract_payload %}{{ execute('icat',row.extract_payload,'Recover file' if row.deleted else 'Extract file',reason=triage.extract_reason) }}{% endif %}
+        </div>
+        <div class="triage-metadata" data-entry-metadata>
+          {% if row.metadata_run_id %}<button class="workspace-text-button" type="button" data-workspace-result="{{ row.metadata_run_id }}" data-entry-metadata-action>View recorded metadata</button>
+          {% elif not triage.metadata_reason %}<span data-entry-metadata-action data-workspace-tool="istat" data-payload='{{ row.metadata_payload|tojson }}' data-label="Filesystem metadata" data-configure="false"></span>
+          {% else %}<p class="helper">Metadata inspection unavailable: {{ triage.metadata_reason }}</p>{% endif %}
+        </div>
+      </section>
+    </td></tr>
+    {% else %}<tr><td colspan="4">No matching entries. Adjust the filters or search the entire inventory.</td></tr>{% endfor %}
+  </tbody></table>
   <nav class="tool-actions" aria-label="Triage pages">{% if triage.previous_url %}<a data-workspace-link class="ghost" href="{{ triage.previous_url }}">Previous 100</a>{% endif %}{% if triage.next_url %}<a data-workspace-link class="ghost" href="{{ triage.next_url }}">Next 100</a>{% endif %}</nav>
-  <details><summary>Inventory source and interpretation</summary><p class="helper">Names and allocation flags come from the filesystem listing. They do not identify content or guarantee recovery. Extract a file to examine its bytes and choose content-specific tools.</p><p>Run {{ triage.run_id }} · {{ 'Recursive inventory' if triage.recursive else 'Single-directory listing' }}</p><button class="ghost" type="button" data-workspace-result="{{ triage.run_id }}">View original listing</button></details>
+  <details data-disclosure="inventory-source" data-operation-slot="inventory-source"><summary>Inventory source and interpretation</summary><p class="helper">Names and allocation flags come from the filesystem listing. They do not identify content or guarantee recovery. Extract a file to examine its bytes.</p><p class="helper">{{ 'Recursive inventory' if triage.recursive else 'Single-directory listing' }}</p><button class="ghost" type="button" data-workspace-result="{{ triage.run_id }}">View original listing</button></details>
   {% endif %}
 </section>

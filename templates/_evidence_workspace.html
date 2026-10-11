@@ -1,62 +1,64 @@
-{% macro execute(tool, payload, label, next='', reason='', configure=false, fields=[]) %}
-<button type="button" class="{{ 'ghost' if configure else 'action' }}" data-workspace-tool="{{ tool }}" data-payload='{{ payload|tojson }}' data-label="{{ label }}" data-next="{{ next }}" data-configure="{{ 'true' if configure else 'false' }}" data-fields='{{ fields|tojson }}' {% if reason %}disabled title="{{ reason }}"{% endif %}>{{ label }}</button>
+{% macro execute(tool, payload, label, reason='', configure=false, fields=[], title='') %}
+<button type="button" class="{{ 'ghost' if configure else 'action' }}" data-workspace-tool="{{ tool }}" data-payload='{{ payload|tojson }}' data-label="{{ title or label }}" data-configure="{{ 'true' if configure else 'false' }}" data-fields='{{ fields|tojson }}' {% if reason %}disabled title="{{ reason }}"{% endif %}>{{ label }}</button>
 {% if reason %}<p class="helper">{{ reason }}</p>{% endif %}
 {% endmacro %}
+{% macro examination_action(action) %}
+<article data-evidence-action="{{ action.id }}" data-operation-slot="action-{{ action.id }}">
+  <div class="workspace-heading"><div><h3>{{ action.label }}</h3><p class="helper">{{ action.description }}</p></div>
+  {% if action.result_run_id %}<button class="ghost" type="button" data-workspace-result="{{ action.result_run_id }}">View result</button>
+  {% elif action.tool in ['volatility', 'scalpel', 'foremost', 'artifact-triage', 'bulk-extractor'] %}
+    {% if action.enabled %}<a class="ghost" href="{{ action.url }}">Open examination</a>{% else %}<span class="helper">{{ action.reason }}</span>{% endif %}
+  {% else %}{{ execute(action.tool, action.payload, 'Start examination', reason=action.reason if not action.enabled else '', configure=true, fields=action.fields, title=action.label) }}{% endif %}</div>
+  {% if action.result_run_id %}<details data-disclosure="repeat-{{ action.id }}"><summary>New examination</summary>{% if action.url %}<a class="ghost" href="{{ action.url }}">Configure examination</a>{% else %}{{ execute(action.tool, action.payload, 'Configure examination', reason=action.reason if not action.enabled else '', configure=true, fields=action.fields, title=action.label) }}{% endif %}</details>{% endif %}
+</article>
+{% endmacro %}
 {% macro examine_actions(actions) %}
+{% set recommended = actions|selectattr('recommended')|list %}
 <div class="workspace-examinations">
-{% for action in actions|sort(attribute='recommended', reverse=true) %}
-  <article data-evidence-action="{{ action.id }}"><div><strong>{{ action.label }}</strong><p class="helper">{{ action.description }}</p></div>
-  <div class="tool-actions">
-  {% if action.result_run_id %}<button class="ghost" type="button" data-workspace-result="{{ action.result_run_id }}">View result</button>{% endif %}
-  {% if action.tool in ['volatility', 'scalpel', 'foremost', 'artifact-triage', 'bulk-extractor'] %}
-    <a class="ghost" href="{{ action.url }}">Configure {{ action.label|lower }}</a>
-  {% else %}
-    {{ execute(action.tool, action.payload, action.label, reason=action.reason if not action.enabled else '', configure=true, fields=action.fields) }}
-  {% endif %}
-  </div></article>
-{% endfor %}
+{% for action in recommended if recommended %}{{ examination_action(action) }}{% endfor %}
+{% if not recommended %}{% for action in actions %}{{ examination_action(action) }}{% endfor %}
+{% else %}{% set others = actions|rejectattr('recommended')|list %}{% if others %}<details data-disclosure="more-examinations"><summary>Other examinations</summary>{% for action in others %}{{ examination_action(action) }}{% endfor %}</details>{% endif %}{% endif %}
 </div>
 {% endmacro %}
-<div class="workspace-heading">
-  <nav aria-label="Evidence location"><a href="/evidence">Evidence</a> / {{ workspace.case.name }}</nav>
-  <a href="/cases#case-{{ workspace.case.id }}">Manage case</a>
-</div>
+<div class="workspace-heading workspace-breadcrumb"><nav aria-label="Evidence location"><a href="/evidence">Evidence</a> / {{ workspace.case.name }}</nav><a href="/cases#case-{{ workspace.case.id }}">Manage case</a></div>
 {% if workspace.selected %}
 <header class="workspace-header">
-  <h1>{{ workspace.selected.label }}</h1><p class="helper">{{ workspace.observed.label }} · {{ workspace.observed.basis }}</p>
-  <label class="workspace-picker">Evidence<select id="workspaceInput" aria-label="Evidence input">
+  <div><h1>{{ workspace.selected.label }}</h1><p class="helper">{{ workspace.observed.label }}</p></div>
+  {% if workspace.case.artifacts|length > 1 or workspace.selected.origin == 'derived' %}<label class="workspace-picker">Evidence<select id="workspaceInput" aria-label="Evidence input">
     {% for item in workspace.case.artifacts %}<option value="e:{{ item.id }}" {% if workspace.selected.key == 'e:' + item.id %}selected{% endif %}>{{ item.label }}</option>{% endfor %}
     {% if workspace.selected.origin == 'derived' %}<option selected value="{{ workspace.selected.key }}">{{ workspace.selected.label }}</option>{% endif %}
-  </select></label>
+  </select></label>{% endif %}
 </header>
-<nav class="workspace-tabs" aria-label="Evidence views">
-  {% for tab, label in [('overview','Overview'),('analysis','Analysis'),('triage','Triage'),('derived','Derived files'),('activity','Activity')] if workspace.is_disk or tab != 'triage' %}
-    <button type="button" data-workspace-tab="{{ tab }}" class="{% if workspace.tab == tab %}active{% endif %}" aria-current="{{ 'page' if workspace.tab == tab else 'false' }}">{{ label }}{% if tab == 'derived' %}<span>{{ workspace.derived|length }}</span>{% endif %}</button>
+<nav class="workspace-tabs" role="tablist" aria-label="Evidence workflow">
+  {% for tab, label, step in [('overview','Overview',''),('analysis','Analysis','1'),('triage','File triage','2'),('derived','Examine files','3'),('activity','Activity','')] if workspace.is_disk or tab != 'triage' %}
+    <button id="tab-{{ tab }}" type="button" role="tab" data-workspace-tab="{{ tab }}" class="{% if workspace.tab == tab %}active{% endif %}" aria-selected="{{ 'true' if workspace.tab == tab else 'false' }}" aria-controls="workspaceTabPanel" tabindex="{{ '0' if workspace.tab == tab else '-1' }}">{% if step and workspace.is_disk %}<span class="workspace-tab-step" aria-hidden="true">{{ step }}</span>{% endif %}{{ label }}{% if tab == 'derived' and workspace.derived %}<span class="workspace-tab-count">{{ workspace.derived|length }}</span>{% endif %}{% if tab == 'activity' and workspace.active %}<span class="workspace-tab-count">{{ workspace.active|length }} running</span>{% endif %}</button>
   {% endfor %}
 </nav>
-<section class="workspace-tab-content" aria-label="{{ workspace.tab|capitalize }}" data-active-tab="{{ workspace.tab }}">
+<section id="workspaceTabPanel" class="workspace-tab-content" role="tabpanel" aria-labelledby="tab-{{ workspace.tab }}" tabindex="0" data-active-tab="{{ workspace.tab }}">
 {% if workspace.tab == 'overview' %}
-  <h2>Evidence overview</h2><dl><dt>Source</dt><dd>{{ workspace.selected.path }}</dd><dt>SHA-256</dt><dd>{{ workspace.selected.hash or 'Directory members are verified when submitted' }}</dd><dt>Content</dt><dd>{{ workspace.observed.label }}{% if workspace.observed.mime %} · MIME hint {{ workspace.observed.mime }}{% endif %}</dd><dt>Classification basis</dt><dd>{{ workspace.observed.basis }}</dd></dl>
+  <header class="workspace-stage-heading"><h2>Evidence overview</h2><p class="helper">Confirm the source and its classification before analysis.</p></header>
+  <dl><dt>Source</dt><dd>{{ workspace.selected.path }}</dd><dt>SHA-256</dt><dd class="workspace-hash">{{ workspace.selected.hash or 'Directory members are verified when submitted' }}</dd><dt>Content</dt><dd>{{ workspace.observed.label }}{% if workspace.observed.mime %} · {{ workspace.observed.mime }}{% endif %}</dd><dt>Classification basis</dt><dd>{{ workspace.observed.basis }}</dd></dl>
   {% if workspace.observed.note %}<p>{{ workspace.observed.note }}</p>{% endif %}
-  {% if workspace.selected.origin == 'registered' %}
-  <form class="workspace-fields" method="post" action="{{ url_for('evidence.set_evidence_type', case_id=workspace.case.id, artifact_id=workspace.selected.id) }}"><label>Registered type<select name="type">{% for key,spec in workspace.types.items() %}<option value="{{ key }}" {% if key == workspace.selected.type %}selected{% endif %}>{{ spec.label }}</option>{% endfor %}</select></label><button class="ghost" type="submit">Save type</button></form>
-  {% endif %}
+  <button class="action" type="button" data-workspace-tab="analysis">Continue to Analysis</button>
+  {% if workspace.selected.origin == 'registered' %}<details data-disclosure="classification"><summary>Change registered type</summary><p class="helper">Use this when the evidence needs an analyst-supplied classification.</p>
+    <form class="workspace-fields" id="evidenceTypeForm" method="post" action="{{ url_for('evidence.set_evidence_type', case_id=workspace.case.id, artifact_id=workspace.selected.id) }}"><label>Registered type<select name="type">{% for key,spec in workspace.types.items() %}<option value="{{ key }}" {% if key == workspace.selected.type %}selected{% endif %}>{{ spec.label }}</option>{% endfor %}</select></label><button class="ghost" type="submit">Save type</button></form>
+  </details>{% endif %}
 {% elif workspace.tab == 'analysis' %}
-  {% if workspace.is_disk %}{% include '_disk_journey.html' %}{% else %}<h2>Examine evidence</h2>{{ examine_actions(workspace.actions) }}{% endif %}
+  {% if workspace.is_disk %}{% include '_disk_journey.html' %}{% else %}<header class="workspace-stage-heading"><h2>Examine evidence</h2><p class="helper">Choose an examination suited to this content. Each result stays with its source.</p></header>{{ examine_actions(workspace.actions) }}{% endif %}
 {% elif workspace.tab == 'triage' %}{% include '_file_triage.html' %}
 {% elif workspace.tab == 'derived' %}
-  <div class="workspace-heading"><div><h2>Derived files</h2><p class="helper">Content captured from this evidence. Examine files here while keeping the source disk selected.</p></div></div>
+  <header class="workspace-stage-heading">{% if workspace.is_disk %}<p class="workspace-step">Step 3 of 3</p>{% endif %}<h2>Examine captured files</h2><p class="helper">Identify content and examine it while keeping the source evidence in context.</p></header>
   {% if workspace.examination %}
-  <section class="workspace-panel" id="derivedExamination"><div class="workspace-heading"><div><h3>{{ workspace.examination.input.label }}</h3><p class="helper">{{ workspace.examination.observed.label }} · {{ workspace.examination.observed.basis }}{% if workspace.examination.observed.mime %} · Native MIME hint: {{ workspace.examination.observed.mime }}{% endif %}</p></div><button class="ghost" type="button" data-close-examination>Back to captured files</button></div>
-    <details><summary>Captured file and provenance</summary><p>{{ workspace.examination.input.path }}</p><p>SHA-256 {{ workspace.examination.input.hash }}</p><button type="button" class="ghost" data-workspace-result="{{ workspace.examination.input.source_run_id }}">Producing run</button></details>
+  <section id="derivedExamination"><div class="workspace-heading"><div><h3>{{ workspace.examination.input.label }}</h3><p class="helper">{{ workspace.examination.observed.label }}</p></div><button class="workspace-text-button" type="button" data-close-examination>All captured files</button></div>
+    <details data-disclosure="captured-provenance" data-operation-slot="captured-provenance"><summary>Captured file and provenance</summary><p>{{ workspace.examination.input.path }}</p><p class="workspace-hash">SHA-256 {{ workspace.examination.input.hash }}</p><p class="helper">{{ workspace.examination.observed.basis }}{% if workspace.examination.observed.mime %} · {{ workspace.examination.observed.mime }}{% endif %}</p><button type="button" class="ghost" data-workspace-result="{{ workspace.examination.input.source_run_id }}">Producing run</button></details>
     {{ examine_actions(workspace.examination.actions) }}
   </section>
-  {% endif %}
-  <div class="workspace-derived-list">{% for item in workspace.derived %}<article><div><strong>{{ item.label }}</strong><p class="helper">{{ item.artifact_kind|replace('_',' ') }}</p></div><button class="ghost" type="button" data-examine="{{ item.key }}">{{ 'Examine block sample' if item.artifact_kind == 'filesystem_block_sample' else 'Examine file' }}</button></article>{% else %}<p>No captured files yet. Extract a file in Triage or examine filesystem blocks in Analysis.</p>{% endfor %}</div>
+  {% else %}<div class="workspace-derived-list">{% for item in workspace.derived %}<article><div><strong>{{ item.label }}</strong><p class="helper">{{ item.artifact_kind|replace('_',' ') }}</p></div><button class="ghost" type="button" data-examine="{{ item.key }}">{{ 'Examine block sample' if item.artifact_kind == 'filesystem_block_sample' else 'Examine file' }}</button></article>{% else %}<div class="workspace-start"><h3>No captured files yet</h3><p>{% if workspace.is_disk %}Inspect a file in File triage, then extract or recover its content.{% else %}Examinations that capture content will make it available here.{% endif %}</p><button class="action" type="button" data-workspace-tab="{{ 'triage' if workspace.is_disk else 'analysis' }}">{{ 'Go to File triage' if workspace.is_disk else 'Go to Analysis' }}</button></div>{% endfor %}</div>{% endif %}
 {% elif workspace.tab == 'activity' %}
-  <h2>Activity</h2><p class="helper">Disk preparation, file captures, and examinations of captured content. Showing {{ workspace.activity|length }} of {{ workspace.activity_count }} runs. <a href="{{ url_for('web.case_results', case_id=workspace.case.id) }}">All case results</a></p>
-  {% for run in workspace.activity %}<article class="workspace-activity"><div><strong>{{ run.plan.parameters.parser_id|default(run.tool) }} · {{ run.status }}</strong><p class="helper">{{ run.source_path }} · {{ run.created_at }}</p>{% if run.error %}<p>{{ run.error }}</p>{% endif %}</div><button type="button" class="ghost" data-workspace-result="{{ run.id }}">{{ 'View job' if run.status in ['queued','running'] else 'View result' }}</button></article>{% else %}<p>No work has been run on this evidence yet.</p>{% endfor %}
+  <header class="workspace-stage-heading"><div class="workspace-heading"><h2>Activity</h2><a href="{{ url_for('web.case_results', case_id=workspace.case.id) }}">All case results</a></div><p class="helper">Showing {{ workspace.activity|length }} of {{ workspace.activity_count }} runs for this evidence and its captured files.</p></header>
+  {% for run in workspace.activity %}<article class="workspace-activity" data-operation-slot="run-{{ run.id }}"><div class="workspace-heading"><div><h3>{{ run.plan.parameters.parser_id|default(run.tool) }} <span class="workspace-badge">{{ run.status }}</span></h3><p class="helper"><time datetime="{{ run.created_at }}">{{ run.created_at[:19]|replace("T", " ") }} UTC</time></p>{% if run.error %}<p>{{ run.error }}</p>{% endif %}</div><button type="button" class="ghost" data-workspace-result="{{ run.id }}">{{ 'View job' if run.status in ['queued','running'] else 'View result' }}</button></div></article>{% else %}<p>No work has been run on this evidence yet.</p>{% endfor %}
 {% endif %}
+<div data-operation-slot="tab-result"></div>
 </section>
 {% else %}<section><h2>Add evidence to this case</h2><p>Register a file or collected directory to begin.</p><a class="action" href="/cases#case-{{ workspace.case.id }}">Manage evidence</a></section>{% endif %}
-<script type="application/json" id="workspaceState">{{ {'active': workspace.active, 'tab':workspace.tab, 'input':workspace.selected.key if workspace.selected else ''}|tojson }}</script>
+<script type="application/json" id="workspaceState">{{ {'active': workspace.active, 'tab':workspace.tab, 'context':workspace.context.id if workspace.context else '', 'examine':workspace.examination.input.key if workspace.examination else '', 'input':workspace.selected.key if workspace.selected else ''}|tojson }}</script>

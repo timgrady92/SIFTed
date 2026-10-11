@@ -87,7 +87,7 @@ def disk_journey(selected, observed, runs, partitions, case_id, key):
     return cards
 
 
-def triage_view(context, selected, case_id, key):
+def triage_view(context, selected, case_id, key, runs, inputs):
     if not context or context["tool"] != "fls":
         return None
     try:
@@ -101,6 +101,16 @@ def triage_view(context, selected, case_id, key):
         return {"error": str(exc)}
     navigation = {"case_id": case_id, "input": key, "tab": "triage", "context_run_id": context["id"]}
     result.update(metadata_reason=tool_reason("istat"), extract_reason=tool_reason("icat"))
+    result["selected_entry"] = request.args.get("entry", type=int)
+    # Reopening an entry reuses its recorded work, scoped to this exact inventory
+    # and source hash. An address alone is not an entry identity.
+    completed = {}
+    for run in runs:
+        params = run["plan"]["parameters"]
+        if (run["status"] == "success" and run.get("input_sha256") == selected.get("hash")
+                and params.get("context_run_id") == context["id"] and params.get("entry_id")):
+            completed.setdefault((run["tool"], params["entry_id"]), run["id"])
+    captures = {item["source_run_id"]: item for item in inputs if item["origin"] == "derived"}
     filters = {"directory": directory, "q": result["query"], "kind": result["kind"], "state": result["state"], "scope": result["scope"]}
     result["root_url"] = url_for("evidence.case_workspace", **navigation)
     for crumb in result["breadcrumbs"]:
@@ -109,6 +119,9 @@ def triage_view(context, selected, case_id, key):
     result["next_url"] = url_for("evidence.case_workspace", offset=result["offset"] + 100, **navigation, **filters) if result["offset"] + len(result["rows"]) < result["total"] else None
     geometry = {name: context["plan"]["parameters"][name] for name in ("offset_sector", "sector_size") if name in context["plan"]["parameters"]}
     for row in result["rows"]:
+        row["metadata_run_id"] = completed.get(("istat", row["id"]))
+        capture = captures.get(completed.get(("icat", row["id"])))
+        row["captured_key"] = capture["key"] if capture else None
         params = {**input_payload(selected, case_id), "context_run_id": context["id"], "entry_id": row["id"], **geometry}
         row["metadata_payload"] = {**params, "metadata_address": row["address"]}
         if row["kind"] == "directory" and row["parent"] is not None:
@@ -170,7 +183,7 @@ def workspace(case_id):
         inventories = [card for card in journey if card["inventory_run_id"]]
         if len(inventories) == 1:
             context = validate_context(repo.run(inventories[0]["inventory_run_id"]), selected, case_id)
-    triage = triage_view(context, selected, case_id, key) if tab == "triage" and selected else None
+    triage = triage_view(context, selected, case_id, key, selected_runs, inputs) if tab == "triage" and selected else None
     derived = []
     descendants = {normalize(selected["path"])} if selected else set()
     by_run = {run["id"]: run for run in runs}
@@ -206,8 +219,7 @@ def workspace(case_id):
     result["activity"] = activity[:100]
     result["activity_count"] = len(activity)
     result["active"] = [{"runId": run["id"], "tool": run["tool"],
-                         "next": "triage" if run["tool"] == "fls" and run["plan"]["parameters"].get("recursive")
-                         else "derived" if run["tool"] in {"icat", "blkcat", "blkls"} else ""}
+                         "payload": {"source_path": run["source_path"], **run["plan"]["parameters"]}}
                         for run in activity if run["status"] in {"queued", "running"}]
     return result
 
@@ -243,6 +255,7 @@ def workspace_run(case_id, run_id):
     material_paths = {normalize(item["path"]) for item in model["derived"]}
     reports = [item for item in files if item["name"].lower().endswith((".txt", ".csv", ".json", ".jsonl"))
                and not item["name"].startswith("_sifted/") and normalize(item["path"]) not in material_paths]
+    captured = [item for item in model["derived"] if item["source_run_id"] == run_id]
     name = request.args.get("report", reports[0]["name"] if reports else "")
     report = next((item for item in reports if item["name"] == name), None)
     content, truncated = "", False
@@ -262,7 +275,8 @@ def workspace_run(case_id, run_id):
         except OSError:
             raise ValidationError("This published report is no longer available.")
     return jsonify(html=render_template("_evidence_result.html", run=run, reports=reports[:100],
-                                       report=name, content=content, truncated=truncated),
+                                       report=name, content=content, truncated=truncated, captured=captured,
+                                       workspace=model),
                    **recipe(Plan.from_dict(run["plan"]), runtime_settings()))
 
 
