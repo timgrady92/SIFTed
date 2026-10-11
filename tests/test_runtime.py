@@ -345,43 +345,6 @@ def test_independent_worker_process_consumes_queue_and_excludes_second_worker(ru
     assert Repository(repo.path).artifacts(run["id"])
 
 
-@pytest.mark.parametrize("stop_target", ["launcher", "worker"])
-def test_local_launcher_keeps_web_and_worker_lifetimes_together(tmp_path, stop_target):
-    import socket
-    import urllib.error
-    import urllib.request
-    with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
-        port = listener.getsockname()[1]
-    environment = {**os.environ, "SIFTED_DATABASE_PATH": str(tmp_path / "runtime.db"),
-                   "SIFTED_INPUT_ROOTS": str(tmp_path), "SIFTED_OUTPUT_ROOTS": str(tmp_path), "SIFTED_PORT": str(port)}
-    process = subprocess.Popen([sys.executable, "app.py"], cwd=Path(__file__).resolve().parent.parent,
-                               env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    worker_pid = None
-    try:
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            try:
-                with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=1) as response:
-                    worker = json.load(response)["worker"]
-                if worker["status"] == "online":
-                    worker_pid = worker["pid"]
-                    break
-            except (urllib.error.URLError, TimeoutError):
-                pass
-            time.sleep(0.05)
-        assert worker_pid
-        os.kill(process.pid if stop_target == "launcher" else worker_pid, signal.SIGTERM)
-        code = process.wait(timeout=10)
-        assert (code == 0) == (stop_target == "launcher")
-        assert process_identity(worker_pid) is None
-    finally:
-        if process.poll() is None:
-            process.terminate()
-            process.wait(timeout=10)
-        process.stderr.close()
-
-
 def test_staging_symlink_cannot_write_or_remove_outside_workspace(runtime, tmp_path):
     repo, settings, _, outputs = runtime
     run = compiled(runtime)

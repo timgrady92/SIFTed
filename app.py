@@ -1,5 +1,4 @@
-"""Flask application factory and local launcher."""
-import logging
+"""Flask application factory."""
 import threading
 from flask import Flask
 from sifted_core.api import create_blueprint
@@ -18,8 +17,3 @@ def create_app(config=None):
 
 
 app = create_app()
-
-if __name__ == "__main__":
-    from sifted_core.launcher import run
-    logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    run(app)

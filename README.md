@@ -100,15 +100,25 @@ The sidebar keeps the glossary one click away from any screen. Search by name, c
 Use Python 3.11+ on a SIFT Workstation or Linux machine with the forensic tools installed.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+./sifted setup
 export SIFTED_INPUT_ROOTS="/cases,/mnt/evidence"
 export SIFTED_OUTPUT_ROOTS="/cases"
-python app.py
+./sifted
 ```
 
-Open `http://127.0.0.1:5000`. The local launcher starts one worker alongside the web server. If the worker exits, the launcher stops the web server. Tool execution uses installed binaries independently of the application's virtual environment.
+Open `http://127.0.0.1:5000`. `setup` creates a private `.venv` and installs the pinned runtime dependencies. Python's `venv` support and access to the Python package index are required for setup; ordinary launches do not install anything or require a network connection. Forensic tools must already be installed on the workstation.
+
+The launcher runs Gunicorn alongside exactly one job worker, using the same Python interpreter and configuration. Ctrl+C or SIGTERM stops both services. If either service exits unexpectedly, the launcher stops the other and exits with a failure status so a service manager can restart it. Tool execution uses installed binaries independently of the application's virtual environment.
+
+```bash
+./sifted --port 8080
+./sifted --lan --port 8080
+./sifted --help
+```
+
+`--lan` binds to `0.0.0.0` and provides unauthenticated access; use it only on a trusted network. The default binds to localhost. The script works from any current directory and through a symlink, so it can also be placed on your PATH. It automatically selects the repository's `.venv`; `SIFTED_PYTHON` can select another Python interpreter explicitly.
+
+To update, stop SIFTed, update the checkout, rerun `./sifted setup`, and start it again. The checkout's `data/sifted.sqlite3` persists across setup runs. Use `SIFTED_DATABASE_PATH` to keep state outside the checkout if replacing the entire directory. Setup does not install or upgrade forensic tools.
 
 ## Foundation
 
@@ -143,7 +153,7 @@ Web and worker processes must use the same environment and filesystem permission
 | `SIFTED_TOOL_TIMEOUT_SECONDS` | `14400` | Whole-job execution deadline |
 | `SIFTED_MAX_OUTPUT_BYTES` | `10737418240` | Monitored attempt storage and subprocess output budget |
 | `SIFTED_RESULT_FILE_LIMIT` | `12` | Result links shown per job |
-| `SIFTED_PORT` | `5000` | Local launcher port |
+| `SIFTED_PORT` | `5000` | Launcher port; `--port` takes precedence |
 
 For example, override an installed tool location without changing its adapter:
 
@@ -153,16 +163,7 @@ export SIFTED_BINARIES='{"volatility":["/opt/volatility/bin/vol"],"evtxecmd":["/
 
 Zimmerman adapters prefer `dotnet` plus the installed assembly because some SIFT shell wrappers lose argument boundaries for paths with spaces. Volatility runs offline and uses configured local symbols or its installed cache.
 
-For a WSGI deployment, run the web service and exactly one worker separately:
-
-```bash
-pip install gunicorn
-python -m sifted_core.worker
-# In a second terminal with the same environment:
-gunicorn --bind 127.0.0.1:5000 --workers 2 --threads 8 --timeout 0 wsgi:app
-```
-
-Use your service manager to supervise both processes. `/api/health` reports the worker heartbeat. This application is intended for a trusted local analyst environment; the launch commands bind to localhost.
+For a persistent deployment, configure your service manager to run the absolute path to `sifted` as the analyst account, with the configuration above in its environment. The launcher supervises both services, so only one service unit is needed. Allow at least 20 seconds for shutdown. Gunicorn runs two HTTP processes with eight threads each; forensic jobs stay serial in the separate worker. `/api/health` reports the worker heartbeat.
 
 ## Verification
 
