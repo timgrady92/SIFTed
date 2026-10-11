@@ -1,5 +1,4 @@
 """Single-worker durable queue with streamed subprocess output and recovery."""
-import csv
 import fcntl
 import hashlib
 import json
@@ -17,6 +16,7 @@ from pathlib import Path
 
 from .tool_base import OUTPUT, Plan, Step, allowed, directory_members, resolve_argv, resolve_token, signature
 from .disk_tools import image_sources
+from .filetype_report import write_report
 from .tool_results import process_results
 from .adapters import ADAPTERS
 from .storage import utc_now
@@ -250,49 +250,28 @@ class Worker:
         return result
 
     def _filetype(self, run, plan, output, workspace, log, deadline):
-        source = Path(plan.source)
-        if source.is_file():
-            files = iter([source])
-        elif plan.parameters["recursive"]:
-            files = (Path(root) / name for root, dirs, names in os.walk(source, followlinks=False)
-                     for name in names)
-        else:
-            files = (p for p in source.iterdir() if p.is_file())
         output.mkdir(exist_ok=True)
-        mime_by_extension = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "gif": "image/gif",
-                             "pdf": "application/pdf", "zip": "application/zip", "txt": "text/plain",
-                             "json": "application/json", "exe": "application/x-dosexec", "dll": "application/x-dosexec",
-                             "doc": "application/msword", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                             "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
-        count = mismatches = 0
-        failures = []
-        with open(output / "filetypes.csv", "w", newline="", encoding="utf-8") as handle:
-            writer = csv.writer(handle)
-            writer.writerow(["Path", "Extension", "Detected Type", "Mismatch"])
-            for path in files:
-                self._check(run["id"], output, deadline, plan.max_output_bytes)
-                if path.is_symlink() or not path.is_file() or not allowed(path, self.settings.input_roots):
-                    failures.append("Skipped non-regular or disallowed file: " + str(path))
-                    continue
-                step = Step([str(path) if arg == "{selected_file}" else arg for arg in plan.steps[0].argv],
-                            "Identify " + path.name, OUTPUT + "/identification.tmp", 10)
-                result = self._execute_step(run, step, output, workspace, log, deadline)
-                temporary = output / "identification.tmp"
-                detected = temporary.read_text(errors="replace").strip() if temporary.exists() else ""
-                temporary.unlink(missing_ok=True)
-                if result["return_code"]:
-                    failures.append(result["error"])
-                    continue
-                ext = path.suffix.lstrip(".").lower()
-                expected = mime_by_extension.get(ext)
-                mismatch = bool(plan.parameters["mode"] == "mime" and expected and detected != expected)
-                mismatches += mismatch
-                count += 1
-                if not plan.parameters["mismatch_only"] or mismatch:
-                    writer.writerow([str(path), ext, detected, "Yes" if mismatch else "No"])
-                handle.flush()
-        self.repo.emit(run["id"], "milestone", f"Processed {count} files, {mismatches} mismatches")
-        return {"file_count": count, "mismatch_count": mismatches}, failures
+
+        def identify(path):
+            step = Step([str(path) if arg == "{selected_file}" else arg for arg in plan.steps[0].argv],
+                        "Identify " + path.name, OUTPUT + "/identification.tmp", 10)
+            result = self._execute_step(run, step, output, workspace, log, deadline)
+            temporary = output / "identification.tmp"
+            detected = temporary.read_text(errors="replace").strip() if temporary.exists() else ""
+            temporary.unlink(missing_ok=True)
+            if result["return_code"]:
+                raise OSError(result["error"])
+            return detected
+
+        counts, failures = write_report(
+            plan.source, output / "filetypes.csv", plan.steps[0].argv, plan.parameters,
+            identify=identify,
+            check=lambda: self._check(run["id"], output, deadline, plan.max_output_bytes),
+            permitted=lambda path: allowed(path, self.settings.input_roots),
+        )
+        self.repo.emit(run["id"], "milestone",
+                       f"Processed {counts['file_count']} files, {counts['mismatch_count']} mismatches")
+        return counts, failures
 
     def _publish(self, run, workspace, status):
         """Preserve failed output too; outputs never disappear on rollback."""

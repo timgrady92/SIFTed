@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, request, stream_with_context
 
 from .adapters import compile_plan
 from .tool_base import ValidationError
+from .terminal import recipe
 from .storage import StoreError, utc_now
 
 TERMINAL = {"success", "error", "cancelled", "interrupted"}
@@ -33,10 +34,7 @@ def create_blueprint(repository_factory, settings_factory):
         return jsonify(error=str(exc)), 404 if str(exc) == "Run not found." else 400
 
     def response_plan(plan):
-        commands = plan.commands()
-        return {"command": "\n".join(commands), "commands": commands, "output_path": plan.output_path,
-                "preview_note": "Tool output is staged in <staging_output>; <job_workspace> holds generated configuration. "
-                                "The actual commands and configuration are saved with the run.",
+        return {"output_path": plan.output_path, **recipe(plan),
                 "operation": plan.operation, "parameters": plan.parameters}
 
     @api.post("/api/<tool_id>/preview")

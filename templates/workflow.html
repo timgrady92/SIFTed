@@ -18,7 +18,7 @@
           </label>{% endif %}
         {% endfor %}
       </div>{% endif %}
-    </section><aside class="results-pane"><div class="panel block"><h2>Command</h2><pre id="commandPreview" class="command"></pre></div>
+    </section><aside class="results-pane"><div class="panel block"><h2>SIFT terminal</h2><pre id="commandPreview" class="command"></pre></div>
       <div class="panel block"><h2>Results</h2>{{ run_results() }}<p class="run-status" id="runStatus"></p>
         <button class="ghost wide" id="openLog">View recent log</button><button class="action wide" id="runWorkflow">Run {{ workflow.id }}</button></div></aside></main>
     <div class="log-drawer" id="logDrawer" aria-hidden="true"><div class="drawer-surface"><div class="drawer-header"><h3>Recent log</h3><button class="ghost" id="closeLog">Close</button></div><p class="drawer-status" id="logDrawerStatus"></p><pre class="run-log" id="logDrawerContent"></pre></div></div>

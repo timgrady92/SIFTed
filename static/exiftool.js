@@ -4,7 +4,6 @@ const tooling = window.SiftedTooling;
 const common = tooling?.getCommonElements() || {};
 const sourcePath = common.sourcePath;
 const outputPath = common.outputPath;
-const commandPreview = common.commandPreview;
 const caseSelect = common.caseSelect;
 const runStatus = common.runStatus;
 
@@ -83,9 +82,6 @@ if (tooling) {
       appendMilestone(payload.message || "Milestone");
     },
     onSuccess: (data) => {
-      if (commandPreview) {
-        commandPreview.textContent = data.command || commandPreview.textContent;
-      }
       if (data.output_path && outputPath) {
         outputPath.value = data.output_path;
       }

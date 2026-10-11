@@ -172,7 +172,7 @@
                     <span class="run-card-date">{{ run.created_at[:19] if run.created_at else "—" }}</span>
                   </div>
                   {% if run.command %}
-                    <code class="run-card-command">{{ run.command[:100] }}{% if run.command|length > 100 %}...{% endif %}</code>
+                    <code class="run-card-command" title="Execution record. Use the tool's SIFT terminal snippet to repeat this workflow.">{{ run.command[:100] }}{% if run.command|length > 100 %}...{% endif %}</code>
                   {% endif %}
                 </div>
               </div>

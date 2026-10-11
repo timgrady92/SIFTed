@@ -55,7 +55,7 @@ def execute(integrated, tool, **options):
     preview = client.post(f"/api/{tool}/preview", json=payload)
     created = client.post(f"/api/{tool}/run", json=payload)
     assert created.status_code == 202, created.json
-    assert preview.json["commands"] == created.json["commands"]
+    assert preview.json["terminal_command"] == created.json["terminal_command"]
     Worker(repo, settings).run_once()
     run = repo.run(created.json["run_id"])
     assert run["status"] == "success", run.get("error")

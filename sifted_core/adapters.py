@@ -104,7 +104,7 @@ class FileTypeAdapter(ToolAdapter):
         args = executable(self.tool_id, ["file"], s, not preview)
         args += ["--mime-type", "-b"] if mode == "mime" else (["-b"] if mode == "brief" else [])
         args += ["--", "{selected_file}"]
-        return Plan(self.tool_id, source, output, [Step(args, "Identify each selected file", timeout=10)],
+        return Plan(self.tool_id, source, output, [Step(args, "Identify each selected file", timeout=s.timeout_seconds)],
                     parameters={"mode": mode, "recursive": recursive, "mismatch_only": mismatch_only}, operation="filetype")
 
 

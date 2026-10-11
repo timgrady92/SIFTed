@@ -21,7 +21,7 @@ def test_exiftool_rejects_unknown_format(application):
     assert sifted_app.runtime_repository().runs() == []
 
 
-def test_preview_is_read_only_and_uses_execution_argv(application):
+def test_terminal_preview_is_read_only_and_matches_submitted_recipe(application):
     client, root = application
     source = root / "source with spaces"
     source.write_bytes(b"test")
@@ -29,10 +29,23 @@ def test_preview_is_read_only_and_uses_execution_argv(application):
     preview = client.post("/api/filetype/preview", json=data)
     run = client.post("/api/filetype/run", json=data)
     assert preview.status_code == 200 and run.status_code == 202
-    assert preview.json["commands"] == run.json["commands"]
-    assert "--mime-type -b" in preview.json["command"]
+    assert preview.json["terminal_command"] == run.json["terminal_command"]
+    queued = sifted_app.runtime_repository().run(run.json["run_id"])
+    assert queued["plan"]["steps"][0]["argv"][1:3] == ["--mime-type", "-b"]
+    assert preview.json["terminal_ready"] and preview.json["terminal_command"].startswith("bash <<'")
+    assert "<staging_output>" not in preview.json["terminal_command"]
+    assert "<job_workspace>" not in preview.json["terminal_command"]
     assert not (root / "out").exists()
     assert client.get(f"/api/run/{run.json['run_id']}/status").json["status"] == "queued"
+
+
+def test_terminal_snippet_requires_real_evidence(application):
+    client, _ = application
+    response = client.post("/api/strings/preview", json={})
+    assert response.status_code == 200
+    assert not response.json["terminal_ready"]
+    assert "Select an existing evidence path" in response.json["terminal_command"]
+    assert sifted_app.runtime_repository().runs() == []
 
 
 def test_malformed_requests_do_not_create_jobs(application):

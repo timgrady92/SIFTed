@@ -98,11 +98,29 @@ def test_preview_queue_completion_and_polling_without_event_stream(tmp_path):
                 page.wait_for_timeout(200)
             assert not errors
             page.goto(base + "/strings")
+            page.wait_for_function("document.querySelector('#copyTerminal').disabled")
             page.click('[data-source-mode="manual"]')
             page.fill('#sourcePath', str(source))
             page.fill('#outputPath', str(tmp_path / "results"))
-            page.wait_for_function("document.querySelector('#commandPreview').textContent.includes('evidence with spaces.bin')")
-            assert '-n 4' in page.locator('#commandPreview').inner_text()
+            page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
+            assert '-n 4' in ' '.join(page.locator('#commandPreview').inner_text().replace('\\\n', ' ').split())
+            assert page.locator('#commandPreview').inner_text().startswith("bash <<'")
+            assert '<staging_output>' not in page.locator('#commandPreview').inner_text()
+            # Copy includes every line, even when the displayed block scrolls.
+            page.evaluate("() => { window.copiedSnippet = ''; document.execCommand = () => { window.copiedSnippet = document.querySelector('textarea').value; return true; }; }")
+            page.evaluate("Object.defineProperty(window, 'isSecureContext', {value: false});")
+            page.click('#copyTerminal')
+            assert page.evaluate('window.copiedSnippet') == page.locator('#commandPreview').inner_text()
+            with page.expect_download() as downloaded:
+                page.click('#downloadTerminal')
+            saved = tmp_path / "saved snippet.sh"
+            downloaded.value.save_as(str(saved))
+            assert saved.read_text() == page.evaluate('window.copiedSnippet')
+            page.fill('#sourcePath', str(tmp_path / 'missing evidence'))
+            page.wait_for_function("document.querySelector('#commandPreview').textContent.includes('Source must be')")
+            assert page.locator('#copyTerminal').is_disabled()
+            page.fill('#sourcePath', str(source))
+            page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
             # Losing the entire event stream must not lose terminal job status.
             page.route('**/api/run/*/events', lambda route: route.abort())
             page.click('#runStrings')
@@ -257,7 +275,11 @@ def test_zimmerman_parser_options_queue_and_mapped_sqlite_results(zimmerman_runt
             page.fill('#outputPath',str(outputs/'browser parsed'))
             page.wait_for_function('document.querySelector("#commandPreview").textContent.includes("sqlite-request.json")')
             page.route('**/api/run/*/events',lambda route:route.abort())
-            page.click('#runEzTool');page.wait_for_function('document.querySelector("#runStatus").textContent.includes("Queued")')
+            page.click('#runEzTool')
+            try:
+                page.wait_for_function('document.querySelector("#runStatus").textContent.includes("Queued")', timeout=10000)
+            except playwright.TimeoutError:
+                pytest.fail(f"Queue submission failed: {page.locator('#runStatus').inner_text()}; browser errors: {errors}")
             Worker(repo,settings).run_once()
             page.wait_for_function('document.querySelector("#runStatus").dataset.tone === "success"',timeout=10000)
             result=repo.runs()[0]

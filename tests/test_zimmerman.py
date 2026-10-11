@@ -15,7 +15,8 @@ from sifted_core.catalog import EZ_TOOL_CATALOG
 from sifted_core.storage import Repository
 from sifted_core.tool_base import Settings, ValidationError
 from sifted_core.worker import Worker
-from sifted_core.zimmerman import REQUIRED_COLUMNS, resolve_ez_tool
+from sifted_core.zimmerman import resolve_ez_tool
+from sifted_core.zimmerman_exports import REQUIRED_COLUMNS
 from test_runtime import enqueue
 from zimmerman_samples import (
     custom_jump_list,

@@ -336,43 +336,127 @@
     tone: exitCode === 0 ? "success" : "error",
   });
 
+  let terminalSnippet = "";
+  const terminalControls = () => {
+    const element = document.getElementById("commandPreview");
+    if (!element) return null;
+    let controls = document.getElementById("terminalControls");
+    if (!controls) {
+      controls = document.createElement("div");
+      controls.id = "terminalControls";
+      controls.className = "terminal-controls";
+      const copy = document.createElement("button");
+      copy.id = "copyTerminal";
+      copy.type = "button";
+      copy.className = "ghost";
+      copy.textContent = "Copy Bash snippet";
+      copy.disabled = true;
+      copy.addEventListener("click", async () => {
+        if (!terminalSnippet) return;
+        try {
+          if (window.isSecureContext && navigator.clipboard) {
+            await navigator.clipboard.writeText(terminalSnippet);
+          } else {
+            // SIFT's local HTTP deployment may lack the Clipboard API.
+            const text = document.createElement("textarea");
+            text.value = terminalSnippet;
+            text.style.position = "fixed";
+            text.style.opacity = "0";
+            document.body.append(text);
+            text.select();
+            const copied = document.execCommand("copy");
+            text.remove();
+            copy.focus();
+            if (!copied) throw new Error("Copy unavailable; select the snippet manually.");
+          }
+          document.getElementById("terminalCopyStatus").textContent = "Copied the complete snippet.";
+        } catch (error) {
+          document.getElementById("terminalCopyStatus").textContent = error.message;
+        }
+      });
+      const download = document.createElement("button");
+      download.id = "downloadTerminal";
+      download.type = "button";
+      download.className = "ghost";
+      download.textContent = "Save .sh";
+      download.disabled = true;
+      download.addEventListener("click", () => {
+        if (!terminalSnippet) return;
+        const url = URL.createObjectURL(new Blob([terminalSnippet], {type: "text/x-shellscript;charset=utf-8"}));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "sift-terminal.sh";
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      });
+      const status = document.createElement("span");
+      status.id = "terminalCopyStatus";
+      status.className = "helper";
+      status.setAttribute("role", "status");
+      controls.append(copy, download, status);
+      element.before(controls);
+      const note = document.createElement("p");
+      note.id = "commandPreviewNote";
+      note.className = "helper";
+      element.after(note);
+      element.setAttribute("aria-label", "Complete Bash snippet for the SIFT terminal");
+    }
+    return element;
+  };
+  const renderTerminalRecipe = (data) => {
+    const element = terminalControls();
+    if (!element) return;
+    terminalSnippet = data.terminal_ready ? data.terminal_command : "";
+    element.textContent = data.terminal_command;
+    document.getElementById("commandPreviewNote").textContent = data.terminal_note || "";
+    document.getElementById("copyTerminal").disabled = !terminalSnippet;
+    document.getElementById("downloadTerminal").disabled = !terminalSnippet;
+    document.getElementById("terminalCopyStatus").textContent = "";
+  };
+  terminalControls();
+
   const previewRequests = new Map();
-  const requestPreview = (toolId, buildPayload, onResult) => {
+  const requestPreview = (toolId, buildPayload) => {
     const previous = previewRequests.get(toolId);
+    let body;
+    try {
+      body = JSON.stringify(buildPayload());
+    } catch (error) {
+      if (previous) {
+        clearTimeout(previous.timer);
+        previous.controller.abort();
+      }
+      previewRequests.delete(toolId);
+      renderTerminalRecipe({terminal_ready: false, terminal_command: error.message});
+      return;
+    }
+    // A blur/change event after input must not replace the same ready snippet
+    // or move a button between pointer-down and pointer-up.
+    if (previous?.body === body) return;
     if (previous) {
       clearTimeout(previous.timer);
       previous.controller.abort();
     }
-    const state = { controller: new AbortController(), timer: null };
+    const state = { controller: new AbortController(), timer: null, body };
     previewRequests.set(toolId, state);
+    renderTerminalRecipe({terminal_ready: false, terminal_command: "Validating the selected paths and options…"});
     state.timer = setTimeout(async () => {
       const element = document.getElementById("commandPreview");
       try {
         const response = await fetch(`/api/${toolId}/preview`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildPayload()),
+          body,
           signal: state.controller.signal,
         });
         const data = await response.json();
         if (previewRequests.get(toolId) !== state) return;
         if (!response.ok) throw new Error(data.error || "Unable to preview command.");
-        if (element) {
-          element.textContent = data.command;
-          element.title = data.preview_note || "";
-          let note = document.getElementById("commandPreviewNote");
-          if (!note) {
-            note = document.createElement("p");
-            note.id = "commandPreviewNote";
-            note.className = "helper";
-            element.after(note);
-          }
-          note.textContent = data.preview_note || "";
-        }
-        if (onResult) onResult(data);
+        renderTerminalRecipe(data);
       } catch (error) {
         if (error.name !== "AbortError" && previewRequests.get(toolId) === state && element) {
-          element.textContent = error.message;
+          renderTerminalRecipe({terminal_ready: false, terminal_command: error.message});
+          previewRequests.delete(toolId);
         }
       }
     }, 150);
@@ -486,6 +570,7 @@
           throw new Error(data.error || `Unable to run ${toolName}.`);
         }
 
+        renderTerminalRecipe(data);
         if (onSuccess) {
           onSuccess(data);
         }

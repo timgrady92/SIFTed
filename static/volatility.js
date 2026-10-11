@@ -4,7 +4,6 @@ const tooling = window.SiftedTooling;
 const common = tooling?.getCommonElements() || {};
 const sourcePath = common.sourcePath;
 const outputPath = common.outputPath;
-const commandPreview = common.commandPreview;
 const runStatus = common.runStatus;
 
 // Tool-specific elements
@@ -19,57 +18,8 @@ const bundleButtons = Array.from(document.querySelectorAll("[data-bundle-plugins
 const pluginSearch = document.getElementById("pluginSearch");
 const pluginSelectedOnly = document.getElementById("pluginSelectedOnly");
 const pluginCount = document.getElementById("pluginCount");
-const toggleCommandView = document.getElementById("toggleCommandView");
-const commandSummary = document.getElementById("commandSummary");
-
 let currentRunId = "";
-let showFullCommands = false;
-let commandList = [];
-
-const renderCommandPreview = () => {
-  if (!commandPreview) {
-    return;
-  }
-  if (!commandList.length) {
-    commandPreview.textContent = "Select plugins to build the command list.";
-    if (commandSummary) {
-      commandSummary.textContent = "";
-    }
-    if (toggleCommandView) {
-      toggleCommandView.disabled = true;
-      toggleCommandView.textContent = "Show full list";
-    }
-    return;
-  }
-
-  if (commandSummary) {
-    const plural = commandList.length === 1 ? "" : "s";
-    const base = `${commandList.length} command${plural} generated.`;
-    commandSummary.textContent =
-      showFullCommands || commandList.length <= 3
-        ? base
-        : `${base} Showing first 3.`;
-  }
-
-  if (toggleCommandView) {
-    toggleCommandView.disabled = commandList.length <= 3;
-    toggleCommandView.textContent = showFullCommands ? "Show condensed" : "Show full list";
-  }
-
-  if (showFullCommands || commandList.length <= 3) {
-    commandPreview.textContent = commandList.join("\n\n");
-    return;
-  }
-
-  const visible = commandList.slice(0, 3);
-  const remaining = commandList.length - visible.length;
-  visible.push(`... ${remaining} more command${remaining === 1 ? "" : "s"} hidden ...`);
-  commandPreview.textContent = visible.join("\n\n");
-};
-
-const buildCommand = () => {
-  tooling?.requestPreview("volatility", buildPayload, (data) => { commandList = data.commands || []; renderCommandPreview(); });
-};
+const buildCommand = () => tooling.requestPreview("volatility", buildPayload);
 
 // Initialize drawers using helper
 if (tooling) {
@@ -212,10 +162,6 @@ if (tooling) {
       if (runResults) runResults.hidden = true;
     },
     setRunIdRef: id => { currentRunId = id; },
-    onSuccess: data => {
-      commandList = data.commands;
-      renderCommandPreview();
-    },
   });
 }
 
@@ -300,12 +246,6 @@ if (pluginSelectedOnly) {
   pluginSelectedOnly.addEventListener("change", filterPlugins);
 }
 
-if (toggleCommandView) {
-  toggleCommandView.addEventListener("click", () => {
-    showFullCommands = !showFullCommands;
-    renderCommandPreview();
-  });
-}
 
 buildCommand();
 filterPlugins();

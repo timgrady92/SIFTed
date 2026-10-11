@@ -23,7 +23,6 @@
   tooling.createRunHandler({runButton: document.getElementById("runWorkflow"), runStatus: common.runStatus,
     apiEndpoint: `/api/${tool}/run`, toolName: tool, buildPayload,
     setRunIdRef: id => {currentRunId = id;},
-    onSuccess: data => {common.commandPreview.textContent = data.command;}
   });
   const query = new URLSearchParams(window.location.search);
   if (query.has("case_id")) common.caseSelect.value = query.get("case_id");

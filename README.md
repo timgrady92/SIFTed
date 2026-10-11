@@ -8,7 +8,7 @@
 
 Most forensic tools assume you already know what you're doing. SIFTed assumes you're learning.
 
-Every workflow shows the exact commands that will run. Every output links back to the artifacts that matter. Every guide explains not just *what* to look for, but *why* it matters and *when* to stop looking.
+Every workflow shows how to run the analysis directly in a SIFT terminal. Every output links back to the artifacts that matter. Every guide explains not just *what* to look for, but *why* it matters and *when* to stop looking.
 
 **We measure success by obsolescence.** An analyst who needs SIFTed indefinitely isn't learning—they're dependent. The goal is internalized knowledge, not a permanent crutch.
 
@@ -30,11 +30,13 @@ No command-line memorization required. No syntax errors. No wasted cycles on typ
 
 Every action teaches:
 
-- **Command preview**: See exactly what will execute before running. Read it. Understand it. Eventually, type it yourself.
+- **SIFT terminal snippets**: Copy or save a complete Bash workflow using your selected evidence and options. Required directories, rules, maps and private captures are included. Read the flag explanations, reproduce the results directly on SIFT, and eventually build the commands yourself.
 - **Integrated glossary**: Hover over forensic terms for instant definitions. Artifacts, registry keys, persistence mechanisms, Windows event codes—all searchable and contextual.
 - **Investigation guides**: Hypothesis-driven playbooks that frame problems, identify evidence sources, warn about pitfalls, and define exit conditions.
 
 The UI is explicit about what it's doing. Nothing is hidden. Nothing is magic.
+
+Each paste creates a fresh folder beside your chosen output path, keeping previous results intact. If no output is selected, terminal results go under `~/sifted-terminal`. Saved snippets run with `bash sift-terminal.sh` and require the corresponding forensic tools installed on SIFT; the SIFTed application and checkout are not required. SQLite map snippets include the standalone Python executor and selected profiles, using Python 3.11+ and PyYAML. [Terminal workflow validation](docs/terminal-validation.md) describes the checks and the distinction between native reports and the app's case tracking.
 
 ### Structured Output
 

@@ -376,7 +376,8 @@ const renderJobs = (runs) => {
 
     const command = document.createElement("div");
     command.className = "job-command";
-    command.textContent = run.command || "Command: (not set)";
+    command.textContent = "Execution record: " + (run.command || "pending");
+    command.title = "Use the tool's SIFT terminal snippet to repeat this workflow.";
 
     const toggle = document.createElement("button");
     toggle.className = "ghost wide job-toggle";
