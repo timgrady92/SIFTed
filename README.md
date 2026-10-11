@@ -150,6 +150,18 @@ The previous JSON stores, in-process runners, arbitrary command logging endpoint
 
 See [the runtime design](docs/runtime.md) for extension points, recovery, and testing. Curated workflows, guides, and the glossary remain the analyst-facing foundation.
 
+## Evidence workspace and direct tools
+
+Open `/evidence` or choose **Evidence workspace** from a case to start with a registered input. The workspace recommends actions from content signatures, native tool capabilities, acquisition type and existing results. The original Tools pages and URLs remain available; both interfaces use the same adapters, durable queue, case history and copyable terminal recipes.
+
+Disk workflows carry verified partition starts and sector sizes into filesystem examination. Complete extracted, carved and plugin-produced files appear as new inputs; supporting reports stay with their producing runs. Raw block samples remain labeled blocks and offer identification, byte and string examination. Successful results can be reopened without executing tools again, while failed and partial work remains visible in the run history.
+
+Raw `.raw` files are ambiguous until their acquisition context is known. Use **Evidence identity and classification → Registered type** to select disk or memory. Recognized content signatures take precedence over misleading names; adapters still validate each preview and execution. Missing tools are shown as unavailable. The workspace does not automatically scan or queue jobs, and recorded processing does not establish forensic findings.
+
+Input navigation shows 100 items per page and the latest 50 runs per selected input. Guided partition choices use up to 100 rows from a hash-verified map no larger than 1 MiB; full raw reports and the existing analysis pages remain available. Background updates announce changes without moving your location or replacing open controls.
+
+Compare **Evidence** and **Tools** against the same case for A/B evaluation. Neither interface requires a separate database or workflow status store.
+
 ## Configuration
 
 Web and worker processes must use the same environment and filesystem permissions.

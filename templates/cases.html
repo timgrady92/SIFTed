@@ -95,6 +95,7 @@
                   <span class="case-meta-pill">ID {{ case.id[:8] }}</span>
                   <span class="case-meta-pill">Created {{ case.created_at }}</span>
                   <a class="case-meta-pill case-results-link" href="{{ url_for('web.case_results', case_id=case.id) }}">View All Results</a>
+                  <a class="case-meta-pill" href="{{ url_for('evidence.case_workspace', case_id=case.id) }}">Evidence workspace</a>
                 </div>
                 {% if case.summary %}
                   <p class="case-summary">{{ case.summary }}</p>

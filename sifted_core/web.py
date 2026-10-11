@@ -162,8 +162,11 @@ def workflow_analysis(run_id):
             table, total, _ = parse_csv_table(target, row_limit=100, row_offset=offset)
         except (OSError, ValueError) as exc:
             return error_response(str(exc))
+    files, truncated = build_run_manifest(run)
+    derived_keys = {entry["path"]: "d:" + str(entry["id"]) for entry in runtime_repository().derived_inputs(run["case_id"])} if run.get("case_id") and request.args.get("workspace_input") else {}
     return render_template("workflow_analysis.html", run=run, summary=summary, table=table, total=total,
-                           offset=offset, examinations=examinations)
+                           offset=offset, examinations=examinations, result_files=files, result_truncated=truncated,
+                           workspace_input=request.args.get("workspace_input"), derived_keys=derived_keys)
 
 
 @web.route("/guides")
@@ -309,6 +312,7 @@ def cases():
             except (OSError, ExecutionFailure):
                 return error_response("Unable to hash stable evidence.")
             artifacts.append({"id": uuid.uuid4().hex, "type": detect_artifact_type(source),
+                              "type_basis": "filename_hint",
                               "path": source, "label": os.path.basename(source), "hash": digest,
                               "added_at": created_at})
         runtime_repository().add_case({"id": uuid.uuid4().hex, "name": name,
@@ -470,6 +474,7 @@ def add_artifact(case_id):
     if not case:
         return jsonify({"error": "Case not found."}), 404
 
+    type_basis = "analyst" if artifact_type else "filename_hint"
     # Auto-detect type if not provided
     if not artifact_type:
         artifact_type = detect_artifact_type(normalized_path)
@@ -492,6 +497,7 @@ def add_artifact(case_id):
     artifact = {
         "id": uuid.uuid4().hex,
         "type": artifact_type,
+        "type_basis": type_basis,
         "path": normalized_path,
         "label": label,
         "hash": artifact_hash,

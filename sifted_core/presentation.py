@@ -50,14 +50,8 @@ def detect_artifact_type(path):
         if basename_upper == name.upper() or basename_upper.endswith(name.upper()):
             return "registry"
 
-    # Check extensions for each type
-    for type_key, type_info in ARTIFACT_TYPES.items():
-        if type_key == "registry":
-            continue
-        if ext in type_info.get("extensions", []):
-            return type_key
-
-    return "other"
+    matches = [key for key, info in ARTIFACT_TYPES.items() if ext in info.get("extensions", [])]
+    return matches[0] if len(matches) == 1 else "other"
 
 
 EZ_CATEGORIES = [

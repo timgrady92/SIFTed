@@ -88,4 +88,5 @@ tooling.createRunHandler({ runButton, runStatus: common.runStatus, apiEndpoint: 
   onStart: () => { if (!toolsById[selectedToolId]?.installed) throw new Error('Select an available parser.'); },
 });
 tooling.attachInputListeners([common.sourcePath, common.outputPath, common.caseSelect], buildCommand);
-if (toolData.length) selectTool((toolData.find(tool => tool.installed) || toolData[0]).id);
+const requestedParser = new URLSearchParams(window.location.search).get('tool_id');
+if (toolData.length) selectTool(toolsById[requestedParser] ? requestedParser : (toolData.find(tool => tool.installed) || toolData[0]).id);

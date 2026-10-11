@@ -120,7 +120,7 @@ def compile_plan(tool_id, payload, settings, repository, preview=False):
         raise ValidationError("Unknown or unsupported workflow.")
     if not isinstance(payload, dict):
         raise ValidationError("Request must be a JSON object.")
-    unknown = payload.keys() - {"case_id", "source_path", "output_path"} - adapter.parameter_names
+    unknown = payload.keys() - {"case_id", "source_path", "output_path", "workspace_input"} - adapter.parameter_names
     if unknown:
         raise ValidationError("Unknown workflow parameters: " + ", ".join(sorted(unknown)))
     case_id = text(payload, "case_id") or None
@@ -129,6 +129,14 @@ def compile_plan(tool_id, payload, settings, repository, preview=False):
         raise ValidationError("Case not found.")
     raw_source = text(payload, "source_path")
     source = normalize(raw_source) if raw_source else "<source_path>"
+    workspace_input = text(payload, "workspace_input")
+    if workspace_input:
+        from .evidence_workspace import select_input
+        if not case:
+            raise ValidationError("Workspace analysis requires its selected case.")
+        selected = select_input(case, repository, workspace_input)
+        if normalize(selected["path"]) != source:
+            raise ValidationError("Workspace evidence does not match the requested source.")
     derived = repository.artifact_by_path(source) if raw_source else None
     if derived and (not derived.get("complete") or derived.get("case_id") != case_id or derived.get("status") != "success"):
         derived = None
@@ -158,7 +166,7 @@ def compile_plan(tool_id, payload, settings, repository, preview=False):
             raise ValidationError("Output folder must be absent or empty; existing results are preserved.")
         if Path(output + ".log").exists():
             raise ValidationError("A run log already exists at this destination; choose a new output folder.")
-    plan = adapter.build(payload, source, output, settings, preview)
+    plan = adapter.build({k: v for k, v in payload.items() if k != "workspace_input"}, source, output, settings, preview)
     context = None
     context_run_id = text(payload, "context_run_id")
     if context_run_id:
@@ -170,6 +178,11 @@ def compile_plan(tool_id, payload, settings, repository, preview=False):
             raise ValidationError("Filesystem geometry does not match the context run.")
         if context["tool"] == "mmls" and context.get("analysis", {}).get("sector_size") != plan.parameters.get("sector_size"):
             raise ValidationError("Disk sector size does not match the partition map.")
+        if workspace_input and context["tool"] == "mmls":
+            from .evidence_workspace import partition_choices
+            rows = partition_choices(context, repository, settings)
+            if plan.parameters.get("offset_sector") not in {row["offset_sector"] for row in rows}:
+                raise ValidationError("Selected filesystem is not in the verified partition map.")
         plan.parameters["context_run_id"] = context_run_id
     plan.max_output_bytes = settings.max_output_bytes
     input_record = {"path": source, "kind": "directory" if Path(source).is_dir() else "file",

@@ -2,7 +2,7 @@
 import sys
 import threading
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, parse_qs, urlparse
 
 import pytest
 from werkzeug.serving import make_server
@@ -292,3 +292,115 @@ def test_zimmerman_parser_options_queue_and_mapped_sqlite_results(zimmerman_runt
             browser.close()
     finally:
         server.shutdown();server.server_close();thread.join(timeout=5)
+
+
+from test_integrated_tools import integrated as integrated
+from test_evidence_workspace import workspace_runtime as workspace_runtime
+
+
+@pytest.mark.browser
+def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tmp_path):
+    app, client, repo, settings, source, outputs, case, key = workspace_runtime
+    worker = Worker(repo, settings)
+    server = make_server('127.0.0.1', 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():
+                pytest.skip('Chromium is not installed.')
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': 390, 'height': 844})
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            base = f'http://127.0.0.1:{server.server_port}'
+            workspace_url = base + f'/case/{case}/workspace?' + urlencode({'input': key})
+            page.goto(workspace_url)
+            assert page.locator('[data-evidence-action="mmls"]').count() == 1
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            page.screenshot(path=str(tmp_path/'workspace-mobile.png'), full_page=True)
+            page.locator('[data-evidence-action="mmls"] a').click()
+            page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
+            assert page.locator('#caseSelect').input_value() == case
+            assert page.locator('#sourcePath').input_value() == str(source)
+            with page.expect_request('**/api/mmls/run') as submitted:
+                page.click('#runWorkflow')
+            assert submitted.value.post_data_json['workspace_input'] == key
+            page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
+            worker.run_once()
+            page.wait_for_selector('#runResultsLinks a[href*="/analysis"]')
+            page.click('#runResultsLinks a[href*="/analysis"]')
+            page.get_by_role('link', name='← Return to evidence workspace').click()
+            page.locator('.evidence-filesystem a', has_text='Browse files').click()
+            page.wait_for_function("document.querySelector('#commandPreview').textContent.includes('-o 2048')")
+            page.click('#runWorkflow')
+            page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
+            worker.run_once()
+            page.wait_for_selector('#runResultsLinks a[href*="/analysis"]')
+            page.click('#runResultsLinks a[href*="/analysis"]')
+            page.get_by_role('link', name='Extract file').first.click()
+            page.wait_for_function("document.querySelector('#commandPreview').textContent.includes('42-128-1')")
+            page.click('#runWorkflow')
+            page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
+            worker.run_once()
+            page.wait_for_selector('#runResultsLinks a[href*="/analysis"]')
+            page.click('#runResultsLinks a[href*="/analysis"]')
+            page.locator('a[href*="/workflow/xxd?"]').click()
+            page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
+            assert parse_qs(urlparse(page.url).query)['workspace_input'][0].startswith('d:')
+            assert page.locator('#sourcePath').input_value() != str(source)
+            page.click('#runWorkflow')
+            page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
+            worker.run_once()
+            page.wait_for_selector('#runResultsLinks a[href*="/analysis"]')
+            page.click('#runResultsLinks a[href*="/analysis"]')
+            page.get_by_role('link', name='← Return to evidence workspace').click()
+            assert page.locator('[data-evidence-action="xxd"] a', has_text='View latest successful result').count() == 1
+            assert len(repo.runs()) == 4 and all(r['status'] == 'success' for r in repo.runs())
+            assert not errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.browser
+def test_evidence_workspace_prefills_specific_zimmerman_parser(zimmerman_runtime):
+    from test_zimmerman import input_for
+    from test_evidence_workspace import register
+    repo, settings, evidence, outputs, native = zimmerman_runtime
+    source = input_for(zimmerman_runtime, 'sqlecmd')
+    app = create_app({'TESTING': True, 'SIFTED_DATABASE_PATH': str(repo.path), 'SIFTED_INPUT_ROOTS': settings.input_roots,
+                      'SIFTED_OUTPUT_ROOTS': settings.output_roots, 'SIFTED_EZ_ROOT': settings.ez_root, 'SIFTED_BINARIES': settings.binaries})
+    case, key = register(app.test_client(), repo, source)
+    server = make_server('127.0.0.1', 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():
+                pytest.skip('Chromium is not installed.')
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            base = f'http://127.0.0.1:{server.server_port}'
+            page.goto(base + f'/case/{case}/workspace?' + urlencode({'input': key}))
+            page.locator('[data-evidence-action="sqlecmd"] a').click()
+            page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
+            assert page.locator('.ez-tool-card.active').get_attribute('data-tool-id') == 'sqlecmd'
+            assert page.locator('#sourcePath').input_value() == str(source)
+            assert page.locator('#caseSelect').input_value() == case
+            page.click('#runEzTool')
+            page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
+            Worker(repo, app.config['SETTINGS']).run_once()
+            page.wait_for_function("document.querySelector('#runStatus').dataset.tone === 'success'")
+            page.get_by_role('link', name='← Return to evidence workspace').click()
+            assert page.locator('[data-evidence-action="sqlecmd"] a', has_text='View latest successful result').count() == 1
+            assert not errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

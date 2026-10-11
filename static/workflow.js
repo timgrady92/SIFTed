@@ -14,8 +14,9 @@
         data[field.dataset.parameter] = numeric ? Number(field.value) : field.value;
       }
     }
-    const context = new URLSearchParams(window.location.search).get("context_run_id");
-    if (context) data.context_run_id = context;
+    const query = new URLSearchParams(window.location.search);
+    const context = query.get("context_run_id");
+    if (context && data.source_path === query.get("source_path") && data.case_id === query.get("case_id")) data.context_run_id = context;
     return data;
   };
   const preview = () => tooling.requestPreview(tool, buildPayload);
@@ -25,12 +26,6 @@
     setRunIdRef: id => {currentRunId = id;},
   });
   const query = new URLSearchParams(window.location.search);
-  if (query.has("case_id")) common.caseSelect.value = query.get("case_id");
-  common.caseSelect.dispatchEvent(new Event("change", {bubbles: true}));
-  if (query.has("source_path")) {
-    document.querySelector('[data-source-mode="manual"]')?.click();
-    common.sourcePath.value = query.get("source_path");
-  }
   for (const field of fields) if (query.has(field.dataset.parameter)) {
     if (field.type === "checkbox") field.checked = query.get(field.dataset.parameter) === "true";
     else field.value = query.get(field.dataset.parameter);

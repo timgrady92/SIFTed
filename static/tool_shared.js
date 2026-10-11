@@ -245,7 +245,7 @@
     return { close: () => { completed = true; clearInterval(timer); source?.close(); } };
   };
 
-  const showRunResults = async (runId) => {
+  const showRunResults = async (runId, submitted = {}) => {
     const panel = document.getElementById("runResults");
     const links = document.getElementById("runResultsLinks");
     if (!panel || !links) return;
@@ -263,11 +263,17 @@
         if (result.error) outcome.textContent += ` — ${result.error.slice(0, 300)}`;
         links.append(outcome);
       }
-      if (data.analysis_url) {
+      if (data.analysis_url || submitted.workspace_input) {
         const link = document.createElement("a");
         link.className = "run-result-link";
-        link.href = data.analysis_url;
-        link.textContent = "Inspect structured results";
+        const target = new URL(data.analysis_url || `/run/${runId}/analysis`, window.location.origin);
+        if (submitted.workspace_input) {
+          target.searchParams.set("workspace_input", submitted.workspace_input);
+          target.searchParams.set("case_id", submitted.case_id);
+          if (launchQuery.get("workspace_context")) target.searchParams.set("workspace_context", launchQuery.get("workspace_context"));
+        }
+        link.href = target.pathname + target.search;
+        link.textContent = data.analysis_url ? "Inspect structured results" : "Open results";
         links.append(link);
       }
       for (const item of data.files || []) {
@@ -416,11 +422,31 @@
   terminalControls();
 
   const previewRequests = new Map();
+  const launchQuery = new URLSearchParams(window.location.search);
+  const workspacePayload = (data) => {
+    const input = launchQuery.get("workspace_input");
+    if (input && data.case_id === launchQuery.get("case_id") && data.source_path === launchQuery.get("source_path")) {
+      return {...data, workspace_input: input};
+    }
+    return data;
+  };
+  document.addEventListener("DOMContentLoaded", () => {
+    const common = getCommonElements();
+    if (launchQuery.has("case_id") && common.caseSelect) {
+      common.caseSelect.value = launchQuery.get("case_id");
+      common.caseSelect.dispatchEvent(new Event("change", {bubbles: true}));
+    }
+    if (launchQuery.has("source_path") && common.sourcePath) {
+      document.querySelector('[data-source-mode="manual"]')?.click();
+      common.sourcePath.value = launchQuery.get("source_path");
+      common.sourcePath.dispatchEvent(new Event("change", {bubbles: true}));
+    }
+  }, {once: true});
   const requestPreview = (toolId, buildPayload) => {
     const previous = previewRequests.get(toolId);
     let body;
     try {
-      body = JSON.stringify(buildPayload());
+      body = JSON.stringify(workspacePayload(buildPayload()));
     } catch (error) {
       if (previous) {
         clearTimeout(previous.timer);
@@ -560,10 +586,11 @@
         if (onStart) {
           await onStart();
         }
+        const submitted = workspacePayload(buildPayload());
         const response = await fetch(apiEndpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildPayload()),
+          body: JSON.stringify(submitted),
         });
         const data = await response.json();
         if (!response.ok) {
@@ -600,7 +627,7 @@
               const exitCode = Number(payload.message || 0);
               const { message, tone } = getCompletionStatus(exitCode);
               setRunStatus(runStatus, payload.error || message, tone);
-              showRunResults(runId);
+              showRunResults(runId, submitted);
               config.onDone?.(payload);
               resetRunButton();
             },

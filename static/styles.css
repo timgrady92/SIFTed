@@ -7885,3 +7885,19 @@ body:has(.guides-toggle) .glossary-toggle {
 .stagger-3 { animation: fade-up 0.6s var(--ease-out-expo) 0.75s both; }
 .stagger-4 { animation: fade-up 0.6s var(--ease-out-expo) 0.85s both; }
 .stagger-5 { animation: fade-up 0.6s var(--ease-out-expo) 0.95s both; }
+/* Optional evidence-first workspace; existing tool layouts remain available. */
+.evidence-workspace { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 24px; max-width: 1440px; margin: 0 auto; padding: 0 24px 48px; }
+.evidence-inputs { align-self: start; padding: 20px; min-width: 0; }
+.evidence-input { display: block; padding: 12px; margin: 8px 0; border: 1px solid var(--border, #334155); border-radius: 8px; overflow-wrap: anywhere; color: var(--text-main); text-decoration: none; }
+.evidence-input span { display: block; font-size: .8rem; opacity: .7; margin-top: 4px; }
+.evidence-input.active { border-color: var(--accent, #4fc3f7); background: rgba(79,195,247,.08); }
+.evidence-input:hover, .evidence-input:focus-visible { border-color: var(--neon-teal); }
+.evidence-content { min-width: 0; display: grid; gap: 24px; }
+.evidence-path, .evidence-content .helper { overflow-wrap: anywhere; }
+.evidence-content details { margin-top: 16px; }
+.evidence-content summary { cursor: pointer; }
+.evidence-type-form { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+.evidence-action-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+.evidence-run, .evidence-filesystem { padding: 16px 0; border-top: 1px solid var(--border, #334155); }
+.workspace-return { max-width: 1440px; margin: 12px auto; padding: 0 24px; }
+@media (max-width: 760px) { .evidence-workspace { grid-template-columns: minmax(0, 1fr); padding: 0 16px 32px; } }

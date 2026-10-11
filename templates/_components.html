@@ -108,11 +108,15 @@
       <a class="nav-link job-pill" id="activeJobs" href="/cases" hidden>Active jobs</a>
       <a class="nav-link{% if active == 'home' %} active{% endif %}" href="/">Home</a>
       <a class="nav-link{% if active == 'cases' %} active{% endif %}" href="/cases">Cases</a>
+      <a class="nav-link{% if active == 'evidence' %} active{% endif %}" href="/evidence">Evidence</a>
       <a class="nav-link{% if active == 'tools' %} active{% endif %}" href="/tools">Tools</a>
       <a class="nav-link{% if active == 'guides' %} active{% endif %}" href="/guides">Guides</a>
       <a class="nav-link{% if active == 'glossary' %} active{% endif %}" href="/glossary">Glossary</a>
     </div>
   </nav>
+  {% if request.args.get('workspace_input') and request.args.get('case_id') %}
+    <div class="workspace-return"><a class="ghost" href="{{ url_for('evidence.case_workspace', case_id=request.args.get('case_id'), input=request.args.get('workspace_input'), context_run_id=request.args.get('workspace_context')) }}">← Return to evidence workspace</a></div>
+  {% endif %}
 {% endmacro %}
 
 {% macro glossary_tiles() %}
