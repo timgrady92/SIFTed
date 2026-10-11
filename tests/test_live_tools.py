@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from sifted_core.adapters import Settings, ValidationError, compile_plan
+from sifted_core.adapters import compile_plan
+from sifted_core.tool_base import Settings, ValidationError
 from sifted_core.storage import Repository, utc_now
 from sifted_core.worker import Worker
 

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | {{ title }}</title><link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" /></head>
+  <body>
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav, glossary_sidebar, guides_sidebar, active_jobs_drawer %}
+    {{ site_nav("tools") }}
+    <header class="hero compact"><div class="hero-text"><p class="eyebrow">Tools</p><h1>{{ title }}</h1>
+      <p class="lead">{% if title == 'Disk Analysis' %}Map partitions, inspect filesystems, extract files, and examine targeted data units without mounting evidence.{% else %}Identify and examine file content while preserving source hashes and tool provenance.{% endif %}</p></div></header>
+    <main class="carving">
+      {% if title == 'File Examination' %}<p class="helper">Also available: <a href="/filetype">File identification</a>, <a href="/strings">Printable strings</a>, and <a href="/exiftool">Embedded metadata</a>.</p>{% endif %}
+      <section class="tool-grid">
+        {% for workflow in workflows %}<article class="tool-card"><div class="tool-header"><h2>{{ workflow.label }}</h2><span class="tool-status">{{ 'Installed' if workflow.installed else 'Not installed' }}</span></div>
+          <p class="tool-detail">{{ workflow.description }}</p><p class="helper">{{ workflow.id }}</p>
+          <a class="action" href="{{ url_for('web.additional_workflow', tool_id=workflow.id) }}">Open workflow</a></article>{% endfor %}
+      </section>
+    </main>
+    {{ glossary_sidebar() }}{{ guides_sidebar() }}{{ active_jobs_drawer() }}
+    <script defer src="{{ url_for('static', filename='app.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='glossary.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='guides-sidebar.js') }}"></script>
+  </body>
+</html>

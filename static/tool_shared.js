@@ -255,6 +255,13 @@
       const response = await fetch(`/api/run/${runId}/results`);
       if (!response.ok) throw new Error("Unable to load result files.");
       const data = await response.json();
+      if (data.analysis_url) {
+        const link = document.createElement("a");
+        link.className = "run-result-link";
+        link.href = data.analysis_url;
+        link.textContent = "Inspect structured results";
+        links.append(link);
+      }
       for (const item of data.files || []) {
         const link = document.createElement("a");
         link.className = "run-result-link";

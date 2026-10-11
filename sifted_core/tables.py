@@ -4,7 +4,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from .adapters import signature
+from .tool_base import signature
 
 
 class CsvTables:

@@ -195,6 +195,19 @@ class Repository:
             return [json.loads(row[0]) for row in db.execute(
                 "SELECT data FROM artifacts WHERE run_id=? ORDER BY id", (run_id,))]
 
+    def artifact_by_path(self, path):
+        with self.connection() as db:
+            row = db.execute("SELECT a.id,a.data,r.status FROM artifacts a JOIN runs r ON r.id=a.run_id WHERE a.path=?",
+                             (path,)).fetchone()
+            return {**json.loads(row["data"]), "id": row["id"], "status": row["status"]} if row else None
+
+    def derived_inputs(self, case_id):
+        with self.connection() as db:
+            values = [dict(json.loads(row["data"]), id=row["id"]) for row in db.execute(
+                "SELECT a.id,a.data FROM artifacts a JOIN runs r ON r.id=a.run_id WHERE r.case_id=? AND r.status='success' ORDER BY a.id",
+                (case_id,))]
+        return [entry for entry in values if entry.get("complete") and not entry["name"].startswith("_sifted/")]
+
     def heartbeat(self, pid):
         with self.connection() as db:
             db.execute("INSERT OR REPLACE INTO metadata VALUES ('worker',?)",

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | {{ run.tool }} results</title><link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" /></head>
+  <body>
+    <div class="noise"></div>{% from "_components.html" import site_nav %}{{ site_nav("tools") }}
+    <header class="hero compact"><div class="hero-text"><p class="eyebrow">{{ run.tool }} · {{ run.status }}</p><h1>Analysis results</h1>
+      <p class="lead">{{ run.source_path }}</p></div></header>
+    <main class="carving">
+      {% if run.error %}<p class="run-status">{{ run.error }}</p>{% endif %}
+      <section class="card block"><h2>Context</h2><p class="helper">Run {{ run.id }}. Original output and provenance remain in {{ run.output_path }}.</p>
+        {% if run.plan.parameters.offset_sector is defined %}<p>Filesystem offset: {{ run.plan.parameters.offset_sector }} disk sectors. Sector size: {{ run.plan.parameters.sector_size|default('auto-detected') }} bytes.</p>{% endif %}
+        {% if summary.sector_size %}<p>Observed disk sector size: {{ summary.sector_size }} bytes.</p>{% endif %}
+        {% if summary.allocation_state %}<p>Observed filesystem data-unit allocation: <strong>{{ summary.allocation_state }}</strong>.</p>{% endif %}
+        {% if summary.direction %}<p>Direction: {{ summary.direction }}. Mapped address: <strong>{{ summary.mapped_address if summary.mapped_address is not none else 'No verified mapping available' }}</strong>.</p>{% endif %}
+        {% if summary.direction == 'original_to_unallocated' %}<p class="helper">The stream position is zero-based and verified against the unallocated-unit listing. Raw blkcalc report: {{ summary.reported_address|default('No numeric report', true) }}. Tool versions can report a different index base.</p>{% endif %}
+        {% if summary.unparsed_lines %}<p>{{ summary.unparsed_lines }} lines could not be interpreted. Inspect unparsed.txt and the original output before drawing conclusions.</p>{% endif %}
+      </section>
+      {% if examinations %}<section class="card block"><h2>Examine captured content</h2><p class="helper">Each examination verifies the captured file against its published SHA-256 and records the producing run.</p>
+        {% for next in examinations %}<a class="ghost" href="{{ url_for('web.additional_workflow', tool_id=next, source_path=run.output_path + '/' + summary.derived_file, case_id=run.case_id or '') }}">{{ next }}</a>{% endfor %}
+      </section>{% endif %}
+      {% if summary.tables %}<section class="card block"><h2>CSV exports</h2><p>{{ summary.entry_count }} records across {{ summary.csv_count }} exports.</p>{% for item in summary.tables %}<p><a href="{{ url_for('web.view_file', path=run.output_path + '/' + item.file, view='table') }}">{{ item.file }}</a> · {{ item.entry_count }} records</p>{% endfor %}</section>{% endif %}
+      {% if table %}<section class="card block"><h2>{{ total }} entries in {{ summary.table }}</h2><p class="helper">{% if table.rows %}Entries {{ offset + 1 }}–{{ offset + table.rows|length }}. {% endif %}<a href="{{ url_for('web.view_file', path=run.output_path + '/' + summary.table, view='table') }}">Open the table viewer</a>.</p>
+        <div class="file-table-container"><table class="file-table"><thead><tr>{% for col in table.columns %}<th>{{ col }}</th>{% endfor %}{% if run.tool in ['mmls', 'fls'] %}<th>Continue</th>{% endif %}</tr></thead><tbody>
+          {% for row in table.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}{% if run.tool in ['mmls', 'fls'] %}<td>
+            {% if run.tool == 'mmls' and row[2] == 'allocated' %}
+              {% for next in ['fsstat', 'fls'] %}<a class="ghost" href="{{ url_for('web.additional_workflow', tool_id=next, source_path=run.source_path, case_id=run.case_id or '', offset_sector=row[3], sector_size=summary.sector_size or '', context_run_id=run.id) }}">{{ next }}</a>{% endfor %}
+            {% elif run.tool == 'fls' %}
+              <a class="ghost" href="{{ url_for('web.additional_workflow', tool_id='istat', source_path=run.source_path, case_id=run.case_id or '', offset_sector=run.plan.parameters.offset_sector, sector_size=run.plan.parameters.sector_size|default(''), metadata_address=row[0], context_run_id=run.id) }}">Inspect metadata</a>
+              {% if row[2] == 'directory' %}<a class="ghost" href="{{ url_for('web.additional_workflow', tool_id='fls', source_path=run.source_path, case_id=run.case_id or '', offset_sector=run.plan.parameters.offset_sector, sector_size=run.plan.parameters.sector_size|default(''), directory_inode=row[0], context_run_id=run.id) }}">Browse directory</a>
+              {% elif row[2] == 'file' %}<a class="ghost" href="{{ url_for('web.additional_workflow', tool_id='icat', source_path=run.source_path, case_id=run.case_id or '', offset_sector=run.plan.parameters.offset_sector, sector_size=run.plan.parameters.sector_size|default(''), metadata_address=row[0], entry_name=row[1].rsplit('/', 1)[-1], recover_deleted='true' if row[3] == 'Yes' else 'false', context_run_id=run.id) }}">Extract file</a>{% endif %}
+            {% endif %}
+          </td>{% endif %}</tr>{% endfor %}
+        </tbody></table></div>
+        <nav class="tool-actions" aria-label="Result pages">{% if offset > 0 %}<a class="ghost" href="{{ url_for('web.workflow_analysis', run_id=run.id, offset=[0, offset - 100]|max) }}">Previous 100</a>{% endif %}{% if offset + table.rows|length < total %}<a class="ghost" href="{{ url_for('web.workflow_analysis', run_id=run.id, offset=offset + 100) }}">Next 100</a>{% endif %}</nav>
+      </section>{% endif %}
+      {% if run.tool == 'fls' %}<section class="card block"><h2>Targeted data-unit examination</h2><p class="helper">Use a filesystem data-unit address from filesystem metadata; disk-sector offsets use a different coordinate system.</p>
+        {% for next in ['blkstat', 'blkcat', 'blkls', 'blkcalc'] %}<a class="ghost" href="{{ url_for('web.additional_workflow', tool_id=next, source_path=run.source_path, case_id=run.case_id or '', offset_sector=run.plan.parameters.offset_sector, sector_size=run.plan.parameters.sector_size|default(''), context_run_id=run.id) }}">{{ next }}</a>{% endfor %}</section>{% endif %}
+      {% if run.case_id %}<a class="action" href="{{ url_for('web.case_results', case_id=run.case_id) }}">All case results</a>{% endif %}
+    </main>
+  </body>
+</html>

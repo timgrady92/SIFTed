@@ -5,7 +5,8 @@ import uuid
 
 from flask import Blueprint, jsonify, request, stream_with_context
 
-from .adapters import ValidationError, compile_plan
+from .adapters import compile_plan
+from .tool_base import ValidationError
 from .storage import StoreError, utc_now
 
 TERMINAL = {"success", "error", "cancelled", "interrupted"}

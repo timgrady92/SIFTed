@@ -18,7 +18,7 @@ EZ_TOOL_CATALOG = {
     "amcacheparser": {
         "label": "AmcacheParser",
         "summary": "Program presence (Amcache.hve)",
-        "description": "Parses Amcache.hve to list installed or executed programs with hashes and timestamps.",
+        "description": "Parses Amcache.hve for program inventory, hashes, and timestamps. Presence alone does not prove execution.",
         "input_hint": "Source: Amcache.hve file",
         "input_mode": "file",
         "csv_name": "amcache.csv",
@@ -61,8 +61,8 @@ EZ_TOOL_CATALOG = {
     },
     "mftecmd": {
         "label": "MFTECmd",
-        "summary": "MFT and USN activity",
-        "description": "Parses the NTFS $MFT (and optionally $UsnJrnl) for file activity timelines.",
+        "summary": "NTFS MFT file activity",
+        "description": "Parses the NTFS $MFT for file metadata and activity timelines.",
         "input_hint": "Source: $MFT file",
         "input_mode": "file",
         "csv_name": "mft.csv",
@@ -72,8 +72,8 @@ EZ_TOOL_CATALOG = {
     },
     "appcompatcacheparser": {
         "label": "AppCompatCacheParser",
-        "summary": "ShimCache execution evidence",
-        "description": "Parses the Application Compatibility Cache (ShimCache) from the SYSTEM registry hive to show programs that have executed.",
+        "summary": "ShimCache program presence",
+        "description": "Parses the Application Compatibility Cache (ShimCache) from the SYSTEM registry hive. Cached program presence requires corroboration before inferring execution.",
         "input_hint": "Source: SYSTEM registry hive",
         "input_mode": "file",
         "csv_name": "shimcache.csv",

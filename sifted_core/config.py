@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 
-from .adapters import Settings
+from .tool_base import Settings
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 

@@ -5,11 +5,13 @@ import os
 import uuid
 from datetime import datetime, timezone
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
-from .adapters import normalize as normalize_path, allowed as is_path_allowed, resolve_ez_tool as discover_ez_tool
+from .tool_base import normalize as normalize_path, allowed as is_path_allowed, resolve_ez_tool as discover_ez_tool
 from .catalog import EZ_TOOL_ORDER
 from .context import runtime_repository, runtime_settings
 from .presentation import ARTIFACT_TYPES, detect_artifact_type, LINUX_TRIAGE_BUNDLES, WINDOWS_TRIAGE_BUNDLES, WINDOWS_DEFAULT_PLUGINS, EZ_CATEGORIES
 from .worker import ExecutionFailure, hash_file
+from .workflow_catalog import WORKFLOWS, CATEGORIES
+from .tool_base import executable
 from .viewers import read_text_preview, parse_csv_table, parse_strings_table, parse_foremost_audit, parse_bulk_extractor_feature, detect_text_table_format, parse_json_table
 
 logger = logging.getLogger(__name__)
@@ -115,6 +117,65 @@ def memory():
 @web.route("/tools")
 def tools():
     return render_template("tools.html")
+
+
+@web.get("/disk-analysis")
+@web.get("/file-examination")
+def additional_tools():
+    category = request.path.lstrip("/")
+    entries = []
+    for tool_id in CATEGORIES[category]:
+        entry = dict(WORKFLOWS[tool_id])
+        try:
+            executable(tool_id, [tool_id], runtime_settings())
+            entry["installed"] = True
+        except ValueError:
+            entry["installed"] = False
+        entries.append(entry)
+    return render_template("workflow_category.html", workflows=entries, title=entries[0]["category"])
+
+
+@web.get("/workflow/<tool_id>")
+def additional_workflow(tool_id):
+    workflow = WORKFLOWS.get(tool_id)
+    if not workflow:
+        return error_response("Workflow not found.", 404)
+    return render_template("workflow.html", cases=load_cases(), workflow=workflow)
+
+
+@web.get("/run/<run_id>/analysis")
+def workflow_analysis(run_id):
+    run, error = run_or_error(run_id)
+    if error:
+        return error
+    summary = run.get("analysis", {})
+    table = None
+    total = 0
+    offset = max(0, request.args.get("offset", 0, type=int))
+    examinations = []
+    if summary.get("derived_file") and run["status"] == "success":
+        target = os.path.join(run["output_path"], summary["derived_file"])
+        if is_path_allowed(target, runtime_settings().output_roots):
+            try:
+                with open(target, "rb") as handle:
+                    header = handle.read(1024)
+                examinations = ["xxd"]
+                if b"\x00" not in header:
+                    examinations.append("head")
+                if b"%PDF-" in header and summary.get("artifact_kind") == "extracted_file":
+                    examinations += ["pdfinfo", "pdftotext"]
+            except OSError:
+                pass
+    if summary.get("table"):
+        target = os.path.join(run["output_path"], summary["table"])
+        if not is_path_allowed(target, runtime_settings().output_roots):
+            return error_response("Result is outside allowed roots.", 403)
+        try:
+            table, total, _ = parse_csv_table(target, row_limit=100, row_offset=offset)
+        except (OSError, ValueError) as exc:
+            return error_response(str(exc))
+    return render_template("workflow_analysis.html", run=run, summary=summary, table=table, total=total,
+                           offset=offset, examinations=examinations)
 
 
 @web.route("/guides")
@@ -378,6 +439,20 @@ def get_case(case_id):
     return jsonify({"error": "Case not found."}), 404
 
 
+@web.get("/api/case/<case_id>/inputs")
+def case_inputs(case_id):
+    case = runtime_repository().case(case_id)
+    if not case:
+        return error_response("Case not found.", 404)
+    values = list(case.get("artifacts", []))
+    for entry in runtime_repository().derived_inputs(case_id):
+        if not is_path_allowed(entry["path"], runtime_settings().output_roots) or not os.path.isfile(entry["path"]):
+            continue
+        values.append({"id": entry["id"], "path": entry["path"], "hash": entry["sha256"], "type": "derived_file",
+                       "label": entry["name"], "source_run_id": entry["run_id"]})
+    return jsonify(inputs=values)
+
+
 @web.route("/api/case/<case_id>/artifacts", methods=["POST"])
 def add_artifact(case_id):
     """Add an artifact to a case."""
@@ -618,7 +693,8 @@ def run_results(run_id):
     if error:
         return error
     files, truncated = build_run_manifest(run)
-    return jsonify(files=files, truncated=truncated)
+    return jsonify(files=files, truncated=truncated,
+                   analysis_url=url_for("web.workflow_analysis", run_id=run_id) if run.get("analysis") else None)
 
 
 @web.route("/api/browse")

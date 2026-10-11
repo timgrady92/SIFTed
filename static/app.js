@@ -10,7 +10,6 @@ const initCaseContext = () => {
   }
 
   let autoImage = "";
-  let cachedArtifacts = {};
 
   const ARTIFACT_TYPE_LABELS = {
     disk_image: "Disk Image",
@@ -19,6 +18,7 @@ const initCaseContext = () => {
     event_log: "Event Log",
     artifact_file: "Artifact File",
     other: "Other",
+    derived_file: "Tool output (hash verified)",
   };
 
   const populateArtifactSelect = (artifacts) => {
@@ -61,21 +61,14 @@ const initCaseContext = () => {
       return;
     }
 
-    // Check cache first
-    if (cachedArtifacts[caseId]) {
-      populateArtifactSelect(cachedArtifacts[caseId]);
-      return;
-    }
-
     try {
-      const response = await fetch(`/api/case/${caseId}`);
+      const response = await fetch(`/api/case/${caseId}/inputs`);
       if (!response.ok) {
         populateArtifactSelect([]);
         return;
       }
       const data = await response.json();
-      const artifacts = data.case?.artifacts || [];
-      cachedArtifacts[caseId] = artifacts;
+      const artifacts = data.inputs || [];
       populateArtifactSelect(artifacts);
     } catch (error) {
       populateArtifactSelect([]);

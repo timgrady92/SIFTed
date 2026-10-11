@@ -12,7 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from sifted_core.adapters import Plan, Settings, Step, ValidationError, compile_plan, resolve_ez_tool
+from sifted_core.adapters import compile_plan
+from sifted_core.tool_base import Plan, Settings, Step, ValidationError, resolve_ez_tool
 from sifted_core.storage import Repository, StoreError, utc_now
 from sifted_core.tables import CsvTables
 from sifted_core.worker import Worker, process_identity
@@ -38,7 +39,7 @@ def option(name): return args[args.index(name)+1]
 if tool in {"foremost", "scalpel", "bulk-extractor"}:
  p=Path(option("-o")); p.mkdir(parents=True); (p/"audit.txt").write_text("preserved raw output")
 elif tool=="eric-zimmerman":
- p=Path(option("--csv")); p.mkdir(parents=True); (p/option("--csvf")).write_text("Name,Value\\nExample,1\\n")
+ p=Path(option("--csv")); p.mkdir(parents=True); (p/option("--csvf")).write_text("EventId,RecordNumber\\n4624,1\\n")
 elif tool=="log2timeline":
  p=Path(option("--storage_file")); p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes(b"storage")
 elif tool=="psort": Path(option("-w")).write_text("Time,Value\\n2026-01-01,1\\n")
@@ -78,6 +79,7 @@ def test_every_adapter_runs_through_shared_worker(runtime, tool, options):
     repo, settings, source, outputs = runtime
     options = dict(options)
     if tool == "eric-zimmerman":
+        source.write_bytes(b"ElfFile\x00synthetic event log")
         options["source_path"] = str(source)
     run = compiled(runtime, tool, **options)
     Worker(repo, settings).run_once()
@@ -249,7 +251,7 @@ def test_zimmerman_prefers_dotnet_assembly_over_shell_wrapper(runtime, monkeypat
     dll = Path(settings.ez_root) / "EvtxeCmd/EvtxECmd.dll"
     dll.parent.mkdir(parents=True)
     dll.write_bytes(b"assembly")
-    monkeypatch.setattr("sifted_core.adapters.shutil.which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr("sifted_core.tool_base.shutil.which", lambda name: "/usr/bin/" + name)
     tool = resolve_ez_tool("evtxecmd", settings)
     assert tool["argv_prefix"] == ["/usr/bin/dotnet", str(dll)]
 

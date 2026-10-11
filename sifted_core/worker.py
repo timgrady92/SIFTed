@@ -15,7 +15,9 @@ import threading
 import time
 from pathlib import Path
 
-from .adapters import OUTPUT, Plan, Step, allowed, directory_members, resolve_argv, resolve_token, signature
+from .tool_base import OUTPUT, Plan, Step, allowed, directory_members, resolve_argv, resolve_token, signature
+from .disk_tools import image_sources
+from .tool_results import process_results
 from .storage import utc_now
 
 logger = logging.getLogger(__name__)
@@ -113,6 +115,7 @@ class Worker:
         termination = None
         code = 1
         stdout_lines = 0
+        stdout_bytes = 0
         stdout_last_byte = None
         try:
             if step.stdout:
@@ -144,6 +147,11 @@ class Worker:
                     if captured > run["plan"]["max_output_bytes"]:
                         raise ExecutionFailure("Subprocess output budget exceeded; output is incomplete.")
                     if key.data == "stdout" and stdout_file:
+                        stdout_bytes += len(chunk)
+                        if step.max_stdout_bytes is not None and stdout_bytes > step.max_stdout_bytes:
+                            remaining = max(0, step.max_stdout_bytes - (stdout_bytes - len(chunk)))
+                            stdout_file.write(chunk[:remaining])
+                            raise ExecutionFailure("Tool exceeded its bounded output limit; captured output is incomplete.")
                         stdout_file.write(chunk)
                         stdout_lines += chunk.count(b"\n")
                         stdout_last_byte = chunk[-1]
@@ -188,6 +196,7 @@ class Worker:
             log.flush()
         result = {"label": step.label, "argv": argv, "return_code": code,
                   "started_at": started, "completed_at": utc_now(), "error": error,
+                  "stdout_bytes": stdout_bytes,
                   "stdout_lines": stdout_lines + int(stdout_last_byte is not None and stdout_last_byte != 10)}
         if termination:
             termination.step_result = result
@@ -294,12 +303,18 @@ class Worker:
         workspace_owned = False
         try:
             plan = Plan.from_dict(run["plan"])
+            original_input = self.repo.input(run["id"])
             # Revalidate durable requests at execution time, after queue waiting.
-            if not allowed(plan.source, self.settings.input_roots) or not allowed(plan.output_path, self.settings.output_roots):
+            derived_allowed = original_input.get("source_run_id") and allowed(plan.source, self.settings.output_roots)
+            if not (allowed(plan.source, self.settings.input_roots) or derived_allowed) or not allowed(plan.output_path, self.settings.output_roots):
                 raise ExecutionFailure("Run paths are no longer allowed.")
             if str(Path(plan.output_path).resolve()) != plan.output_path:
                 raise ExecutionFailure("Output path changed while queued.")
-            original_input = self.repo.input(run["id"])
+            if original_input.get("image_paths") and image_sources(plan.source) != original_input["image_paths"]:
+                raise ExecutionFailure("Image segment membership changed while queued.")
+            for member in original_input.get("related_files", []):
+                if not allowed(member["path"], self.settings.input_roots) or signature(member["path"]) != member["signature"]:
+                    raise ExecutionFailure("Image segment changed or is no longer allowed.")
             if signature(plan.source) != original_input["signature"]:
                 raise ExecutionFailure("Input changed while queued; register or select the current evidence again.")
             if original_input["kind"] == "directory" and directory_members(plan.source) != original_input["members"]:
@@ -324,6 +339,13 @@ class Worker:
                 extra.update(input_sha256=digest, input_size_bytes=size)
                 if original_input.get("baseline_sha256") and digest != original_input["baseline_sha256"]:
                     raise ExecutionFailure("Input SHA-256 differs from the registered evidence baseline.")
+                if original_input.get("related_files"):
+                    extra["input_files"] = [{"path": plan.source, "sha256": digest, "size_bytes": size}]
+                    for member in original_input["related_files"]:
+                        digest, size = hash_file(member["path"], integrity_check)
+                        if member.get("baseline_sha256") and digest != member["baseline_sha256"]:
+                            raise ExecutionFailure("Image segment SHA-256 differs from the context run.")
+                        extra["input_files"].append({"path": member["path"], "sha256": digest, "size_bytes": size})
             else:
                 self.repo.emit(run["id"], "status", "Verifying directory evidence integrity...")
                 hashes = []
@@ -385,9 +407,16 @@ class Worker:
                             raise ExecutionFailure("Tool completed without its expected output: " + pattern)
                 if signature(plan.source) != original_input["signature"]:
                     raise ExecutionFailure("Input changed during execution; results are incomplete.")
+                if original_input.get("image_paths") and image_sources(plan.source) != original_input["image_paths"]:
+                    raise ExecutionFailure("Image segment membership changed during execution.")
+                for member in original_input.get("related_files", []):
+                    if signature(member["path"]) != member["signature"]:
+                        raise ExecutionFailure("Image segment changed during execution; results are incomplete.")
                 if original_input["kind"] == "directory" and directory_members(plan.source) != original_input["members"]:
                     raise ExecutionFailure("Directory evidence changed during execution; results are incomplete.")
                 self._check(run["id"], output, deadline, plan.max_output_bytes)
+                if status == "success" and plan.postprocess:
+                    extra.update(process_results(plan, output, integrity_check))
                 log.flush()
                 os.fsync(log.fileno())
         except ExecutionFailure as exc:

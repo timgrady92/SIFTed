@@ -93,7 +93,19 @@ The sidebar keeps the glossary one click away from any screen. Search by name, c
 | Memory Analysis | Volatility 3 | Extract processes, network connections, malware indicators from RAM dumps |
 | Feature Extraction | Bulk Extractor | Scan large datasets for emails, URLs, credit cards, EXIF data |
 | Timeline Creation | Plaso (log2timeline) | Build unified timelines from filesystem and artifact timestamps |
-| Artifact Parsing | Eric Zimmermann tools | Parse Windows artifacts: Prefetch, Amcache, LNK files, Jump Lists, Event Logs, MFT |
+| Artifact Parsing | Eric Zimmermann tools | Parse Windows artifacts: Amcache, ShimCache, LNK files, Jump Lists, Event Logs, MFT, registry hives, and mapped SQLite databases |
+| Disk Analysis | mmls, fsstat, fls, istat, icat, blkstat, blkcat, blkls, blkcalc | Map partitions, browse filesystems, inspect metadata, extract files, and examine targeted data units |
+| File Examination | head, xxd, pdfinfo, pdftotext, file, strings, ExifTool | Read bounded text/hex samples, identify formats, and examine PDF properties and text |
+
+Disk analysis starts at `/disk-analysis`; bounded file examination starts at `/file-examination`. Existing file identification, strings, and metadata workflows provide the corresponding utilities from the sibling SIFTed application. EvtxECmd and MFTECmd remain in Artifact Parsing, with input-signature checks and explicit expected CSV exports.
+
+Partition and file listings preserve raw tool output alongside streaming CSV interpretations. Structured results link to filesystem details, directory browsing, inode inspection, file extraction, and targeted block tools. Offsets are **disk sectors**; block addresses are **filesystem data units**. Set the disk sector size when it differs from the image format or raw-image default. NTFS attribute addresses such as `42-128-1` remain intact for `icat`; `istat` inspects their base metadata record.
+
+Conventional split raw (`.000`/`.001`) and EWF (`.E01`/`.Ex01`) sequences are enumerated explicitly. Every segment gets an identity snapshot and SHA-256; gaps, symlinks, and changed membership are rejected. Select the first segment. Advanced image formats, encrypted containers, and deleted-file recovery depend on the installed Sleuth Kit; a successful extraction does not prove original deleted content is intact.
+
+Completed outputs appear as selectable case inputs. Follow-up examinations retain the producing run and verify the published SHA-256, including when evidence and output roots are separate. Failed or incomplete outputs are not offered as derived inputs. `icat` preserves binary bytes; `blkcat` reads one data unit, and `blkls` reads only unallocated units in a bounded range. Exceeding a sample limit fails the run and marks retained output incomplete.
+
+`blkcalc` output is retained verbatim. For original-to-unallocated mapping, the worker also records a `blkls` allocation listing and computes a verified zero-based stream position, avoiding index-base differences observed in installed tool versions. These positions refer to a complete unallocated stream, not a targeted `blkls` sample.
 
 ## Quick Start
 
@@ -185,4 +197,4 @@ python -m playwright install chromium
 pytest -m browser -q
 ```
 
-Real SIFT smoke tests cover strings (ASCII and UTF-16), ExifTool CSV/JSON, MIME mismatches, normal/safe Foremost, Scalpel, Bulk Extractor, Plaso extraction/export, and LECmd parsing of a synthetic Unicode shortcut using temporary synthetic evidence and paths containing spaces. Comprehensive Windows artifact and memory fixtures are not bundled; those parsers are covered by deterministic adapter tests and installation discovery, not by claims of forensic validation.
+Real SIFT smoke tests cover strings (ASCII and UTF-16), ExifTool CSV/JSON, MIME mismatches, normal/safe Foremost, Scalpel, Bulk Extractor, Plaso extraction/export, and LECmd parsing of a synthetic Unicode shortcut. Synthetic partitioned ext4 images exercise all nine Sleuth Kit tools, exact binary extraction, allocation and mapping, and 4,096-byte sector geometry. A generated PDF exercises Poppler; a generated NTFS filesystem exercises extraction and MFTECmd parsing of its MFT. Browser checks follow a filesystem listing through extraction into a hash-verified derived examination. Fixtures and output paths are temporary and include spaces. Comprehensive EVTX and memory fixtures are not bundled, so these checks establish integration, not parser accuracy across all forensic formats and versions.

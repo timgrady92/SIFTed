@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SIFTed | {{ workflow.label }}</title><link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" /></head>
+  <body data-workflow="{{ workflow.id }}">
+    <div class="noise"></div>
+    {% from "_components.html" import site_nav, run_context, run_results, browse_drawer, glossary_sidebar, guides_sidebar, active_jobs_drawer %}
+    {{ site_nav("tools") }}
+    <header class="hero compact"><div class="hero-text"><p class="eyebrow">{{ workflow.category }} · {{ workflow.id }}</p><h1>{{ workflow.label }}</h1><p class="lead">{{ workflow.description }}</p></div></header>
+    <main class="foremost"><section class="work-pane">
+      {{ run_context(cases, '/cases/<case-name>/' + workflow.id + '/<timestamp>', workflow.id, true, 'Source', 'Evidence path', '/cases/evidence.dd', 'Select original evidence or a completed tool output from the case.') }}
+      {% if workflow.fields %}<div class="card block"><h2>Options</h2>
+        {% for field in workflow.fields %}
+          {% if field.type == 'checkbox' %}<label class="toggle"><input data-parameter="{{ field.name }}" type="checkbox" {% if field.default %}checked{% endif %} />{{ field.label }}</label>
+          {% else %}<label class="input-stack">{{ field.label }}
+            {% if field.type == 'select' %}<select data-parameter="{{ field.name }}">{% for value, label in field.choices %}<option value="{{ value }}" {% if value == field.default %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+            {% else %}<input data-parameter="{{ field.name }}" type="{{ field.type }}" value="{{ field.default }}" {% if field.type == 'number' %}min="{{ field.min }}" max="{{ field.max }}" step="1"{% endif %} placeholder="{{ field.placeholder|default('') }}" />{% endif %}
+          </label>{% endif %}
+        {% endfor %}
+      </div>{% endif %}
+    </section><aside class="results-pane"><div class="panel block"><h2>Command</h2><pre id="commandPreview" class="command"></pre></div>
+      <div class="panel block"><h2>Results</h2>{{ run_results() }}<p class="run-status" id="runStatus"></p>
+        <button class="ghost wide" id="openLog">View recent log</button><button class="action wide" id="runWorkflow">Run {{ workflow.id }}</button></div></aside></main>
+    <div class="log-drawer" id="logDrawer" aria-hidden="true"><div class="drawer-surface"><div class="drawer-header"><h3>Recent log</h3><button class="ghost" id="closeLog">Close</button></div><p class="drawer-status" id="logDrawerStatus"></p><pre class="run-log" id="logDrawerContent"></pre></div></div>
+    {{ browse_drawer() }}{{ glossary_sidebar() }}{{ guides_sidebar() }}{{ active_jobs_drawer() }}
+    <script src="{{ url_for('static', filename='app.js') }}"></script><script src="{{ url_for('static', filename='glossary.js') }}"></script>
+    <script src="{{ url_for('static', filename='guides-sidebar.js') }}"></script><script src="{{ url_for('static', filename='tool_shared.js') }}"></script>
+    <script src="{{ url_for('static', filename='workflow.js') }}"></script>
+  </body>
+</html>

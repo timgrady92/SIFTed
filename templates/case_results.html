@@ -160,6 +160,7 @@
               <div class="run-card">
                 <div class="run-card-header">
                   <span class="tool-chip">{{ run.tool }}</span>
+                  {% if run.analysis %}<a href="{{ url_for('web.workflow_analysis', run_id=run.id) }}">Inspect structured results</a>{% endif %}
                   <span class="run-status-pill" data-status="{{ run.status }}">
                     {{ run.status }}
                   </span>
