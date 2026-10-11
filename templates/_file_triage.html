@@ -1,0 +1,37 @@
+<section class="card block" aria-label="File triage">
+  <p class="eyebrow">Find → inspect → extract → examine</p><h2>File triage</h2>
+  {% set triage = workspace.triage %}
+  {% if not triage %}<p>Choose a prepared filesystem to browse its inventory.</p><div class="tool-actions">
+    {% for card in workspace.journey if card.triage_url %}<a class="action" href="{{ card.triage_url }}">Explore files at sector {{ card.offset_sector }}</a>{% endfor %}
+    <a class="ghost" href="{{ url_for('evidence.case_workspace', case_id=workspace.case.id, input=workspace.selected.key, tab='analysis') }}">Prepare a filesystem</a></div>
+  {% elif triage.error %}<p class="run-status" data-tone="error">{{ triage.error }}</p><a class="ghost" href="{{ url_for('evidence.case_workspace', case_id=workspace.case.id, input=workspace.selected.key, tab='analysis') }}">Return to filesystem preparation</a>
+  {% else %}
+  <p class="helper">Filesystem at sector {{ workspace.context.plan.parameters.offset_sector }} · {{ triage.counts.total }} names · {{ triage.counts.deleted }} deleted entries · {{ triage.counts.reallocated }} reallocated entries</p>
+  <p class="helper">Names and allocation flags come from the filesystem listing. They do not identify content or guarantee recovery. Extract a file to examine its bytes and choose content-specific tools.</p>
+  {% if triage.metadata_reason %}<p class="helper">Metadata inspection unavailable: {{ triage.metadata_reason }}</p>{% endif %}
+  {% if triage.extract_reason %}<p class="helper">File extraction unavailable: {{ triage.extract_reason }}</p>{% endif %}
+  {% if triage.unparsed_lines %}<p class="run-status">{{ triage.unparsed_lines }} listing lines could not be interpreted. This inventory may be incomplete; inspect the original listing.</p>{% endif %}
+  {% if triage.deleted_only %}<p class="run-status">This inventory includes deleted entries only.</p>{% endif %}
+  {% if triage.directory_inode %}<p class="helper">This listing starts at metadata address {{ triage.directory_inode }}, rather than the filesystem root.</p>{% endif %}
+  <nav class="triage-breadcrumbs" aria-label="Directory location"><a href="{{ triage.root_url }}">{{ 'Listing root' if triage.directory_inode else 'Filesystem root' }}</a>{% for crumb in triage.breadcrumbs %}<span aria-hidden="true">/</span><a href="{{ crumb.url }}">{{ crumb.name }}</a>{% endfor %}</nav>
+  <form class="triage-filters" method="get">
+    <input type="hidden" name="input" value="{{ workspace.selected.key }}" /><input type="hidden" name="tab" value="triage" /><input type="hidden" name="context_run_id" value="{{ triage.run_id }}" />
+    {% if triage.directory %}<input type="hidden" name="directory" value="{{ triage.directory }}" />{% endif %}
+    <label>Search names<input type="search" name="q" value="{{ triage.query }}" maxlength="256" placeholder="Filename or path" /></label>
+    <label>Search scope<select name="scope"><option value="directory" {% if triage.scope == 'directory' %}selected{% endif %}>Current directory</option><option value="filesystem" {% if triage.scope == 'filesystem' %}selected{% endif %}>Entire inventory</option></select></label>
+    <label>Entry type<select name="kind">{% for value, label in [('', 'All entries'), ('file', 'Files'), ('directory', 'Directories'), ('other', 'Other entries')] %}<option value="{{ value }}" {% if triage.kind == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Listing state<select name="state">{% for value, label in [('', 'All states'), ('allocated', 'Not marked deleted'), ('deleted', 'Deleted'), ('reallocated', 'Reallocated')] %}<option value="{{ value }}" {% if triage.state == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button class="action" type="submit">Filter entries</button><a class="ghost" href="{{ triage.root_url }}">Reset</a>
+  </form>
+  <p role="status">{{ triage.total }} matching entries{% if triage.total %} · showing {{ triage.offset + 1 }}–{{ triage.offset + triage.rows|length }}{% endif %}</p>
+  <div class="file-table-container"><table class="file-table triage-table"><thead><tr><th>Name / path</th><th>Type</th><th>Metadata address</th><th>Listing state</th><th>Investigate</th></tr></thead><tbody>
+    {% for row in triage.rows %}<tr data-triage-entry="{{ row.id }}">
+      <td data-label="Name / path">{% if row.directory_url %}<a href="{{ row.directory_url }}">{{ row.path if triage.scope == 'filesystem' else row.name }}</a>{% if row.ambiguous_path %}<span class="helper">Duplicate path · open a listing by metadata address</span>{% endif %}{% else %}{{ row.path if triage.scope == 'filesystem' else row.name }}{% endif %}</td>
+      <td data-label="Type">{{ row.kind }}</td><td data-label="Metadata address">{{ row.address }}</td><td data-label="Listing state">{{ 'Deleted' if row.deleted else 'Not marked deleted' }}{% if row.reallocated %} · Reallocated{% endif %}</td>
+      <td data-label="Investigate"><div class="tool-actions">{% if not triage.metadata_reason %}<a class="ghost" href="{{ row.metadata_url }}">Inspect metadata</a>{% else %}<button class="ghost" disabled>Inspect metadata</button>{% endif %}{% if row.extract_url %}{% if not triage.extract_reason %}<a class="ghost" href="{{ row.extract_url }}">{{ 'Recover file' if row.deleted else 'Extract file' }}</a>{% else %}<button class="ghost" disabled>Extract file</button>{% endif %}{% endif %}</div></td>
+    </tr>{% else %}<tr><td colspan="5">No matching entries. Adjust the filters or search the entire inventory.</td></tr>{% endfor %}
+  </tbody></table></div>
+  <nav class="tool-actions" aria-label="Triage pages">{% if triage.previous_url %}<a class="ghost" href="{{ triage.previous_url }}">Previous 100</a>{% endif %}{% if triage.next_url %}<a class="ghost" href="{{ triage.next_url }}">Next 100</a>{% endif %}</nav>
+  <details><summary>Inventory source and provenance</summary><p>Run {{ triage.run_id }} · {{ 'Recursive inventory' if triage.recursive else 'Single-directory listing' }}</p><a href="{{ url_for('web.workflow_analysis', run_id=triage.run_id, case_id=workspace.case.id, workspace_input=workspace.selected.key, workspace_context=triage.run_id, workspace_tab='triage') }}">View original listing and reports</a></details>
+  {% endif %}
+</section>

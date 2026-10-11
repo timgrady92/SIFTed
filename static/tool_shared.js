@@ -271,6 +271,9 @@
           target.searchParams.set("workspace_input", submitted.workspace_input);
           target.searchParams.set("case_id", submitted.case_id);
           if (launchQuery.get("workspace_context")) target.searchParams.set("workspace_context", launchQuery.get("workspace_context"));
+          for (const name of ["workspace_tab", "workspace_directory", "workspace_query", "workspace_kind", "workspace_state", "workspace_scope", "workspace_offset"]) {
+            if (launchQuery.has(name)) target.searchParams.set(name, launchQuery.get(name));
+          }
         }
         link.href = target.pathname + target.search;
         link.textContent = data.analysis_url ? "Inspect structured results" : "Open results";

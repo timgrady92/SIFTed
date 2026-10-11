@@ -26,6 +26,7 @@
 
     {% if case %}
     <main class="single">
+      <a class="action" href="{{ url_for('evidence.case_workspace', case_id=case.id) }}">Continue evidence triage</a>
       <!-- Stats Summary -->
       <section class="card block results-stats">
         <h2>Analysis Summary</h2>

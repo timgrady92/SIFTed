@@ -320,10 +320,10 @@ def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tm
             base = f'http://127.0.0.1:{server.server_port}'
             workspace_url = base + f'/case/{case}/workspace?' + urlencode({'input': key})
             page.goto(workspace_url)
-            assert page.locator('[data-evidence-action="mmls"]').count() == 1
+            assert page.get_by_role('link', name='Map disk', exact=True).count() == 1
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path/'workspace-mobile.png'), full_page=True)
-            page.locator('[data-evidence-action="mmls"] a').click()
+            page.get_by_role('link', name='Map disk', exact=True).click()
             page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
             assert page.locator('#caseSelect').input_value() == case
             assert page.locator('#sourcePath').input_value() == str(source)
@@ -335,21 +335,36 @@ def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tm
             page.wait_for_selector('#runResultsLinks a[href*="/analysis"]')
             page.click('#runResultsLinks a[href*="/analysis"]')
             page.get_by_role('link', name='← Return to evidence workspace').click()
-            page.locator('.evidence-filesystem a', has_text='Browse files').click()
+            page.locator('.evidence-filesystem details').first.evaluate('(element) => element.open = true')
+            page.locator('.evidence-filesystem a', has_text='Build file inventory').click()
             page.wait_for_function("document.querySelector('#commandPreview').textContent.includes('-o 2048')")
             page.click('#runWorkflow')
             page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
             worker.run_once()
             page.wait_for_selector('#runResultsLinks a[href*="/analysis"]')
             page.click('#runResultsLinks a[href*="/analysis"]')
-            page.get_by_role('link', name='Extract file').first.click()
+            page.get_by_role('link', name='← Return to evidence workspace').click()
+            page.get_by_role('link', name='Explore files', exact=True).click()
+            page.fill('input[name="q"]', 'spaces')
+            page.select_option('select[name="state"]', 'deleted')
+            page.get_by_role('button', name='Filter entries').click()
+            assert page.locator('[data-triage-entry]').count() == 1
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            page.screenshot(path=str(tmp_path/'triage-mobile.png'), full_page=True)
+            page.get_by_role('link', name='Recover file', exact=True).click()
             page.wait_for_function("document.querySelector('#commandPreview').textContent.includes('42-128-1')")
             page.click('#runWorkflow')
             page.wait_for_function("document.querySelector('#runStatus').textContent.includes('Queued')")
             worker.run_once()
             page.wait_for_selector('#runResultsLinks a[href*="/analysis"]')
             page.click('#runResultsLinks a[href*="/analysis"]')
-            page.locator('a[href*="/workflow/xxd?"]').click()
+            page.get_by_role('link', name='← Return to evidence workspace').click()
+            assert page.locator('input[name="q"]').input_value() == 'spaces'
+            assert page.locator('select[name="state"]').input_value() == 'deleted'
+            assert page.locator('[data-triage-entry]').count() == 1
+            page.get_by_role('link', name='Derived files', exact=True).click()
+            page.get_by_role('link', name='Examine file', exact=True).click()
+            page.locator('[data-evidence-action="xxd"] a').click()
             page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
             assert parse_qs(urlparse(page.url).query)['workspace_input'][0].startswith('d:')
             assert page.locator('#sourcePath').input_value() != str(source)

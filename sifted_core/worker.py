@@ -335,6 +335,16 @@ class Worker:
             plan = Plan.from_dict(run["plan"])
             ADAPTERS[plan.tool].validate_execution(plan, self.settings)
             original_input = self.repo.input(run["id"])
+            if "entry_id" in plan.parameters:
+                from .file_triage import validate_entry
+                context = self.repo.run(plan.parameters.get("context_run_id"))
+                if (not context or context["status"] != "success" or context.get("case_id") != run.get("case_id")
+                        or context["source_path"] != plan.source
+                        or any(context["plan"]["parameters"].get(key) != plan.parameters.get(key)
+                               for key in ("offset_sector", "sector_size"))):
+                    raise ExecutionFailure("Selected inventory context changed while queued.")
+                if validate_entry(plan, context, self.repo, self.settings) != original_input.get("filesystem_entry"):
+                    raise ExecutionFailure("Selected inventory entry changed while queued.")
             # Revalidate durable requests at execution time, after queue waiting.
             derived_allowed = original_input.get("source_run_id") and allowed(plan.source, self.settings.output_roots)
             if not (allowed(plan.source, self.settings.input_roots) or derived_allowed) or not allowed(plan.output_path, self.settings.output_roots):
@@ -459,6 +469,7 @@ class Worker:
                     processed = process_results(plan, output, integrity_check, results)
                     validation_errors = processed.pop("validation_errors", [])
                     extra.update(processed)
+                    self._check(run["id"], output, deadline, plan.max_output_bytes)
                     if validation_errors:
                         status, exit_code = "error", 1
                         error = "\n".join(filter(None, [error, *validation_errors]))[:65536]

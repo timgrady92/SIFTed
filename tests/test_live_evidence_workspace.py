@@ -1,5 +1,4 @@
 """Evidence-first disk journeys using installed forensic tools and known bytes."""
-import csv
 from pathlib import Path
 import shutil
 
@@ -10,6 +9,54 @@ from sifted_core.storage import Repository
 from sifted_core.worker import Worker
 from test_evidence_workspace import register, view, payload
 from tool_fixtures import make_disk, pdf_bytes
+
+
+@pytest.mark.live
+def test_native_workspace_real_ewf_case_evidence(tmp_path):
+    import hashlib
+    import os
+    import subprocess
+    from sifted_core.disk_tools import image_sources
+
+    value = os.environ.get('SIFTED_TEST_DISK_IMAGE')
+    if not value:
+        pytest.skip('Set SIFTED_TEST_DISK_IMAGE to an available real disk acquisition.')
+    source = Path(value).resolve()
+    assert source.is_file()
+    outputs = tmp_path/'isolated outputs'
+    outputs.mkdir()
+    app = create_app({'TESTING': True, 'SIFTED_DATABASE_PATH': str(tmp_path/'case.db'),
+                      'SIFTED_INPUT_ROOTS': [str(source.parent)], 'SIFTED_OUTPUT_ROOTS': [str(outputs)]})
+    repo, client = Repository(app.config['DATABASE_PATH']), app.test_client()
+    case, key = register(client, repo, source, 'disk_image')
+    baseline = repo.case(case)['artifacts'][0]['hash']
+    worker = Worker(repo, app.config['SETTINGS'])
+
+    def run(tool, data):
+        response = client.post(f'/api/{tool}/run', json=data)
+        assert response.status_code == 202, response.json
+        worker.run_once()
+        result = repo.run(response.json['run_id'])
+        assert result['status'] == 'success', result.get('error')
+        return result
+
+    run('mmls', {'source_path': str(source), 'case_id': case, 'workspace_input': key})
+    chosen = view(client, case, key)['partitions'][0]
+    run('fsstat', payload(chosen['actions'][0]))
+    card = view(client, case, key)['journey'][0]
+    inventory = run('fls', payload({'url': card['inventory_url']}))
+    triage = view(client, case, key, tab='triage', context_run_id=inventory['id'], scope='filesystem', kind='file', state='allocated')['triage']
+    assert triage['total'] > 0
+    entry = next(row for row in triage['rows'] if row.get('extract_url'))
+    extracted = run('icat', payload({'url': entry['extract_url']}))
+    material = next(item for item in view(client, case, key, tab='derived')['derived'] if item['source_run_id'] == extracted['id'])
+    expected = subprocess.run(['icat', '-b', str(chosen['sector_size']), '-o', str(chosen['offset_sector']),
+                               *image_sources(str(source)), entry['address']], check=True, capture_output=True).stdout
+    assert Path(material['path']).read_bytes() == expected
+    assert hashlib.sha256(source.read_bytes()).hexdigest() == baseline
+    actions = view(client, case, material['key'])['actions']
+    assert any(action['id'] == 'filetype' and action['enabled'] for action in actions)
+    assert repo.input(extracted['id'])['filesystem_entry']['address'] == entry['address']
 
 
 @pytest.mark.live
@@ -44,10 +91,11 @@ def test_native_workspace_partition_to_identified_pdf(tmp_path, sector_size):
     assert chosen['sector_size'] == sector_size
     data = payload(chosen['actions'][1])
     inventory = run('fls', {**data, 'recursive': True})
-    with (Path(inventory['output_path'])/'fls.csv').open(newline='') as handle:
-        rows = list(csv.DictReader(handle))
-    document = next(row for row in rows if row['Name'].endswith('known.pdf'))
-    extracted = run('icat', {**data, 'context_run_id': inventory['id'], 'metadata_address': document['Metadata Address'], 'entry_name': 'renamed document.bin'})
+    triage = view(client, case, key, tab='triage', context_run_id=inventory['id'])['triage']
+    nested = next(row for row in triage['rows'] if row['name'] == 'nested')
+    triage = view(client, case, key, tab='triage', context_run_id=inventory['id'], directory=nested['id'])['triage']
+    document = next(row for row in triage['rows'] if row['name'] == 'known.pdf')
+    extracted = run('icat', payload({'url': document['extract_url']}))
     material = next(x for x in view(client, case, key)['inputs'] if x.get('source_run_id') == extracted['id'])
     assert Path(material['path']).read_bytes() == pdf_bytes()
     result = view(client, case, material['key'])

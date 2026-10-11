@@ -45,6 +45,7 @@
         <section class="card block">
           <p class="eyebrow">{{ workspace.observed.label }}</p><h2>{{ workspace.selected.label }}</h2>
           <p class="evidence-path">{{ workspace.selected.path }}</p><p class="helper">Basis: {{ workspace.observed.basis }}.</p>
+          {% if workspace.parent_input %}<p><a href="{{ workspace.parent_input.url }}">← Source evidence: {{ workspace.parent_input.label }}</a></p>{% endif %}
           {% if workspace.observed.note %}<p class="run-status">{{ workspace.observed.note }}</p>{% endif %}
           {% if workspace.observed.kind in ['ewf', 'container'] %}<p class="helper">Carving requires a raw stream. Export the container to raw before carving; Sleuth Kit must support the selected container format.</p>{% endif %}
           {% if workspace.observed.kind == 'registry' %}<p class="helper">Specialized hive parsers depend on hive identity. ShellBags requires a collected directory containing user hives; add that directory in Cases.</p>{% endif %}
@@ -58,18 +59,20 @@
             {% else %}<p><a href="{{ url_for('web.workflow_analysis', run_id=workspace.selected.source_run_id, case_id=workspace.case.id, workspace_input=workspace.selected.key) }}">Producing run and provenance</a></p>{% endif %}
           </details>
         </section>
-        <section class="card block" aria-label="Investigation progress">
-          <h2>Recorded work</h2><p>{{ workspace.completed_count }} successful runs · {{ workspace.active_count }} active jobs</p>
-          <p class="helper">These counts describe tool processing, not findings or completeness of the investigation.</p>
-          <p id="workspaceUpdates" role="status"></p><button class="ghost" id="refreshWorkspace" type="button">Refresh workspace</button>
+        <nav class="workspace-tabs" aria-label="Evidence views">
+          {% for tab, label in [('analysis', 'Analysis'), ('triage', 'File triage'), ('derived', 'Derived files'), ('tools', 'Tools')] if workspace.is_disk or tab in ['derived', 'tools'] %}
+          <a class="ghost{% if workspace.tab == tab %} active{% endif %}" {% if workspace.tab == tab %}aria-current="page"{% endif %} href="{{ url_for('evidence.case_workspace', case_id=workspace.case.id, input=workspace.selected.key, tab=tab, context_run_id=workspace.context.id if workspace.context else '') }}">{{ label }}</a>
+          {% endfor %}
+        </nav>
+        {% if workspace.tab == 'analysis' %}{% include '_disk_journey.html' %}{% endif %}
+        {% if workspace.tab == 'triage' %}{% include '_file_triage.html' %}{% endif %}
+        {% if workspace.tab == 'derived' %}
+        <section class="card block" aria-label="Derived files"><h2>Examine captured files</h2><p class="helper">Captured content from this input, including subsequent extractions. Select a file to identify its content and continue examination.</p>
+          {% for item in workspace.derived %}<article class="evidence-run"><h3>{{ item.label }}</h3><p class="helper">{{ item.artifact_kind|replace('_', ' ') }} · SHA-256 {{ item.hash }}</p><p class="evidence-path">{{ item.path }}</p><a class="action" href="{{ item.url }}">{{ 'Examine block sample' if item.artifact_kind == 'filesystem_block_sample' else 'Examine file' }}</a><a class="ghost" href="{{ url_for('web.workflow_analysis', run_id=item.source_run_id, case_id=workspace.case.id, workspace_input=workspace.selected.key, workspace_tab='derived') }}">Producing run</a></article>
+          {% else %}<p>No captured content yet. Extract a file from File triage or run a recovery tool.</p>{% endfor %}
         </section>
-        {% if workspace.partitions %}<section class="card block"><h2>Choose a partition</h2><p class="helper">Starts come from the latest verified partition map. Offsets and sector sizes travel with the selected action.</p>
-          {% for partition in workspace.partitions %}<article class="evidence-filesystem"><h3>{{ partition.description }}</h3><p class="helper">Start {{ partition.offset_sector }} disk sectors · {{ partition.sector_size }} bytes per sector · {{ partition.length_sectors }} sectors</p><div class="tool-actions">{% for action in partition.actions %}<a class="ghost" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}</div></article>{% endfor %}
-        </section>{% endif %}
-        {% if workspace.filesystems %}<section class="card block"><h2>Filesystem contexts</h2><p class="helper">Select a previously examined filesystem to carry its geometry into subsequent work.</p>
-          <div class="tool-actions">{% for filesystem in workspace.filesystems %}<a class="ghost" href="{{ filesystem.url }}">Offset {{ filesystem.offset_sector }} sectors · {{ filesystem.sector_size or 'auto' }} bytes/sector</a>{% endfor %}</div>
-          {% if workspace.context %}<p>Selected context: {{ workspace.context.plan.parameters.offset_sector }} disk sectors. <a href="{{ url_for('web.workflow_analysis', run_id=workspace.context.id, case_id=workspace.case.id, workspace_input=workspace.selected.key) }}">Open context results</a></p>{% endif %}
-        </section>{% endif %}
+        {% endif %}
+        {% if workspace.tab == 'tools' %}
         <section aria-label="Contextual actions"><h2>Investigate this evidence</h2>
           <p class="helper">Actions open the existing tool workflows with this evidence selected. Native commands remain available to copy and run on SIFT.</p>
           <div class="tool-grid evidence-action-grid">
@@ -83,7 +86,8 @@
           {% endfor %}
           </div>
         </section>
-        <section class="card block"><h2>Runs for this input</h2><p class="helper">Showing the latest {{ workspace.runs|length }} of {{ workspace.run_count }} runs. <a href="{{ url_for('web.case_results', case_id=workspace.case.id) }}">All case results</a></p>
+        {% endif %}
+        <section class="card block"><h2>Runs for this input</h2><p class="helper">{{ workspace.completed_count }} successful runs · {{ workspace.active_count }} active jobs. Recorded processing does not establish findings or completeness.</p><p id="workspaceUpdates" role="status"></p><button class="ghost" id="refreshWorkspace" type="button">Refresh workspace</button><p class="helper">Showing the latest {{ workspace.runs|length }} of {{ workspace.run_count }} runs. <a href="{{ url_for('web.case_results', case_id=workspace.case.id) }}">All case results</a></p>
           {% for run in workspace.runs %}<article class="evidence-run" id="run-{{ run.id }}"><h3>{{ run.plan.parameters.parser_id|default(run.tool) }} · {{ run.status }}</h3><p class="helper">{{ run.created_at }}</p>
             {{ run_controls(run) }}
             {% if run.result_url %}<a class="ghost" href="{{ run.result_url }}">Open analysis</a>{% endif %}

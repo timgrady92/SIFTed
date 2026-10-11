@@ -28,10 +28,14 @@ def view(client, case, key, **args):
 
 
 def payload(action):
-    values = {k: v[0] for k, v in parse_qs(urlparse(action['url']).query).items() if k not in {'tool_id', 'workspace_context'}}
-    for name in ('offset_sector', 'sector_size'):
+    values = {k: v[0] for k, v in parse_qs(urlparse(action['url']).query).items()
+              if k != 'tool_id' and (not k.startswith('workspace_') or k == 'workspace_input')}
+    for name in ('offset_sector', 'sector_size', 'entry_id'):
         if name in values:
             values[name] = int(values[name])
+    for name in ('recursive', 'deleted_only', 'recover_deleted'):
+        if name in values:
+            values[name] = values[name] == 'true'
     return values
 
 
@@ -138,11 +142,14 @@ def test_guided_partition_inventory_extraction_and_result_reuse(workspace_runtim
     worker.run_once()
     context = response.json['run_id']
     selected = view(client, case, key, context_run_id=context)
-    assert selected['filesystems'][0]['offset_sector'] == 2048
+    assert selected['journey'][0]['offset_sector'] == 2048
     fls = next(a for a in selected['actions'] if a['id'] == 'fls')
     assert fls['result_run_id'] == context
     assert payload(fls)['context_run_id'] == context
-    extract = {**inventory, 'context_run_id': context, 'metadata_address': '42-128-1', 'entry_name': 'derived.bin'}
+    triage = view(client, case, key, tab='triage', context_run_id=context)
+    selected_file = next(row for row in triage['triage']['rows'] if row['address'] == '42-128-1')
+    extract = payload({'url': selected_file['extract_url']})
+    assert extract['recover_deleted'] and extract['entry_id'] == selected_file['id']
     response = client.post('/api/icat/run', json=extract)
     assert response.status_code == 202, response.json
     worker.run_once()

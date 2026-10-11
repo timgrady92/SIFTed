@@ -71,11 +71,15 @@ class DiskAdapter(ToolAdapter):
             "blkstat": {"block_address"}, "blkcat": {"block_address"},
             "blkls": {"block_address", "end_block"}, "blkcalc": {"block_address", "direction"},
         }.get(tool_id, set())
+        if tool_id in {"fls", "istat", "icat"}:
+            self.parameter_names.add("entry_id")
 
     def build(self, p, source, output, settings, preview=False):
         tool = self.tool_id
         args = executable(tool, [tool], settings, not preview)
         params = {}
+        if "entry_id" in p:
+            params["entry_id"] = integer(p, "entry_id", minimum=1)
         sector_size = p.get("sector_size")
         if sector_size is not None:
             sector_size = integer(p, "sector_size")

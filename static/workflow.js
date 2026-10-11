@@ -16,7 +16,10 @@
     }
     const query = new URLSearchParams(window.location.search);
     const context = query.get("context_run_id");
-    if (context && data.source_path === query.get("source_path") && data.case_id === query.get("case_id")) data.context_run_id = context;
+    if (context && data.source_path === query.get("source_path") && data.case_id === query.get("case_id")) {
+      data.context_run_id = context;
+      if (query.has("entry_id")) data.entry_id = Number(query.get("entry_id"));
+    }
     return data;
   };
   const preview = () => tooling.requestPreview(tool, buildPayload);

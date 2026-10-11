@@ -6,6 +6,7 @@ import re
 from .json_rows import json_lines, tree_rows
 from .carving import verify_recoveries
 from .zimmerman import process_exports
+from .file_triage import build_index, INDEX_NAME
 
 
 PARTITION = re.compile(r"^\s*(\d+):\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$")
@@ -136,5 +137,9 @@ def process_results(plan, output, check, step_results=None):
         raise ValueError("mmls produced no recognized partition entries; inspect raw output.")
     if count == 0 and unparsed:
         raise ValueError("Tool produced no recognized listing entries; inspect raw output and unparsed.txt.")
-    return {"analysis": {"table": table, "entry_count": count, "deleted_count": deleted,
-                         "unparsed_lines": unparsed, "sector_size": sector_size}}
+    analysis = {"table": table, "entry_count": count, "deleted_count": deleted,
+                "unparsed_lines": unparsed, "sector_size": sector_size}
+    if tool == "fls":
+        build_index(output, check)
+        analysis["inventory"] = INDEX_NAME
+    return {"analysis": analysis}

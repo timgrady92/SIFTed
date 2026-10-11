@@ -184,6 +184,10 @@ def compile_plan(tool_id, payload, settings, repository, preview=False):
             if plan.parameters.get("offset_sector") not in {row["offset_sector"] for row in rows}:
                 raise ValidationError("Selected filesystem is not in the verified partition map.")
         plan.parameters["context_run_id"] = context_run_id
+    selection = None
+    if "entry_id" in plan.parameters:
+        from .file_triage import validate_entry
+        selection = validate_entry(plan, context, repository, settings)
     plan.max_output_bytes = settings.max_output_bytes
     input_record = {"path": source, "kind": "directory" if Path(source).is_dir() else "file",
                     "case_id": case_id, "artifact_id": None, "baseline_sha256": None,
@@ -193,6 +197,8 @@ def compile_plan(tool_id, payload, settings, repository, preview=False):
     if context:
         input_record["baseline_sha256"] = context.get("input_sha256")
         input_record["context_run_id"] = context_run_id
+    if selection:
+        input_record["filesystem_entry"] = selection
     if plan.input_paths and raw_source:
         input_record["image_paths"] = plan.input_paths
         input_record["related_files"] = []
