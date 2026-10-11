@@ -19,7 +19,7 @@
       </div>
     </header>
 
-    <main class="foremost">
+    <main class="foremost" data-carving-tool="foremost">
       <section class="work-pane">
         {% from "_components.html" import run_context %}
         {{ run_context(
@@ -30,18 +30,16 @@
           "Image",
           "Image path",
           "/cases/case-name/evidence.dd",
-          "Source artifact: raw disk or partition image (dd, E01)."
+          "Source: a complete raw disk image, partition image, or extracted byte stream. Export E01 and other containers to raw first."
         ) }}
 
         <div class="card block">
           <h2>What to carve</h2>
+          {% if carving_error %}<p class="run-status">{{ carving_error }}</p>{% endif %}
           <div class="chip-grid">
-            <label class="chip"><input type="checkbox" value="jpg" checked /> JPG</label>
-            <label class="chip"><input type="checkbox" value="png" /> PNG</label>
-            <label class="chip"><input type="checkbox" value="pdf" checked /> PDF</label>
-            <label class="chip"><input type="checkbox" value="doc" /> DOC</label>
-            <label class="chip"><input type="checkbox" value="zip" /> ZIP</label>
-            <label class="chip"><input type="checkbox" value="exe" /> EXE</label>
+            {% for type in carving_types %}
+            <label class="chip"><input type="checkbox" value="{{ type }}" {% if type in ['jpg', 'pdf'] %}checked{% endif %} /> {{ type|upper }}</label>
+            {% endfor %}
           </div>
         </div>
 
@@ -50,17 +48,14 @@
           <div class="toggle-row">
             <label class="toggle">
               <input id="quickFlag" type="checkbox" />
-              Quick scan
+              Search only 512-byte boundaries
             </label>
             <label class="toggle">
               <input id="verboseFlag" type="checkbox" checked />
               Verbose log
             </label>
-            <label class="toggle">
-              <input id="safeMode" type="checkbox" />
-              Safe mode (10s per type)
-            </label>
           </div>
+          <p class="helper">A full scan searches every byte. The boundary-only scan can miss files. Foremost uses its built-in format parsers. A completed scan does not establish that every recoverable file was found. DOC/OLE recovery missed a valid Word fixture in workstation validation; cross-check those formats with another recovery method.</p>
         </div>
       </section>
 
@@ -71,25 +66,11 @@
         </div>
         <div class="panel block">
           <h2>Results</h2>
-          <div class="result-list">
-            <div class="result-item">
-              <span class="result-label">Recovered files</span>
-              <span class="result-value" id="resultCarved">carved/</span>
-            </div>
-            <div class="result-item">
-              <span class="result-label">Audit log</span>
-              <span class="result-value" id="resultAudit">audit.txt</span>
-            </div>
-          </div>
-          <div class="milestones">
-            <p class="milestone-title">Milestones</p>
-            <ul id="milestoneList"></ul>
-          </div>
           {% from "_components.html" import run_results %}
           {{ run_results() }}
           <p class="run-status" id="runStatus"></p>
           <button class="ghost wide" id="openLog">View recent log</button>
-          <button class="action wide" id="runForemost">Run Foremost</button>
+          <button class="action wide" id="runForemost" {% if carving_error %}disabled{% endif %}>Run Foremost</button>
         </div>
       </aside>
     </main>
@@ -118,6 +99,6 @@
     <script src="{{ url_for('static', filename='glossary.js') }}"></script>
     <script src="{{ url_for('static', filename='guides-sidebar.js') }}"></script>
     <script src="{{ url_for('static', filename='tool_shared.js') }}"></script>
-    <script src="{{ url_for('static', filename='foremost.js') }}"></script>
+    <script src="{{ url_for('static', filename='carving.js') }}"></script>
   </body>
 </html>

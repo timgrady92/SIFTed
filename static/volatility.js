@@ -9,11 +9,10 @@ const runStatus = common.runStatus;
 
 // Tool-specific elements
 const symbolPath = document.getElementById("symbolPath");
-const jsonOutput = document.getElementById("jsonOutput");
-const tableOutput = document.getElementById("tableOutput");
+const renderer = document.getElementById("renderer");
+const offline = document.getElementById("offline");
 const runButton = document.getElementById("runVolatility");
 const runResults = document.getElementById("runResults");
-const runResultsLinks = document.getElementById("runResultsLinks");
 const tabButtons = Array.from(document.querySelectorAll("[data-tab]"));
 const tabPanels = Array.from(document.querySelectorAll("[data-tab-panel]"));
 const bundleButtons = Array.from(document.querySelectorAll("[data-bundle-plugins]"));
@@ -100,6 +99,7 @@ const setActiveTab = (tabId, persist = true) => {
     localStorage.setItem("sifted.volatility.tab", tabId);
   }
   filterPlugins();
+  buildCommand();
 };
 
 const getActiveOs = () =>
@@ -115,7 +115,7 @@ const filterPlugins = () => {
   }
   const query = pluginSearch?.value.trim().toLowerCase() || "";
   const selectedOnly = Boolean(pluginSelectedOnly?.checked);
-  const chips = Array.from(panel.querySelectorAll(".chip"));
+  const chips = Array.from(panel.querySelectorAll(".plugin-entry"));
   let total = 0;
   let selected = 0;
   let visible = 0;
@@ -126,7 +126,9 @@ const filterPlugins = () => {
       return;
     }
     total += 1;
-    const name = (input.dataset.plugin || "").toLowerCase();
+    const name = chip.textContent.toLowerCase();
+    const options = chip.querySelector("[data-plugin-options]");
+    if (options) options.hidden = !input.checked;
     const isSelected = input.checked;
     if (isSelected) {
       selected += 1;
@@ -164,8 +166,31 @@ const filterPlugins = () => {
 
 const buildPayload = () => {
   const plugins = Array.from(
-    document.querySelectorAll(".chip input[data-plugin]:checked"),
+    document.querySelectorAll(`[data-tab-panel="${getActiveOs()}"] .chip input[data-plugin]:checked`),
   ).map((input) => input.dataset.plugin);
+  const pluginOptions = {};
+  plugins.forEach((name) => {
+    const entry = Array.from(document.querySelectorAll("[data-plugin-entry]")).find(el => el.dataset.pluginEntry === name);
+    const values = {};
+    entry?.querySelectorAll("[data-option]").forEach((input) => {
+      const type = input.dataset.optionType;
+      if (type === "boolean") { if (input.checked) values[input.dataset.option] = true; return; }
+      const raw = input.value.trim();
+      if (!raw) return;
+      if (type === "integer") {
+        // Send exact text: 64-bit memory addresses exceed JavaScript's integer precision.
+        values[input.dataset.option] = raw;
+      } else if (type.endsWith("_list")) {
+        let parsed;
+        try { parsed = JSON.parse(raw); } catch { parsed = raw; }
+        if (type === "integer_list" && Array.isArray(parsed) && parsed.some(value => typeof value === "number" && !Number.isSafeInteger(value))) {
+          throw new Error("Use quoted decimal or hexadecimal strings for large integers in plugin lists.");
+        }
+        values[input.dataset.option] = parsed;
+      } else { values[input.dataset.option] = raw; }
+    });
+    pluginOptions[name] = values;
+  });
   return {
 
     case_id: document.getElementById("caseSelect")?.value || "",
@@ -173,7 +198,9 @@ const buildPayload = () => {
     output_path: outputPath?.value.trim() || "",
     symbol_path: symbolPath?.value.trim() || "",
     plugins,
-    renderer: jsonOutput?.checked ? "json" : "pretty",
+    plugin_options: pluginOptions,
+    offline: Boolean(offline?.checked),
+    renderer: renderer?.value || "json",
   };
 };
 
@@ -186,7 +213,6 @@ if (tooling) {
     },
     setRunIdRef: id => { currentRunId = id; },
     onSuccess: data => {
-      if (outputPath) outputPath.value = data.output_path;
       commandList = data.commands;
       renderCommandPreview();
     },
@@ -196,7 +222,7 @@ if (tooling) {
 // Attach input listeners
 if (tooling) {
   tooling.attachInputListeners(
-    [sourcePath, outputPath, symbolPath, jsonOutput, tableOutput],
+    [sourcePath, outputPath, symbolPath, renderer, offline, ...document.querySelectorAll("[data-option]")],
     buildCommand,
   );
 }

@@ -4,13 +4,10 @@ Only these adapters can create plans; HTTP clients cannot supply command text.
 OUTPUT and WORKSPACE tokens are resolved by the worker inside its managed attempt.
 """
 import os
-import re
 import shlex
 import shutil
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-
-from .catalog import EZ_TOOL_CATALOG
 
 OUTPUT = "{output}"
 WORKSPACE = "{workspace}"
@@ -58,9 +55,8 @@ class Settings:
     input_roots: list = field(default_factory=lambda: ["/cases"])
     output_roots: list = field(default_factory=lambda: ["/cases"])
     symbol_roots: list = field(default_factory=list)
-    plugin_path: str = "data/volatility_plugins.json"
-    foremost_config: str = "/etc/foremost.conf"
-    scalpel_config: str = "/etc/scalpel/scalpel.conf"
+    volatility_symbols: str = field(default_factory=lambda: str(Path.home() / ".cache/sifted/volatility3/symbols"))
+    scalpel_config: str = str(Path(__file__).with_name("carving_profiles.conf"))
     ez_root: str = "/opt/zimmermantools"
     binaries: dict = field(default_factory=dict)
     timeout_seconds: int = 14400
@@ -70,6 +66,7 @@ class Settings:
         self.input_roots = [normalize(p) for p in self.input_roots]
         self.output_roots = [normalize(p) for p in self.output_roots]
         self.symbol_roots = [normalize(p) for p in self.symbol_roots]
+        self.volatility_symbols = normalize(self.volatility_symbols)
         if not self.input_roots or not self.output_roots:
             raise ValidationError("Input and output roots must be explicitly configured.")
         if self.timeout_seconds < 1 or self.max_output_bytes < 1:
@@ -84,6 +81,7 @@ class Step:
     timeout: int = 14400
     continue_on_error: bool = False
     max_stdout_bytes: int | None = None
+    stderr: str | None = None
 
 
 @dataclass
@@ -101,6 +99,9 @@ class Plan:
     create_output_directory: bool = False
     postprocess: str | None = None
     input_paths: list[str] = field(default_factory=list)
+    auxiliary_paths: list[str] = field(default_factory=list)
+    input_copies: dict[str, str] = field(default_factory=dict)
+    postprocess_on_failure: bool = False
 
     def to_dict(self):
         return asdict(self)
@@ -115,6 +116,8 @@ class Plan:
             command = shlex.join(resolve_argv(step.argv, output, workspace))
             if step.stdout:
                 command += " > " + shlex.quote(resolve_token(step.stdout, output, workspace))
+            if step.stderr:
+                command += " 2> " + shlex.quote(resolve_token(step.stderr, output, workspace))
             rendered.append(command)
         return rendered
 
@@ -141,34 +144,14 @@ def executable(tool_id, candidates, settings, required=True):
             return [path, *prefix[1:]]
         if not required:
             return prefix
-    elif tool_id in EZ_TOOL_CATALOG:
-        # SIFT's shell wrappers use ${*}, losing argument boundaries. Invoke
-        # dotnet directly whenever its installed assembly can be discovered.
-        dotnet = shutil.which("dotnet")
-        root = Path(settings.ez_root)
-        if dotnet and root.is_dir():
-            dll = next((p for p in root.rglob("*.dll") if p.stem.casefold() == candidates[0].casefold()), None)
-            if dll:
-                return [dotnet, str(dll.resolve())]
     if not configured:
         for candidate in candidates:
             path = shutil.which(candidate)
             if path:
                 return [path]
     if required:
-        raise ValidationError(f"{candidates[0]} is not installed or its configured executable is unavailable.")
+        raise ValidationError(f"{candidates[0] if candidates else tool_id} is not installed or its configured executable is unavailable.")
     return [candidates[0]]
-
-
-def resolve_ez_tool(tool_id, settings):
-    tool = EZ_TOOL_CATALOG.get(tool_id)
-    if not tool:
-        return None
-    prefix = executable(tool_id, tool["binaries"], settings, required=False)
-    installed = bool(shutil.which(prefix[0]))
-    return {**tool, "id": tool_id, "installed": installed,
-            "binary": prefix[0] if installed else None,
-            "binary_display": shlex.join(prefix), "argv_prefix": prefix}
 
 
 def text(payload, key, default=""):
@@ -199,28 +182,15 @@ def choices(payload, key, accepted):
     return list(dict.fromkeys(values))
 
 
-def config_for_types(path, types):
-    try:
-        lines = Path(path).read_text().splitlines()
-    except OSError as exc:
-        raise ValidationError(f"Tool configuration is unavailable: {path}") from exc
-    entries = {}
-    for line in lines:
-        match = re.match(r"^\s*#?\s*([a-z0-9]+)\s+[yn]\s+\d+", line, re.I)
-        if match:
-            entries.setdefault(match[1].lower(), []).append(line.lstrip().lstrip("#").strip())
-    missing = set(types) - entries.keys()
-    if missing:
-        raise ValidationError("Types absent from installed configuration: " + ", ".join(sorted(missing)))
-    return "# SIFTed configuration snapshot\n" + "\n".join(line for t in types for line in entries[t]) + "\n"
-
-
 class ToolAdapter:
     """Each adapter owns supported parameters and a persisted execution plan."""
 
     tool_id = ""
     source_kind = "file"
     parameter_names = frozenset()
+
+    def validate_execution(self, plan, settings):
+        """Recheck tool-specific assumptions after a durable request leaves the queue."""
 
     def build(self, payload, source, output, settings, preview=False):
         raise NotImplementedError

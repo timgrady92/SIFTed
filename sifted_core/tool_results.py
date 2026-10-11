@@ -1,44 +1,62 @@
 """Streaming, conservative interpretation; raw tool output is always retained."""
 import csv
+import json
 from pathlib import Path
 import re
+from .json_rows import json_lines, tree_rows
+from .carving import verify_recoveries
+from .zimmerman import process_exports
 
 
 PARTITION = re.compile(r"^\s*(\d+):\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$")
 FILE_ENTRY = re.compile(r"^\s*([A-Za-z-])/([A-Za-z-])\s+(\*\s+)?(\d+(?:-\d+){0,2})(\(realloc\))?:\s(.*)$")
 
 
-def process_results(plan, output, check):
+def process_results(plan, output, check, step_results=None):
     if output.is_symlink():
         raise ValueError("Tool output directory must not be a symbolic link.")
     tool = plan.postprocess
-    if tool == "zimmerman_csv":
-        files = sorted(output.rglob("*.csv"))
-        total = 0
-        counts = []
-        for path in files:
-            if path.is_symlink():
-                raise ValueError("Parser CSV output must not be a symbolic link.")
-            with path.open(newline="", encoding="utf-8-sig", errors="strict") as handle:
-                reader = csv.reader(handle, strict=True)
-                header = next(reader, None)
-                if not header or not any(header):
-                    raise ValueError("Parser CSV output has no columns.")
-                required = {"evtxecmd": {"EventId"}, "mftecmd": {"FileName", "EntryNumber"}}.get(plan.parameters["parser_id"], set())
-                if not required.issubset(header):
-                    raise ValueError("Parser CSV is missing required columns: " + ", ".join(sorted(required - set(header))))
-                count = 0
-                for row in reader:
-                    check()
-                    if not row:
-                        continue
-                    if len(row) != len(header):
-                        raise ValueError("Parser CSV contains a row with an inconsistent column count.")
-                    count += 1
-                counts.append({"file": path.relative_to(output).as_posix(), "entry_count": count})
-                total += count
-        return {"analysis": {"table": files[0].relative_to(output).as_posix(), "entry_count": total,
-                             "tables": counts, "csv_count": len(files), "unparsed_lines": 0}}
+    if tool == "carving":
+        return verify_recoveries(plan, output, check)
+    if tool == "volatility":
+        summaries, errors = [], []
+        results = {r["label"]: r for r in step_results or []}
+        for step in plan.steps:
+            check()
+            result = results.get(step.label)
+            relative = "plugins/" + step.label + ("/result.txt" if plan.parameters["renderer"] == "pretty"
+                                                 else "/result." + plan.parameters["renderer"])
+            summary = {"plugin": step.label, "file": relative, "status": "skipped", "row_count": None}
+            if result:
+                summary.update(status="error" if result["return_code"] else "success",
+                               return_code=result["return_code"], error=result.get("error"))
+            if result and not result["return_code"]:
+                try:
+                    path = output / relative
+                    if path.is_symlink():
+                        raise ValueError("Plugin result must be a regular file.")
+                    if plan.parameters["renderer"] == "json":
+                        with path.open(encoding="utf-8", errors="strict") as handle:
+                            rows = json.load(handle)
+                        if not isinstance(rows, list):
+                            raise ValueError("Expected a JSON array of result rows.")
+                        summary["row_count"] = sum(1 for row in tree_rows(rows, check))
+                    elif plan.parameters["renderer"] == "jsonl":
+                        count = 0
+                        with path.open("rb") as handle:
+                            for root in json_lines(handle):
+                                count += sum(1 for row in tree_rows([root], check))
+                        summary["row_count"] = count
+                    elif not path.is_file() or not path.stat().st_size:
+                        raise ValueError("Plugin produced no table output.")
+                except (OSError, ValueError, UnicodeError) as exc:
+                    summary.update(status="error", error="Invalid plugin output: " + str(exc))
+                    errors.append(step.label + ": " + summary["error"])
+            summaries.append(summary)
+        (output / "plugin-summary.json").write_text(json.dumps(summaries, indent=2))
+        return {"plugin_results": summaries, "validation_errors": errors}
+    if tool == "zimmerman":
+        return process_exports(plan, output, check)
     if tool in {"icat", "blkcat", "blkls"}:
         return {"analysis": {"derived_file": plan.expected_files[0],
                              "artifact_kind": "extracted_file" if tool == "icat" else "filesystem_block_sample"}}

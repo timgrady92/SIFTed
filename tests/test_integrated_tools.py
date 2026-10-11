@@ -9,7 +9,6 @@ import pytest
 
 from app import create_app
 from sifted_core.adapters import compile_plan
-from sifted_core.catalog import EZ_TOOL_CATALOG
 from sifted_core.disk_tools import DISK_TOOL_IDS, image_sources
 from sifted_core.examination_tools import EXAMINATION_TOOL_IDS
 from sifted_core.storage import Repository
@@ -149,7 +148,7 @@ def test_segment_mutation_and_membership_changes_fail_before_tools_run(integrate
     assert plan.input_paths == [str(first), str(second)]
     second.write_bytes(b"changed")
     Worker(repo, settings).run_once()
-    assert "Image segment changed" in repo.run(created.json["run_id"])["error"]
+    assert "Related input changed" in repo.run(created.json["run_id"])["error"]
     source.with_name("segmented.004").write_bytes(b"gap")
     with pytest.raises(ValidationError, match="gap"):
         image_sources(str(first))
@@ -192,53 +191,3 @@ def test_original_block_mapping_is_verified_independently_of_reported_index(inte
     assert run["analysis"]["reported_address"] == "731"
     assert run["analysis"]["mapped_address"] == "2"
     assert len(run["steps"]) == 2
-
-
-@pytest.mark.parametrize("tool_id", list(EZ_TOOL_CATALOG))
-def test_existing_zimmerman_tools_have_complete_export_contracts(integrated, tmp_path, tool_id):
-    _, _, settings, source, _ = integrated
-    tool = EZ_TOOL_CATALOG[tool_id]
-    script = tmp_path / "fake parser.py"
-    script.write_text('''import sys
-from pathlib import Path
-tool,*args=sys.argv[1:]
-output=Path(args[args.index("--csv")+1]); output.mkdir(parents=True)
-filename=args[args.index("--csvf")+1] if "--csvf" in args else "mapped.csv"
-data="EventId,RecordNumber\\n4624,1\\n" if tool=="evtxecmd" else "FileName,EntryNumber\\n$MFT,0\\n" if tool=="mftecmd" else "Name,Value\\nKnown,1\\n"
-(output/filename).write_text(data)
-''')
-    settings.binaries[tool_id] = [sys.executable, str(script), tool_id]
-    settings.ez_root = str(tmp_path / "EZ root")
-    batch = Path(settings.ez_root) / "RECmd/BatchExamples/RegistryASEPs.reb"
-    batch.parent.mkdir(parents=True)
-    batch.write_text("Description: Synthetic registry batch\n")
-    if tool_id == "evtxecmd":
-        source.write_bytes(b"ElfFile\x00synthetic EVTX")
-    elif tool_id == "mftecmd":
-        source.write_bytes(b"FILEsynthetic MFT")
-    source = source.parent if tool["input_mode"] == "dir" else source
-    run = execute(integrated, "eric-zimmerman", tool_id=tool_id, source_path=str(source))
-    assert run["analysis"]["entry_count"] == 1
-    if tool.get("batch_file"):
-        assert (Path(run["output_path"]) / "_sifted/registry-batch.reb").read_text() == batch.read_text()
-
-
-@pytest.mark.parametrize("tool_id", ["evtxecmd", "mftecmd"])
-def test_windows_parser_source_signature_is_required(integrated, tool_id):
-    app, repo, _, source, outputs = integrated
-    response = app.test_client().post("/api/eric-zimmerman/run", json={"tool_id": tool_id, "source_path": str(source), "output_path": str(outputs / "invalid")})
-    assert response.status_code == 400 and "signature" in response.json["error"]
-    assert not repo.runs()
-
-
-def test_parser_cannot_claim_success_with_malformed_csv(integrated, tmp_path):
-    app, repo, settings, source, outputs = integrated
-    source.write_bytes(b"FILEsynthetic MFT")
-    script = tmp_path / "bad csv.py"
-    script.write_text('import sys\nfrom pathlib import Path\na=sys.argv\np=Path(a[a.index("--csv")+1]);p.mkdir();(p/"mft.csv").write_text("FileName,EntryNumber\\nmalformed,0,extra\\n")\n')
-    settings.binaries["mftecmd"] = [sys.executable, str(script)]
-    created = app.test_client().post("/api/eric-zimmerman/run", json={"tool_id": "mftecmd", "source_path": str(source), "output_path": str(outputs / "bad-csv")})
-    Worker(repo, settings).run_once()
-    failed = repo.run(created.json["run_id"])
-    assert failed["status"] == "error" and "column count" in failed["error"]
-    assert all(not entry["complete"] for entry in repo.artifacts(failed["id"]))

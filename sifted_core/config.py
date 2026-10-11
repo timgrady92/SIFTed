@@ -32,9 +32,8 @@ def load_config(overrides=None):
     settings = Settings(
         input_roots=input_roots, output_roots=output_roots,
         symbol_roots=roots("SIFTED_SYMBOL_ROOTS", []),
-        plugin_path=str(value("SIFTED_PLUGIN_CATALOG", BASE_DIR / "data/volatility_plugins.json")),
-        foremost_config=str(value("SIFTED_FOREMOST_CONFIG", "/etc/foremost.conf")),
-        scalpel_config=str(value("SIFTED_SCALPEL_CONFIG", "/etc/scalpel/scalpel.conf")),
+        volatility_symbols=str(value("SIFTED_VOLATILITY_SYMBOLS", Path.home() / ".cache/sifted/volatility3/symbols")),
+        scalpel_config=str(value("SIFTED_SCALPEL_CONFIG", BASE_DIR / "sifted_core/carving_profiles.conf")),
         ez_root=str(value("SIFTED_EZ_ROOT", "/opt/zimmermantools")), binaries=binaries,
         timeout_seconds=int(value("SIFTED_TOOL_TIMEOUT_SECONDS", 14400)),
         max_output_bytes=int(value("SIFTED_MAX_OUTPUT_BYTES", 10 * 1024 ** 3)),

@@ -19,7 +19,7 @@
       </div>
     </header>
 
-    <main class="foremost">
+    <main class="foremost" data-carving-tool="scalpel">
       <section class="work-pane">
         {% from "_components.html" import run_context %}
         {{ run_context(
@@ -30,28 +30,17 @@
           "Image",
           "Image path",
           "/cases/case-name/evidence.dd",
-          "Source artifact: raw disk or partition image (dd, E01)."
+          "Source: a complete raw disk image, partition image, or extracted byte stream. Export E01 and other containers to raw first."
         ) }}
 
         <div class="card block">
           <h2>Recovery focus</h2>
-          <p class="helper">Choose what to carve. Keep the scope tight for cleaner results.</p>
-          <div class="chip-grid focus-types">
-            <label class="chip">
-              <input type="checkbox" data-types="jpg,jpeg,png,gif,tif,bmp" checked />
-              Photos
-              <span class="chip-meta">jpg, png, gif, tif</span>
-            </label>
-            <label class="chip">
-              <input type="checkbox" data-types="pdf,doc" />
-              Documents
-              <span class="chip-meta">pdf, doc</span>
-            </label>
-            <label class="chip">
-              <input type="checkbox" data-types="zip" />
-              Archives
-              <span class="chip-meta">zip</span>
-            </label>
+          <p class="helper">Select active signature profiles. The defaults cover JPEG, PNG, GIF, PDF, and ZIP.</p>
+          {% if carving_error %}<p class="run-status">{{ carving_error }}</p>{% endif %}
+          <div class="chip-grid">
+            {% for type in carving_types %}
+            <label class="chip"><input type="checkbox" value="{{ type }}" {% if type in ['jpg', 'pdf'] %}checked{% endif %} /> {{ type|upper }}</label>
+            {% endfor %}
           </div>
         </div>
 
@@ -63,7 +52,7 @@
               Group files by type
             </label>
           </div>
-          <p class="helper">Grouping keeps carved results tidy and easier to review.</p>
+          <p class="helper">Scalpel matches headers and footers; it does not validate file structure. Fragmented files, embedded JPEG thumbnails, PDF updates, and ZIP comments may require a different recovery method. Original audits and verified source ranges are retained.</p>
         </div>
       </section>
 
@@ -78,7 +67,7 @@
           {{ run_results() }}
           <p class="run-status" id="runStatus"></p>
           <button class="ghost wide" id="openLog">View recent log</button>
-          <button class="action wide" id="runScalpel">Run Scalpel</button>
+          <button class="action wide" id="runScalpel" {% if carving_error %}disabled{% endif %}>Run Scalpel</button>
         </div>
       </aside>
     </main>
@@ -106,6 +95,6 @@
     <script src="{{ url_for('static', filename='glossary.js') }}"></script>
     <script src="{{ url_for('static', filename='guides-sidebar.js') }}"></script>
     <script src="{{ url_for('static', filename='tool_shared.js') }}"></script>
-    <script src="{{ url_for('static', filename='scalpel.js') }}"></script>
+    <script src="{{ url_for('static', filename='carving.js') }}"></script>
   </body>
 </html>

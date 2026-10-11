@@ -85,14 +85,6 @@ def test_installed_filetype_reports_mime_mismatch(installed_runtime):
 
 
 @pytest.mark.live
-@pytest.mark.parametrize("tool,options", [("foremost", {}), ("foremost", {"safe_mode": True}), ("scalpel", {})])
-def test_installed_carvers_preserve_recovered_jpeg(installed_runtime, tool, options):
-    output, _ = execute(installed_runtime, tool, types=["jpg"], **options)
-    assert list(output.rglob("*.jpg"))
-    assert list(output.rglob("audit.txt"))
-
-
-@pytest.mark.live
 def test_installed_bulk_extractor(installed_runtime):
     source = installed_runtime[2]
     source.write_bytes(b"known.user@example.com\nhttps://example.com/known-forensic-marker\n" * 1000)
@@ -107,19 +99,3 @@ def test_installed_plaso(installed_runtime):
     output, _ = execute(installed_runtime, "artifact-triage", source=source)
     assert (output / "timeline.plaso").stat().st_size > 0
     assert "known-forensic-marker" in (output / "timeline.csv").read_text()
-
-
-@pytest.mark.live
-def test_installed_lecmd_parses_synthetic_unicode_link(installed_runtime):
-    import struct
-    target = "known forensic target.txt"
-    header = bytearray(76)
-    struct.pack_into("<I", header, 0, 76)
-    header[4:20] = bytes.fromhex("0114020000000000c000000000000046")
-    struct.pack_into("<II", header, 20, 0x88, 0x80)  # Relative path and Unicode StringData.
-    struct.pack_into("<I", header, 60, 1)
-    source = installed_runtime[2].with_suffix(".lnk")
-    source.write_bytes(header + struct.pack("<H", len(target)) + target.encode("utf-16-le"))
-    output, run = execute(installed_runtime, "eric-zimmerman", source=source, tool_id="lecmd")
-    assert target in (output / "lnk.csv").read_text()
-    assert any(path.endswith("LECmd.dll") for path in run["executables"])

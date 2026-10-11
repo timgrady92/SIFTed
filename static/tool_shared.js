@@ -255,6 +255,14 @@
       const response = await fetch(`/api/run/${runId}/results`);
       if (!response.ok) throw new Error("Unable to load result files.");
       const data = await response.json();
+      for (const result of data.plugin_results || []) {
+        const outcome = document.createElement("p");
+        outcome.className = "helper";
+        outcome.textContent = `${result.plugin}: ${result.status}`;
+        if (result.row_count != null) outcome.textContent += ` (${result.row_count} rows)`;
+        if (result.error) outcome.textContent += ` — ${result.error.slice(0, 300)}`;
+        links.append(outcome);
+      }
       if (data.analysis_url) {
         const link = document.createElement("a");
         link.className = "run-result-link";

@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 
 from sifted_core.adapters import compile_plan
-from sifted_core.tool_base import Plan, Settings, Step, ValidationError, resolve_ez_tool
+from sifted_core.tool_base import Plan, Settings, Step, ValidationError
 from sifted_core.storage import Repository, StoreError, utc_now
-from sifted_core.tables import CsvTables
+from sifted_core.tables import ResultTables
 from sifted_core.worker import Worker, process_identity
 
 
@@ -27,32 +27,24 @@ def runtime(tmp_path):
     outputs.mkdir()
     source = evidence / 'source with spaces and "quotes".bin'
     source.write_bytes(b"forensic test sample\x00")
-    config = tmp_path / "carver.conf"
-    config.write_text("#jpg y 10000 \\xff\\xd8 \\xff\\xd9\n#pdf y 10000 %PDF %%EOF\n")
-    plugins = tmp_path / "plugins.json"
-    plugins.write_text(json.dumps({"windows": ["windows.pslist", "windows.malfind"]}))
     script = tmp_path / "fake tools.py"
     script.write_text('''import json,sys
 from pathlib import Path
 tool,*args=sys.argv[1:]
 def option(name): return args[args.index(name)+1]
-if tool in {"foremost", "scalpel", "bulk-extractor"}:
+if tool=="bulk-extractor":
  p=Path(option("-o")); p.mkdir(parents=True); (p/"audit.txt").write_text("preserved raw output")
-elif tool=="eric-zimmerman":
- p=Path(option("--csv")); p.mkdir(parents=True); (p/option("--csvf")).write_text("EventId,RecordNumber\\n4624,1\\n")
 elif tool=="log2timeline":
  p=Path(option("--storage_file")); p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes(b"storage")
 elif tool=="psort": Path(option("-w")).write_text("Time,Value\\n2026-01-01,1\\n")
-elif tool=="volatility": print(json.dumps([{"PID":1,"Name":"example"}]))
 elif tool=="exiftool": print("SourceFile,FileType\\nexample,TXT")
 elif tool=="filetype": print("image/png")
 else: print("0 forensic strings")
 ''')
     binaries = {tool: [sys.executable, str(script), tool] for tool in
-                ["foremost", "scalpel", "bulk-extractor", "volatility", "log2timeline", "psort", "exiftool", "strings", "filetype"]}
-    binaries["evtxecmd"] = [sys.executable, str(script), "eric-zimmerman"]
-    settings = Settings(input_roots=[str(evidence)], output_roots=[str(outputs)], plugin_path=str(plugins),
-                        foremost_config=str(config), scalpel_config=str(config), binaries=binaries, timeout_seconds=5)
+                ["bulk-extractor", "log2timeline", "psort", "exiftool", "strings", "filetype"]}
+    settings = Settings(input_roots=[str(evidence)], output_roots=[str(outputs)],
+                        binaries=binaries, timeout_seconds=5)
     return Repository(tmp_path / "runtime.db"), settings, source, outputs
 
 
@@ -71,16 +63,13 @@ def compiled(runtime, tool="strings", **options):
 
 
 @pytest.mark.parametrize("tool,options", [
-    ("strings", {}), ("exiftool", {}), ("foremost", {"types": ["jpg"]}), ("scalpel", {"types": ["jpg", "jpeg"]}),
-    ("bulk-extractor", {"focus_scanners": ["email"]}), ("volatility", {"plugins": ["windows.pslist", "windows.malfind"]}),
-    ("artifact-triage", {}), ("filetype", {}), ("eric-zimmerman", {"tool_id": "evtxecmd"}),
+    ("strings", {}), ("exiftool", {}),
+    ("bulk-extractor", {"focus_scanners": ["email"]}),
+    ("artifact-triage", {}), ("filetype", {}),
 ])
-def test_every_adapter_runs_through_shared_worker(runtime, tool, options):
+def test_command_and_builtin_operations_use_shared_worker(runtime, tool, options):
     repo, settings, source, outputs = runtime
     options = dict(options)
-    if tool == "eric-zimmerman":
-        source.write_bytes(b"ElfFile\x00synthetic event log")
-        options["source_path"] = str(source)
     run = compiled(runtime, tool, **options)
     Worker(repo, settings).run_once()
     completed = repo.run(run["id"])
@@ -96,10 +85,8 @@ def test_every_adapter_runs_through_shared_worker(runtime, tool, options):
 @pytest.mark.parametrize("tool,options", [
     ("strings", {"encodng": "l"}), ("strings", {"encoding": "--help"}), ("strings", {"min_length": True}), ("strings", {"min_length": 0}),
     ("strings", {"show_offsets": "false"}), ("exiftool", {"output_format": "xml"}),
-    ("volatility", {"plugins": ["--help"]}), ("volatility", {"plugins": "windows.pslist"}),
-    ("volatility", {"plugins": ["windows.pslist"], "renderer": "csv"}),
     ("artifact-triage", {"timezone": "not-a-time-zone"}), ("bulk-extractor", {"focus_scanners": ["unknown"]}),
-    ("scalpel", {"types": ["exe"]}), ("filetype", {"mode": "invalid"}), ("filetype", {"mode": "full", "mismatch_only": True}),
+    ("filetype", {"mode": "invalid"}), ("filetype", {"mode": "full", "mismatch_only": True}),
 ])
 def test_invalid_options_fail_before_enqueue(runtime, tool, options):
     with pytest.raises(ValidationError):
@@ -236,24 +223,12 @@ def test_recovery_preserves_staging_and_kills_orphan(runtime):
 def test_csv_cache_pages_and_invalidates(tmp_path):
     source = tmp_path / "rows.csv"
     source.write_text("Name,Value\n" + "".join(f"row{i},{i}\n" for i in range(2000)))
-    cache = CsvTables(tmp_path / "cache.db")
+    cache = ResultTables(tmp_path / "cache.db")
     data, total, more = cache.page(source, 1200, 10)
     assert total == 2000 and more and data["rows"][0] == ["row1200", "1200"]
     source.write_text("Name,Value\nreplacement,3\n")
     data, total, more = cache.page(source)
     assert total == 1 and not more and data["rows"] == [["replacement", "3"]]
-
-
-def test_zimmerman_prefers_dotnet_assembly_over_shell_wrapper(runtime, monkeypatch, tmp_path):
-    settings = runtime[1]
-    settings.binaries.pop("evtxecmd")
-    settings.ez_root = str(tmp_path / "tools")
-    dll = Path(settings.ez_root) / "EvtxeCmd/EvtxECmd.dll"
-    dll.parent.mkdir(parents=True)
-    dll.write_bytes(b"assembly")
-    monkeypatch.setattr("sifted_core.tool_base.shutil.which", lambda name: "/usr/bin/" + name)
-    tool = resolve_ez_tool("evtxecmd", settings)
-    assert tool["argv_prefix"] == ["/usr/bin/dotnet", str(dll)]
 
 
 def test_directory_member_change_is_detected_before_execution(runtime):
@@ -361,3 +336,66 @@ def test_staging_symlink_cannot_write_or_remove_outside_workspace(runtime, tmp_p
     assert repo.run(run["id"])["status"] == "error"
     assert marker.read_text() == "preserve this"
     assert list(foreign_attempt.iterdir()) == [marker]
+
+
+def test_non_utf8_output_retains_attempt_and_worker_can_process_next_job(runtime):
+    program = "import os; fd=os.open(b'output/invalid-name\\xff', os.O_WRONLY|os.O_CREAT, 0o600); os.write(fd,b'preserved bytes'); os.close(fd)"
+    run = custom_run(runtime, program)
+    worker = Worker(runtime[0], runtime[1])
+    worker.run_once()
+    result = runtime[0].run(run["id"])
+    assert result["status"] == "error" and "non-UTF-8 path" in result["error"]
+    retained = Path(result["retained_workspace"])
+    assert retained.is_dir() and not Path(run["output_path"]).exists()
+    invalid = os.fsencode(retained / "output") + b"/invalid-name\xff"
+    with open(invalid, "rb") as handle:
+        assert handle.read() == b"preserved bytes"
+    assert runtime[0].artifacts(run["id"]) == []
+    assert runtime[0].events(run["id"])[-1]["type"] == "done"
+    following = compiled(runtime)
+    worker.run_once()
+    assert runtime[0].run(following["id"])["status"] == "success"
+
+
+def test_private_inputs_can_change_without_altering_evidence_and_nested_configs_are_retained(runtime):
+    from sifted_core.tool_base import OUTPUT, WORKSPACE
+    repo, settings, source, outputs = runtime
+    plan, case, record = compile_plan('strings', {'source_path':str(source), 'output_path':str(outputs/'captured')}, settings, repo)
+    original = source.read_bytes()
+    plan.input_copies = {str(source):'input/captured.bin'}
+    plan.configs = {'maps/nested/query.map':'SELECT known;\n'}
+    code = "from pathlib import Path; import sys; p=Path(sys.argv[1]); assert p.read_bytes()==bytes.fromhex(sys.argv[2]); p.write_bytes(b'changed private copy'); print('0 '+Path(sys.argv[3]).read_text().strip())"
+    plan.steps = [Step([sys.executable,'-c',code,WORKSPACE+'/input/captured.bin',original.hex(),WORKSPACE+'/maps/nested/query.map'],'captured parser',OUTPUT+'/strings.txt')]
+    run = enqueue(repo, plan, record, case)
+    Worker(repo,settings).run_once()
+    result = repo.run(run['id'])
+    assert result['status']=='success',result.get('error')
+    assert source.read_bytes()==original
+    assert Path(result['output_path'],'_sifted/maps/nested/query.map').read_text()=='SELECT known;\n'
+    assert not Path(result['output_path'],'_sifted/input').exists()
+
+
+@pytest.mark.parametrize('action', ['metadata_symlink','config_changed','config_symlink','provenance_occupied'])
+def test_tool_cannot_replace_managed_provenance_or_configuration(runtime, action, tmp_path):
+    from sifted_core.tool_base import OUTPUT, WORKSPACE
+    repo, settings, source, outputs = runtime
+    external = tmp_path/'outside'; external.mkdir()
+    marker=external/'marker';marker.write_text('untouched')
+    actions = {
+        'metadata_symlink': "(output/'_sifted').symlink_to(external,target_is_directory=True)",
+        'config_changed': "config.write_text('changed')",
+        'config_symlink': "config.unlink(); config.symlink_to(external/'marker')",
+        'provenance_occupied': "(output/'_sifted').mkdir(); (output/'_sifted/provenance.json').write_text('spoofed')",
+    }
+    plan, case, record = compile_plan('strings',{'source_path':str(source),'output_path':str(outputs/action)},settings,repo)
+    plan.configs={'maps/config.map':'original'}
+    code="from pathlib import Path; import sys; output,config,external=map(Path,sys.argv[1:]); output.mkdir(exist_ok=True); "+actions[action]+"; print('0 output')"
+    plan.steps=[Step([sys.executable,'-c',code,OUTPUT,WORKSPACE+'/maps/config.map',str(external)],'bad parser',OUTPUT+'/strings.txt')]
+    run=enqueue(repo,plan,record,case);worker=Worker(repo,settings);worker.run_once()
+    result=repo.run(run['id'])
+    assert result['status']=='error' and Path(result['retained_workspace']).is_dir()
+    assert not Path(run['output_path']).exists()
+    assert marker.read_text()=='untouched' and list(external.iterdir())==[marker]
+    assert repo.events(run['id'])[-1]['type']=='done'
+    following=compiled(runtime);worker.run_once()
+    assert repo.run(following['id'])['status']=='success'

@@ -4,7 +4,8 @@ import os
 import re
 from pathlib import Path
 from flask import current_app
-from .tables import CsvTables
+from .tables import ResultTables
+from .json_rows import tree_rows
 
 def read_text_preview(path, max_bytes=1024 * 1024):
     with open(path, "rb") as handle:
@@ -66,7 +67,7 @@ def build_table_from_list(items):
 
 def parse_csv_table(path, row_limit=500, max_bytes=1024 ** 3, row_offset=0):
     cache_path = Path(current_app.config["DATABASE_PATH"]).with_suffix(".tables.sqlite3")
-    return CsvTables(cache_path).page(path, row_offset, row_limit, max_bytes)
+    return ResultTables(cache_path).page(path, row_offset, row_limit, max_bytes)
 
 
 def parse_strings_table(path, row_limit=500, max_bytes=50 * 1024 * 1024, row_offset=0):
@@ -130,64 +131,26 @@ def parse_strings_table(path, row_limit=500, max_bytes=50 * 1024 * 1024, row_off
     return {"columns": columns, "rows": rows}, total_rows, truncated
 
 
-def parse_foremost_audit(path, row_limit=500, max_bytes=10 * 1024 * 1024, row_offset=0):
-    """Parse Foremost audit.txt into table data structure."""
-    try:
-        file_size = os.path.getsize(path)
-    except OSError:
-        raise ValueError("Unable to read file size.")
-    if file_size > max_bytes:
-        size_mb = file_size / (1024 * 1024)
-        raise ValueError(f"File is too large for table view ({size_mb:.1f} MB).")
-
-    # Pattern for carved files: "   12345:   filename.ext"
-    file_pattern = re.compile(r"^\s*(\d+):\s+(\S+)")
-    # Section header pattern
-    section_pattern = re.compile(r"^Foremost.*|^Audit File|^Invocation:|^Output directory:|^Configuration file:|^-----|^File:")
-
-    row_offset = max(0, row_offset)
-    row_limit = max(0, row_limit)
-    rows = []
-    current_type = "unknown"
-    total_rows = 0
-
-    try:
-        with open(path, "r", encoding="utf-8", errors="replace") as handle:
-            for line in handle:
-                line = line.rstrip("\n\r")
-
-                # Skip headers and section markers
-                if section_pattern.match(line) or not line.strip():
-                    continue
-
-                # Check for file type sections (e.g., "jpg:")
-                if line.endswith(":") and not line.startswith(" "):
-                    current_type = line[:-1].strip()
-                    continue
-
-                # Parse carved file entries
-                match = file_pattern.match(line)
-                if match:
-                    file_offset = match.group(1)
-                    filename = match.group(2)
-                    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-                    row = [current_type, file_offset, filename, ext]
-                    row_index = total_rows
-                    if row_index >= row_offset and len(rows) < row_limit:
-                        rows.append(row)
-                    total_rows += 1
-    except OSError:
-        raise ValueError("Unable to read file.")
-
-    if total_rows == 0:
-        raise ValueError("No carved files found in audit.")
-
-    columns = ["Type", "Offset", "Filename", "Extension"]
-    truncated = total_rows > row_offset + len(rows)
-    columns = [coerce_table_value(col) for col in columns]
-    rows = [[coerce_table_value(value) for value in row] for row in rows]
-
-    return {"columns": columns, "rows": rows}, total_rows, truncated
+def parse_carving_audit(path, row_limit=500, max_bytes=10 * 1024 * 1024, row_offset=0):
+    """Display native source-byte offsets, including valid zero-recovery audits."""
+    from .carving import audit_entries
+    if os.path.getsize(path) > max_bytes:
+        raise ValueError("File is too large for audit table view.")
+    with open(path, encoding="utf-8") as handle:
+        header = handle.read(256).lstrip()
+    if header.startswith("Foremost version "):
+        tool = "foremost"
+    elif header.startswith("Scalpel version "):
+        tool = "scalpel"
+    else:
+        raise ValueError("Unrecognized carving audit header.")
+    rows, total = [], 0
+    row_offset, row_limit = max(0, row_offset), max(0, row_limit)
+    for entry in audit_entries(path, tool):
+        if total >= row_offset and len(rows) < row_limit:
+            rows.append([entry["name"], str(entry["offset"]), str(entry["length"]) if entry["length"] is not None else entry["audit_size"], entry["chopped"], entry["comment"]])
+        total += 1
+    return {"columns": ["Filename", "Offset Bytes", "Length Bytes" if tool == "scalpel" else "Size (rounded by Foremost)", "Chopped", "Comment"], "rows": rows}, total, total > row_offset + len(rows)
 
 
 def parse_bulk_extractor_feature(path, row_limit=500, max_bytes=50 * 1024 * 1024, row_offset=0):
@@ -264,7 +227,7 @@ def detect_text_table_format(path):
 
     # Foremost/Scalpel audit files
     if basename in ("audit.txt", "foremost.log") or basename.startswith("audit_"):
-        return "foremost_audit"
+        return "carving_audit"
 
     # Bulk Extractor feature files (common patterns)
     bulk_patterns = [
@@ -317,6 +280,9 @@ def detect_text_table_format(path):
 
 
 def parse_json_table(path, row_limit=500, max_bytes=10 * 1024 * 1024, row_offset=0):
+    if str(path).lower().endswith(".jsonl"):
+        cache_path = Path(current_app.config["DATABASE_PATH"]).with_suffix(".tables.sqlite3")
+        return ResultTables(cache_path).page(path, row_offset, row_limit)
     try:
         file_size = os.path.getsize(path)
     except OSError:
@@ -349,6 +315,8 @@ def parse_json_table(path, row_limit=500, max_bytes=10 * 1024 * 1024, row_offset
         else:
             columns, rows = build_table_from_list([data])
     elif isinstance(data, list):
+        if any(isinstance(row, dict) and "__children" in row for row in data):
+            data = list(tree_rows(data))
         columns, rows = build_table_from_list(data)
     else:
         columns, rows = ["Value"], [[data]]

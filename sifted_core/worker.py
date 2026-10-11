@@ -18,6 +18,7 @@ from pathlib import Path
 from .tool_base import OUTPUT, Plan, Step, allowed, directory_members, resolve_argv, resolve_token, signature
 from .disk_tools import image_sources
 from .tool_results import process_results
+from .adapters import ADAPTERS
 from .storage import utc_now
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,36 @@ def hash_file(path, check=None):
     if before != signature(path):
         raise ExecutionFailure(f"File changed while hashing: {path}")
     return digest.hexdigest(), before[2]
+
+
+def workspace_path(workspace, name, area=None):
+    relative = Path(name)
+    if relative.is_absolute() or not relative.parts or any(p in {".", ".."} for p in relative.parts):
+        raise ExecutionFailure("Invalid managed workspace path.")
+    if area and relative.parts[0] != area:
+        raise ExecutionFailure("Staged inputs must remain in the managed input directory.")
+    if not area and relative.parts[0] in {"input", "output", "run.log", "provenance.json"}:
+        raise ExecutionFailure("Configuration overlaps a reserved workspace path.")
+    path = workspace / relative
+    if path.resolve() != path:
+        raise ExecutionFailure("Managed workspace path contains a symbolic link.")
+    return path
+
+
+def copy_input(source, target, expected, check):
+    """Copy verified evidence into a private working file without changing the original."""
+    digest = hashlib.sha256()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    with os.fdopen(descriptor, "rb") as original, target.open("xb") as captured:
+        while data := original.read(1024 * 1024):
+            check()
+            captured.write(data)
+            digest.update(data)
+    if digest.hexdigest() != expected:
+        raise ExecutionFailure("Staged input differs from the verified evidence: " + str(source))
+    shutil.copystat(source, target, follow_symlinks=False)
+    target.chmod(0o600)
 
 
 def tree_size(path):
@@ -106,7 +137,7 @@ class Worker:
         log.flush()
         environment = {**os.environ, "LC_ALL": "C", "LANG": "C"}
         deadline = min(job_deadline, time.monotonic() + step.timeout)
-        stdout_file = None
+        stdout_file = stderr_file = None
         process = None
         selector = selectors.DefaultSelector()
         diagnostic = bytearray()
@@ -125,6 +156,13 @@ class Worker:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
                 stdout_file = os.fdopen(descriptor, "wb")
+            if step.stderr:
+                target = Path(resolve_token(step.stderr, str(output), str(workspace)))
+                if not target.resolve().is_relative_to(output.resolve()):
+                    raise ExecutionFailure("Adapter stderr escaped its managed output folder.")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+                stderr_file = os.fdopen(descriptor, "wb")
             process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE, env=environment, cwd=workspace,
                                        shell=False, start_new_session=True)
@@ -160,9 +198,13 @@ class Worker:
                     if key.data == "stderr" or not stdout_file:
                         diagnostic.extend(chunk)
                         del diagnostic[:-65536]
+                    if key.data == "stderr" and stderr_file:
+                        stderr_file.write(chunk)
                 log.flush()
                 if stdout_file:
                     stdout_file.flush()
+                if stderr_file:
+                    stderr_file.flush()
             # A process may close both pipes and continue working. Keep checking
             # cancellation and budgets until it actually exits.
             while process.poll() is None:
@@ -193,6 +235,10 @@ class Worker:
                 stdout_file.flush()
                 os.fsync(stdout_file.fileno())
                 stdout_file.close()
+            if stderr_file:
+                stderr_file.flush()
+                os.fsync(stderr_file.fileno())
+                stderr_file.close()
             log.flush()
         result = {"label": step.label, "argv": argv, "return_code": code,
                   "started_at": started, "completed_at": utc_now(), "error": error,
@@ -261,6 +307,11 @@ class Worker:
         files = []
         if output.exists():
             for root, dirs, names in os.walk(output, followlinks=False):
+                for name in dirs + names:
+                    try:
+                        (Path(root) / name).relative_to(output).as_posix().encode("utf-8")
+                    except UnicodeEncodeError as exc:
+                        raise ExecutionFailure("Tool output contains a non-UTF-8 path; attempt retained.") from exc
                 dirs[:] = [d for d in dirs if not (Path(root) / d).is_symlink()]
                 for name in sorted(names):
                     path = Path(root) / name
@@ -303,6 +354,7 @@ class Worker:
         workspace_owned = False
         try:
             plan = Plan.from_dict(run["plan"])
+            ADAPTERS[plan.tool].validate_execution(plan, self.settings)
             original_input = self.repo.input(run["id"])
             # Revalidate durable requests at execution time, after queue waiting.
             derived_allowed = original_input.get("source_run_id") and allowed(plan.source, self.settings.output_roots)
@@ -314,7 +366,7 @@ class Worker:
                 raise ExecutionFailure("Image segment membership changed while queued.")
             for member in original_input.get("related_files", []):
                 if not allowed(member["path"], self.settings.input_roots) or signature(member["path"]) != member["signature"]:
-                    raise ExecutionFailure("Image segment changed or is no longer allowed.")
+                    raise ExecutionFailure("Related input changed or is no longer allowed: " + member["path"])
             if signature(plan.source) != original_input["signature"]:
                 raise ExecutionFailure("Input changed while queued; register or select the current evidence again.")
             if original_input["kind"] == "directory" and directory_members(plan.source) != original_input["members"]:
@@ -344,7 +396,7 @@ class Worker:
                     for member in original_input["related_files"]:
                         digest, size = hash_file(member["path"], integrity_check)
                         if member.get("baseline_sha256") and digest != member["baseline_sha256"]:
-                            raise ExecutionFailure("Image segment SHA-256 differs from the context run.")
+                            raise ExecutionFailure("Related input SHA-256 differs from its registered baseline: " + member["path"])
                         extra["input_files"].append({"path": member["path"], "sha256": digest, "size_bytes": size})
             else:
                 self.repo.emit(run["id"], "status", "Verifying directory evidence integrity...")
@@ -370,11 +422,20 @@ class Worker:
                         identities[str(path)] = {"sha256": digest, "size_bytes": size}
             extra["executables"] = identities
             extra["environment"] = {"LC_ALL": "C", "LANG": "C"}
+            if plan.input_copies:
+                verified = {entry["path"] if Path(entry["path"]).is_absolute() else str(Path(plan.source) / entry["path"]): entry["sha256"]
+                            for entry in extra.get("input_files", [])}
+                if extra.get("input_sha256"):
+                    verified[plan.source] = extra["input_sha256"]
+                for source, name in plan.input_copies.items():
+                    if source not in verified:
+                        raise ExecutionFailure("Staged input has not been verified: " + source)
+                    copy_input(source, workspace_path(workspace, name, "input"), verified[source], integrity_check)
             self.repo.update(run["id"], {"command": "\n".join(plan.commands(str(output), str(workspace)))})
             for name, content in plan.configs.items():
-                if Path(name).name != name:
-                    raise ExecutionFailure("Invalid adapter configuration filename.")
-                (workspace / name).write_text(content, encoding="utf-8")
+                path = workspace_path(workspace, name)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
             if plan.create_output_directory:
                 output.mkdir()
             with open(workspace / "run.log", "wb") as log:
@@ -411,12 +472,24 @@ class Worker:
                     raise ExecutionFailure("Image segment membership changed during execution.")
                 for member in original_input.get("related_files", []):
                     if signature(member["path"]) != member["signature"]:
-                        raise ExecutionFailure("Image segment changed during execution; results are incomplete.")
+                        raise ExecutionFailure("Related input changed during execution; results are incomplete: " + member["path"])
                 if original_input["kind"] == "directory" and directory_members(plan.source) != original_input["members"]:
                     raise ExecutionFailure("Directory evidence changed during execution; results are incomplete.")
                 self._check(run["id"], output, deadline, plan.max_output_bytes)
-                if status == "success" and plan.postprocess:
-                    extra.update(process_results(plan, output, integrity_check))
+                if plan.postprocess and (status == "success" or plan.postprocess_on_failure):
+                    processed = process_results(plan, output, integrity_check, results)
+                    validation_errors = processed.pop("validation_errors", [])
+                    extra.update(processed)
+                    if validation_errors:
+                        status, exit_code = "error", 1
+                        error = "\n".join(filter(None, [error, *validation_errors]))[:65536]
+                if signature(plan.source) != original_input["signature"]:
+                    raise ExecutionFailure("Input changed during result validation; results are incomplete.")
+                for member in original_input.get("related_files", []):
+                    if signature(member["path"]) != member["signature"]:
+                        raise ExecutionFailure("Related input changed during result validation; results are incomplete: " + member["path"])
+                if original_input["kind"] == "directory" and directory_members(plan.source) != original_input["members"]:
+                    raise ExecutionFailure("Directory evidence changed during result validation; results are incomplete.")
                 log.flush()
                 os.fsync(log.fileno())
         except ExecutionFailure as exc:
@@ -435,10 +508,24 @@ class Worker:
                 # Include configuration snapshots and provenance as durable results.
                 output.mkdir(exist_ok=True)
                 metadata = output / "_sifted"
+                if metadata.is_symlink() or metadata.resolve() != metadata:
+                    raise ExecutionFailure("Tool created a symbolic link in managed metadata; attempt retained.")
                 metadata.mkdir(exist_ok=True)
-                for path in workspace.iterdir():
-                    if path.is_file() and path.name != "run.log":
-                        shutil.copyfile(path, metadata / path.name)
+                provenance = workspace / "provenance.json"
+                if (metadata / "provenance.json").exists() or (metadata / "provenance.json").is_symlink():
+                    raise ExecutionFailure("Tool occupied the managed provenance destination; attempt retained.")
+                shutil.copyfile(provenance, metadata / "provenance.json")
+                for name in plan.configs:
+                    path = workspace_path(workspace, name)
+                    if path.is_symlink() or not path.is_file():
+                        raise ExecutionFailure("Configuration snapshot disappeared or became a symbolic link.")
+                    if path.read_text(encoding="utf-8") != plan.configs[name]:
+                        raise ExecutionFailure("Tool changed its configuration snapshot; attempt retained.")
+                    destination = metadata / name
+                    if destination.resolve() != destination:
+                        raise ExecutionFailure("Configuration output path contains a symbolic link.")
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(path, destination)
                 files = self._publish(run, workspace, status)
         except Exception as exc:
             logger.exception("Publication failed for %s", run["id"])

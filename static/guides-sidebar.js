@@ -1402,11 +1402,6 @@ const initGuidesSidebar = () => {
       </div>
     `;
 
-    // Initialize artifact tooltips for the detail content
-    if (typeof window.initArtifactTooltips === "function") {
-      window.initArtifactTooltips(detailContent);
-    }
-
     detailPane.hidden = false;
     detailPane.dataset.category = guide.category;
     if (sidebarContent) sidebarContent.style.display = "none";

@@ -155,27 +155,6 @@ body {
   opacity: 1;
 }
 
-/* Nav action button (legacy support) */
-.nav-action {
-  text-decoration: none;
-  color: var(--neon-teal);
-  border: 1px solid rgba(var(--neon-teal-rgb), 0.4);
-  padding: var(--space-sm) var(--space-lg);
-  border-radius: var(--radius-full);
-  font-size: 0.8rem;
-  font-weight: 500;
-  transition:
-    color var(--duration-fast) var(--ease-out-expo),
-    border-color var(--duration-fast) var(--ease-out-expo),
-    box-shadow var(--duration-fast) var(--ease-out-expo);
-}
-
-.nav-action:hover {
-  color: var(--neon-pink);
-  border-color: rgba(var(--neon-pink-rgb), 0.6);
-  box-shadow: 0 0 16px rgba(var(--neon-pink-rgb), 0.2);
-}
-
 /* Navigation links container */
 .nav-links {
   display: flex;
@@ -5164,13 +5143,6 @@ body.modal-open {
   font-size: 0.75rem;
   color: var(--text-muted);
   line-height: 1.4;
-}
-
-/* Legacy support */
-.detail-fields li code {
-  display: block;
-  white-space: normal;
-  word-break: break-word;
 }
 
 /* Event log details (for RDP, etc.) */

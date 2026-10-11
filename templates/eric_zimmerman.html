@@ -37,7 +37,7 @@
           <div class="block-header">
             <div>
               <h2>Choose a parser</h2>
-              <p class="helper">Select a tool to parse specific Windows artifacts. Each outputs CSV for easy filtering and review.</p>
+              <p class="helper">Select a parser for extracted Windows artifacts. All native CSV exports, diagnostics, configuration and provenance are retained.</p>
             </div>
           </div>
 
@@ -53,12 +53,11 @@
                   class="ez-tool-card{% if not tool.installed %} missing{% endif %}"
                   type="button"
                   data-tool-id="{{ tool.id }}"
-                  data-curated="{{ tool.curated | lower }}"
                 >
                   <span class="ez-tool-name">{{ tool.label }}</span>
                   <span class="ez-tool-summary">{{ tool.summary }}</span>
                   <span class="ez-tool-input">{{ tool.input_hint | replace("Source: ", "") }}</span>
-                  <span class="ez-tool-status">{{ "Installed" if tool.installed else "Missing" }}</span>
+                  <span class="ez-tool-status">{{ "Available" if tool.installed else "Unavailable" }}</span>
                 </button>
               {% endfor %}
             </div>
@@ -71,6 +70,8 @@
             <p class="helper" id="ezToolHint"></p>
             <p class="helper" id="ezToolOutput"></p>
             <span class="tool-status" id="ezToolStatus"></span>
+            <div id="ezToolOptions"></div>
+            <p class="helper">Registry logs are replayed by default. Working copies protect original hives and their logs; native source paths identify those copies in the run provenance.</p>
           </div>
         </div>
       </section>

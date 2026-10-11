@@ -11,8 +11,64 @@ from app import create_app
 from sifted_core.storage import Repository
 from sifted_core.worker import Worker
 from sifted_core.workflow_catalog import WORKFLOWS
+from test_volatility import memory_runtime as memory_runtime
+from test_carving import carving_runtime as carving_runtime
+from test_zimmerman import zimmerman_runtime as zimmerman_runtime
 
 playwright = pytest.importorskip("playwright.sync_api")
+
+
+@pytest.mark.browser
+def test_volatility_tabs_options_and_64_bit_addresses(memory_runtime, monkeypatch):
+    from sifted_core import web
+    repo, settings, source, installed = memory_runtime
+    monkeypatch.setattr(web, "discover_volatility", lambda settings: installed)
+    app = create_app({"TESTING": True, "SIFTED_DATABASE_PATH": str(source.parent / "runtime.db"),
+                      "SIFTED_INPUT_ROOTS": settings.input_roots, "SIFTED_OUTPUT_ROOTS": settings.output_roots,
+                      "SIFTED_VOLATILITY_SYMBOLS": settings.volatility_symbols})
+    server = make_server("127.0.0.1", 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():
+                pytest.skip("Chromium is not installed.")
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"http://127.0.0.1:{server.server_port}/volatility")
+            page.click('[data-source-mode="manual"]')
+            page.fill('#sourcePath', str(source))
+            page.fill('#outputPath', str(source.parent / "results"))
+            page.check('[data-plugin="windows.pslist.PsList"]')
+            page.locator('[data-plugin-options="windows.pslist.PsList"] summary').click()
+            page.fill('[data-plugin-options="windows.pslist.PsList"] [data-option="offset"]', '0xffff800000123001')
+            page.fill('[data-plugin-options="windows.pslist.PsList"] [data-option="pid"]', '[4]')
+            page.click('[data-tab="linux"]')
+            page.check('[data-plugin="linux.pagecache.RecoverFs"]')
+            assert page.evaluate('buildPayload().plugins') == ['linux.pagecache.RecoverFs']
+            page.click('[data-tab="windows"]')
+            page.select_option('#renderer', 'jsonl')
+            expected = int('0xffff800000123001', 16)
+            page.wait_for_function('(value) => document.querySelector("#commandPreview").textContent.includes(value)',
+                                   arg='--offset=' + str(expected))
+            page.route('**/api/run/*/events', lambda route: route.abort())
+            page.click('#runVolatility')
+            page.wait_for_function('document.querySelector("#runStatus").textContent.includes("Queued")')
+            Worker(repo, settings).run_once()
+            page.wait_for_function('document.querySelector("#runStatus").dataset.tone === "success"', timeout=10000)
+            run = repo.runs()[0]
+            assert run['plan']['parameters']['plugin_options']['windows.pslist.PsList']['offset'] == expected
+            assert run['plan']['parameters']['plugins'] == ['windows.pslist.PsList']
+            page.wait_for_selector('#runResultsLinks a')
+            assert 'success (2 rows)' in page.locator('#runResultsLinks').inner_text()
+            assert not errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 @pytest.mark.browser
@@ -121,3 +177,96 @@ def test_filesystem_listing_extraction_and_derived_examination(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize('tool',['foremost','scalpel'])
+def test_carving_recovery_table_and_hash_verified_followup(carving_runtime, tool):
+    repo,settings,source,_=carving_runtime
+    repo.add_case({'id':'case','name':'Carving browser case','slug':'case','artifacts':[]})
+    app=create_app({'TESTING':True,'SIFTED_DATABASE_PATH':str(repo.path),'SIFTED_INPUT_ROOTS':settings.input_roots,
+                    'SIFTED_OUTPUT_ROOTS':settings.output_roots,'SIFTED_BINARIES':settings.binaries})
+    server=make_server('127.0.0.1',0,app,threaded=True)
+    thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+    errors=[]
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():pytest.skip('Chromium is not installed')
+            browser=engine.chromium.launch(headless=True);page=browser.new_page()
+            page.on('pageerror',lambda error:errors.append(str(error)))
+            page.goto(f'http://127.0.0.1:{server.server_port}/'+tool)
+            page.click('[data-source-mode="manual"]');page.select_option('#caseSelect','case')
+            page.fill('#sourcePath',str(source));page.fill('#outputPath',str(source.parent/'results'))
+            page.uncheck('.chip input[value="pdf"]')
+            page.wait_for_function('document.querySelector("#commandPreview").textContent.includes("carver.py")')
+            page.route('**/api/run/*/events',lambda route:route.abort())
+            page.click('#run'+tool.title())
+            page.wait_for_function('document.querySelector("#runStatus").textContent.includes("Queued")')
+            Worker(repo,app.config['SETTINGS']).run_once()
+            page.wait_for_function('document.querySelector("#runStatus").dataset.tone === "success"',timeout=10000)
+            page.wait_for_selector('#runResultsLinks a[href$="/analysis"]')
+            page.click('#runResultsLinks a[href$="/analysis"]')
+            assert '1 recovered files' in page.locator('main').inner_text()
+            assert 'Offset Bytes' in page.locator('table').inner_text()
+            page.click('a[href*="/workflow/xxd?"]')
+            page.wait_for_function('document.querySelector("#commandPreview").textContent.includes("00000000.jpg")')
+            page.click('#runWorkflow')
+            page.wait_for_function('document.querySelector("#runStatus").textContent.includes("Queued")')
+            Worker(repo,app.config['SETTINGS']).run_once()
+            page.wait_for_function('document.querySelector("#runStatus").dataset.tone === "success"',timeout=10000)
+            runs=repo.runs(case_id='case');assert len(runs)==2 and all(run['status']=='success' for run in runs)
+            examined=next(run for run in runs if run['tool']=='xxd')
+            producer=next(run for run in runs if run['tool']==tool)
+            assert repo.input(examined['id'])['source_run_id']==producer['id']
+            assert producer['plan']['parameters']['types']==['jpg']
+            assert not errors
+            browser.close()
+    finally:
+        server.shutdown();server.server_close();thread.join(timeout=5)
+
+
+@pytest.mark.browser
+def test_zimmerman_parser_options_queue_and_mapped_sqlite_results(zimmerman_runtime):
+    from test_zimmerman import input_for
+    repo, settings, evidence, outputs, _ = zimmerman_runtime
+    source = input_for(zimmerman_runtime, 'sqlecmd')
+    app = create_app({'TESTING':True, 'SIFTED_DATABASE_PATH':str(evidence.parent/'runtime.db'),
+                      'SIFTED_INPUT_ROOTS':settings.input_roots,'SIFTED_OUTPUT_ROOTS':settings.output_roots,
+                      'SIFTED_EZ_ROOT':settings.ez_root, 'SIFTED_BINARIES':settings.binaries})
+    server=make_server('127.0.0.1',0,app,threaded=True)
+    thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+    errors=[]
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():pytest.skip('Chromium is not installed.')
+            browser=engine.chromium.launch(headless=True);page=browser.new_page()
+            page.on('pageerror',lambda error:errors.append(str(error)))
+            page.goto(f'http://127.0.0.1:{server.server_port}/eric-zimmerman')
+            page.click('[data-tool-id="recmd"]')
+            assert page.locator('[data-parser-option="batch"]').input_value()=='RegistryASEPs'
+            page.check('[data-parser-option="ignore_transaction_logs"]')
+            page.click('[data-tool-id="jlecmd"]')
+            assert page.locator('[data-parser-option="batch"]').count()==0
+            assert page.locator('[data-parser-option="ignore_transaction_logs"]').count()==0
+            page.check('[data-parser-option="include_unlisted"]')
+            page.click('[data-tool-id="sqlecmd"]')
+            assert 'SIFTed executor' in page.locator('#ezToolStatus').inner_text()
+            assert page.locator('[data-parser-option="include_unlisted"]').count()==0
+            page.select_option('[data-parser-option="maps"]',['test.smap'])
+            page.click('[data-source-mode="manual"]');page.fill('#sourcePath',str(source))
+            page.fill('#outputPath',str(outputs/'browser parsed'))
+            page.wait_for_function('document.querySelector("#commandPreview").textContent.includes("sqlite-request.json")')
+            page.route('**/api/run/*/events',lambda route:route.abort())
+            page.click('#runEzTool');page.wait_for_function('document.querySelector("#runStatus").textContent.includes("Queued")')
+            Worker(repo,settings).run_once()
+            page.wait_for_function('document.querySelector("#runStatus").dataset.tone === "success"',timeout=10000)
+            result=repo.runs()[0]
+            assert result['analysis']['entry_count']==1 and result['plan']['parameters']['maps']==['test.smap']
+            assert 'include_unlisted' not in result['plan']['parameters']
+            page.wait_for_selector('#runResultsLinks a')
+            page.click('#runResultsLinks a:has-text("Inspect structured results")')
+            assert 'known value' in page.locator('body').inner_text()
+            assert not errors
+            browser.close()
+    finally:
+        server.shutdown();server.server_close();thread.join(timeout=5)

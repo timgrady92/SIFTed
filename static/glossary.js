@@ -2964,16 +2964,6 @@ const initTooltipDelegation = () => {
 // Initialize event delegation immediately
 initTooltipDelegation();
 
-// Legacy function kept for compatibility - now a no-op since delegation handles everything
-const initArtifactTooltips = (container = document) => {
-  // Event delegation handles all artifact links automatically
-  // This function is kept for backward compatibility with code that calls it
-  // (e.g., guide modal initialization)
-};
-
-// Expose globally for use by other scripts (e.g., guide modal)
-window.initArtifactTooltips = initArtifactTooltips;
-
 // Keep tooltip visible when hovering over it
 if (tooltip) {
   tooltip.addEventListener("mouseenter", () => {

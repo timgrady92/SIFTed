@@ -77,7 +77,7 @@ def create_blueprint(repository_factory, settings_factory):
     def status(run_id):
         run = run_or_404(run_id)
         return jsonify({key: run.get(key) for key in ("id", "tool", "status", "created_at", "output_path",
-                                                     "exit_code", "error", "current_step", "completed_at", "string_count", "file_count", "mismatch_count")})
+                                                     "exit_code", "error", "current_step", "completed_at", "string_count", "file_count", "mismatch_count", "plugin_results")})
 
     @api.get("/api/run/<run_id>/events")
     def events(run_id):

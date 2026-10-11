@@ -7,7 +7,7 @@ import subprocess
 import pytest
 
 
-def make_pdf(path):
+def pdf_bytes():
     stream = b"BT /F1 18 Tf 72 720 Td (Known forensic PDF marker) Tj ET"
     objects = [b"<< /Type /Catalog /Pages 2 0 R >>",
                b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -24,7 +24,11 @@ def make_pdf(path):
     for offset in offsets[1:]:
         data += f"{offset:010d} 00000 n \n".encode()
     data += b"trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n" + str(xref).encode() + b"\n%%EOF\n"
-    path.write_bytes(data)
+    return bytes(data)
+
+
+def make_pdf(path):
+    path.write_bytes(pdf_bytes())
     return path
 
 

@@ -5,14 +5,18 @@ import os
 import uuid
 from datetime import datetime, timezone
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
-from .tool_base import normalize as normalize_path, allowed as is_path_allowed, resolve_ez_tool as discover_ez_tool
+from .tool_base import normalize as normalize_path, allowed as is_path_allowed
+from .zimmerman import resolve_ez_tool
+from .volatility import discover as discover_volatility, BUNDLES
+from .carving import available_types
+from .tool_base import ValidationError
 from .catalog import EZ_TOOL_ORDER
 from .context import runtime_repository, runtime_settings
-from .presentation import ARTIFACT_TYPES, detect_artifact_type, LINUX_TRIAGE_BUNDLES, WINDOWS_TRIAGE_BUNDLES, WINDOWS_DEFAULT_PLUGINS, EZ_CATEGORIES
+from .presentation import ARTIFACT_TYPES, detect_artifact_type, EZ_CATEGORIES
 from .worker import ExecutionFailure, hash_file
 from .workflow_catalog import WORKFLOWS, CATEGORIES
 from .tool_base import executable
-from .viewers import read_text_preview, parse_csv_table, parse_strings_table, parse_foremost_audit, parse_bulk_extractor_feature, detect_text_table_format, parse_json_table
+from .viewers import read_text_preview, parse_csv_table, parse_strings_table, parse_carving_audit, parse_bulk_extractor_feature, detect_text_table_format, parse_json_table
 
 logger = logging.getLogger(__name__)
 web = Blueprint("web", __name__)
@@ -24,14 +28,6 @@ def load_cases():
 
 def load_runs():
     return runtime_repository().runs()
-
-
-def resolve_ez_tool(tool_id):
-    return discover_ez_tool(tool_id, runtime_settings())
-
-
-def detect_volatility_symbol_path():
-    return next((path for path in runtime_settings().symbol_roots if os.path.isdir(path)), "")
 
 
 def build_run_manifest(run, limit="configured"):
@@ -49,22 +45,6 @@ def compute_sha256(path):
 def error_response(message, status=400):
     """Create a standardized JSON error response."""
     return jsonify({"error": message}), status
-
-
-def load_volatility_plugins():
-    if not os.path.exists(runtime_settings().plugin_path):
-        return {"windows": [], "linux": [], "mac": []}
-    try:
-        with open(runtime_settings().plugin_path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-    except (OSError, json.JSONDecodeError):
-        logger.warning("Unable to load volatility plugins from %s", runtime_settings().plugin_path)
-        return {"windows": [], "linux": [], "mac": []}
-    return {
-        "windows": data.get("windows", []),
-        "linux": data.get("linux", []),
-        "mac": data.get("mac", []),
-    }
 
 
 def slugify(value):
@@ -103,10 +83,18 @@ def artifact_timeline():
     return render_template("artifact_timeline.html", cases=cases)
 
 
+def carving_page(tool):
+    error = None
+    try:
+        types = available_types(tool, runtime_settings())
+    except ValidationError as exc:
+        types, error = [], str(exc)
+    return render_template(tool + ".html", cases=load_cases(), carving_types=types, carving_error=error)
+
+
 @web.route("/foremost")
 def foremost():
-    cases = load_cases()
-    return render_template("foremost.html", cases=cases)
+    return carving_page("foremost")
 
 
 @web.route("/memory")
@@ -193,7 +181,7 @@ def get_tools_for_category(category):
     tools = []
     tools_json = []
     for tool_id in EZ_TOOL_ORDER:
-        tool = resolve_ez_tool(tool_id)
+        tool = resolve_ez_tool(tool_id, runtime_settings())
         if not tool or tool.get("category") != category:
             continue
         tools.append(tool)
@@ -205,12 +193,13 @@ def get_tools_for_category(category):
                 "description": tool["description"],
                 "input_hint": tool["input_hint"],
                 "input_mode": tool["input_mode"],
-                "csv_name": tool["csv_name"],
-                "curated": tool["curated"],
                 "installed": tool["installed"],
                 "binary_display": tool["binary_display"],
-                "batch_file": tool.get("batch_file"),
-                "supports_csvf": tool.get("supports_csvf", True),
+                "version": tool["version"],
+                "error": tool.get("error"),
+                "options": tool["options"],
+                "export_summary": tool["export_summary"],
+                "rejected_maps": tool.get("rejected_maps", {}),
             }
         )
     return tools, tools_json
@@ -275,20 +264,20 @@ def filetype():
 
 @web.route("/volatility")
 def volatility():
-    cases = load_cases()
-    symbol_path = detect_volatility_symbol_path()
-    plugins = load_volatility_plugins()
-    return render_template(
-        "volatility.html",
-        cases=cases,
-        symbol_path=symbol_path,
-        windows_plugins=plugins.get("windows", []),
-        linux_plugins=plugins.get("linux", []),
-        mac_plugins=plugins.get("mac", []),
-        windows_bundles=WINDOWS_TRIAGE_BUNDLES,
-        linux_bundles=LINUX_TRIAGE_BUNDLES,
-        windows_defaults=WINDOWS_DEFAULT_PLUGINS,
-    )
+    try:
+        installed = discover_volatility(runtime_settings())
+        error = None
+    except ValidationError as exc:
+        installed = {"plugins": {}, "version": None, "symbol_paths": [], "import_failures": []}
+        error = str(exc)
+    groups = {os: {name: spec for name, spec in installed["plugins"].items() if spec["os"] == os}
+              for os in ("windows", "linux", "mac", "general")}
+    bundles = {os: [{"label": label, "plugins": [name for name in names if name in groups[os]
+                    and not any(o["required"] for o in groups[os][name]["options"])]}
+                   for label, names in BUNDLES[os]] for os in groups}
+    return render_template("volatility.html", cases=load_cases(), installed=installed,
+                           discovery_error=error, groups=groups, bundles=bundles,
+                           symbol_roots=runtime_settings().symbol_roots)
 
 
 @web.route("/bulk-extractor")
@@ -299,8 +288,7 @@ def bulk_extractor():
 
 @web.route("/scalpel")
 def scalpel():
-    cases = load_cases()
-    return render_template("scalpel.html", cases=cases)
+    return carving_page("scalpel")
 
 
 @web.route("/cases", methods=["GET", "POST"])
@@ -601,7 +589,7 @@ def case_search(case_id):
                     continue
 
             # Skip non-text files
-            if not file_name.endswith((".txt", ".csv", ".json", ".log")):
+            if not file_name.endswith((".txt", ".csv", ".json", ".jsonl", ".log")):
                 continue
 
             if not is_path_allowed(file_path, current_app.config["BROWSE_ROOTS"]):
@@ -694,6 +682,7 @@ def run_results(run_id):
         return error
     files, truncated = build_run_manifest(run)
     return jsonify(files=files, truncated=truncated,
+                   plugin_results=run.get("plugin_results", []),
                    analysis_url=url_for("web.workflow_analysis", run_id=run_id) if run.get("analysis") else None)
 
 
@@ -738,7 +727,7 @@ def view_file():
 
     # Determine if file supports table view
     lower_target = target.lower() if target else ""
-    is_json = lower_target.endswith(".json")
+    is_json = lower_target.endswith((".json", ".jsonl"))
     is_csv = lower_target.endswith(".csv")
     is_txt = lower_target.endswith(".txt")
 
@@ -775,7 +764,7 @@ def view_file():
 
     target = normalize_path(target)
     lower_target = target.lower()
-    is_json = lower_target.endswith(".json")
+    is_json = lower_target.endswith((".json", ".jsonl"))
     is_csv = lower_target.endswith(".csv")
     is_txt = lower_target.endswith(".txt")
 
@@ -839,8 +828,8 @@ def view_file():
                     table_data, table_total, table_truncated = parse_json_table(target, row_limit=100)
                 elif text_format == "strings":
                     table_data, table_total, table_truncated = parse_strings_table(target, row_limit=100)
-                elif text_format == "foremost_audit":
-                    table_data, table_total, table_truncated = parse_foremost_audit(target, row_limit=100)
+                elif text_format == "carving_audit":
+                    table_data, table_total, table_truncated = parse_carving_audit(target, row_limit=100)
                 elif text_format == "bulk_extractor":
                     table_data, table_total, table_truncated = parse_bulk_extractor_feature(target, row_limit=100)
                 else:
@@ -901,7 +890,7 @@ def api_table_rows():
 
     target = normalize_path(target)
     lower_target = target.lower()
-    is_json = lower_target.endswith(".json")
+    is_json = lower_target.endswith((".json", ".jsonl"))
     is_csv = lower_target.endswith(".csv")
     is_txt = lower_target.endswith(".txt")
 
@@ -942,8 +931,8 @@ def api_table_rows():
                 row_limit=limit,
                 row_offset=offset,
             )
-        elif text_format == "foremost_audit":
-            table_data, total_rows, _ = parse_foremost_audit(
+        elif text_format == "carving_audit":
+            table_data, total_rows, _ = parse_carving_audit(
                 target,
                 row_limit=limit,
                 row_offset=offset,

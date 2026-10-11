@@ -1,16 +1,17 @@
 """Workflow adapters and the authoritative execution registry."""
-import json
 import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .catalog import EZ_TOOL_CATALOG
+from .volatility import VolatilityAdapter
+from .carving import CarvingAdapter
+from .zimmerman import ZimmermanAdapter
 from .disk_tools import DISK_TOOL_IDS, DiskAdapter
 from .examination_tools import EXAMINATION_TOOL_IDS, ExaminationAdapter
-from .tool_base import (OUTPUT, WORKSPACE, Plan, Step, ToolAdapter, ValidationError, allowed,
-                        choices, config_for_types, directory_members, executable, flag, normalize, signature, text)
+from .tool_base import (OUTPUT, Plan, Step, ToolAdapter, ValidationError, allowed,
+                        choices, directory_members, executable, flag, normalize, signature, text)
 
 
 class StringsAdapter(ToolAdapter):
@@ -48,44 +49,6 @@ class ExifToolAdapter(ToolAdapter):
         return Plan(self.tool_id, source, output, [Step(args, "Extract metadata", OUTPUT + "/metadata." + fmt, s.timeout_seconds)], expected_files=["metadata." + fmt])
 
 
-class CarvingAdapter(ToolAdapter):
-    def __init__(self, tool_id):
-        self.tool_id = tool_id
-        self.parameter_names = {"types", "organize"} if tool_id == "scalpel" else {"types", "safe_mode", "quick", "verbose"}
-
-    def build(self, p, source, output, s, preview=False):
-        types = choices(p, "types", {"jpg", "jpeg", "png", "pdf", "doc", "zip", "exe", "gif", "tif", "tiff", "bmp"})
-        types = list(dict.fromkeys({"jpeg": "jpg", "tiff": "tif"}.get(t, t) for t in types))
-        prefix = executable(self.tool_id, [self.tool_id], s, not preview)
-        plan = Plan(self.tool_id, source, output)
-        if self.tool_id == "scalpel":
-            if not types:
-                raise ValidationError("Select at least one file type.")
-            plan.configs["scalpel.conf"] = config_for_types(s.scalpel_config, types)
-            args = prefix + ["-c", WORKSPACE + "/scalpel.conf", "-o", OUTPUT]
-            if not flag(p, "organize", True):
-                args.append("-O")
-            plan.steps = [Step(args + [source], "Carve files", timeout=s.timeout_seconds)]
-        else:
-            safe = flag(p, "safe_mode")
-            if safe and not types:
-                raise ValidationError("Select at least one type for safe mode.")
-            extra = (["-q"] if flag(p, "quick") else []) + (["-v"] if flag(p, "verbose") else [])
-            # Each safe-mode type has its own output/audit directory, preserving
-            # every occurrence and allowing partial results to remain explicit.
-            groups = [[t] for t in types] if safe else [types]
-            for i, group in enumerate(groups):
-                args = prefix + ["-i", source, "-o", OUTPUT + ("/" + group[0] if safe else "")]
-                if group:
-                    name = f"foremost-{i}.conf"
-                    plan.configs[name] = config_for_types(s.foremost_config, group)
-                    args += ["-t", ",".join(group), "-c", WORKSPACE + "/" + name]
-                plan.steps.append(Step(args + extra, "Carve " + (",".join(group) or "default types"),
-                                       timeout=10 if safe else s.timeout_seconds, continue_on_error=safe))
-        plan.parameters = {"types": types}
-        return plan
-
-
 class BulkAdapter(ToolAdapter):
     tool_id = "bulk-extractor"
     parameter_names = {"focus_scanners", "advanced_scanners", "info_mode", "histograms"}
@@ -103,78 +66,6 @@ class BulkAdapter(ToolAdapter):
         for scanner in focus + advanced:
             args += ["-e", scanner]
         return Plan(self.tool_id, source, output, [Step(args + [source], "Extract features", timeout=s.timeout_seconds)])
-
-
-class ZimmermanAdapter(ToolAdapter):
-    tool_id = "eric-zimmerman"
-    parameter_names = {"tool_id"}
-    source_kind = "file_or_dir"
-
-    def build(self, p, source, output, s, preview=False):
-        tool_id = text(p, "tool_id")
-        tool = EZ_TOOL_CATALOG.get(tool_id)
-        if not tool:
-            raise ValidationError("Unknown Eric Zimmerman tool.")
-        is_dir = Path(source).is_dir()
-        if source != "<source_path>" and ((tool["input_mode"] == "dir" and not is_dir) or (tool["input_mode"] == "file" and is_dir)):
-            raise ValidationError("Source type does not match this parser's accepted input.")
-        signatures = {"evtxecmd": b"ElfFile\x00", "mftecmd": b"FILE"}
-        if tool_id in signatures and source != "<source_path>":
-            selected = [Path(source)] if not is_dir else list(Path(source).rglob("*.evtx"))
-            if not selected:
-                raise ValidationError("Select a Windows Event Log file or a directory containing EVTX files.")
-            for path in selected:
-                if path.is_symlink():
-                    raise ValidationError("Directory evidence must not contain symbolic links.")
-                with path.open("rb") as handle:
-                    if handle.read(len(signatures[tool_id])) != signatures[tool_id]:
-                        raise ValidationError(f"{tool['label']} source has an incompatible file signature: {path.name}")
-        args = executable(tool_id, tool["binaries"], s, not preview) + ["-d" if is_dir or tool["input_mode"] == "dir" else "-f", source, "--csv", OUTPUT]
-        configs = {}
-        if tool.get("batch_file"):
-            batch = Path(s.ez_root) / "RECmd/BatchExamples/RegistryASEPs.reb"
-            if not preview and not batch.is_file():
-                raise ValidationError("RECmd batch configuration is unavailable.")
-            if batch.is_file():
-                configs["registry-batch.reb"] = batch.read_text(encoding="utf-8-sig")
-            args += ["--bn", WORKSPACE + "/registry-batch.reb"]
-        if tool.get("supports_csvf", True):
-            args += ["--csvf", tool["csv_name"]]
-        return Plan("EZ " + tool["label"], source, output, [Step(args, tool["label"], timeout=s.timeout_seconds)],
-                    configs=configs, expected_files=[tool["csv_name"]] if tool.get("supports_csvf", True) else [],
-                    expected_globs=[] if tool.get("supports_csvf", True) else ["*.csv"],
-                    postprocess="zimmerman_csv", parameters={"parser_id": tool_id})
-
-
-class VolatilityAdapter(ToolAdapter):
-    tool_id = "volatility"
-    parameter_names = {"plugins", "renderer", "symbol_path"}
-
-    def build(self, p, source, output, s, preview=False):
-        try:
-            catalog = json.loads(Path(s.plugin_path).read_text())
-        except (OSError, ValueError) as exc:
-            raise ValidationError("Volatility plugin catalog is unavailable.") from exc
-        accepted = {name for names in catalog.values() for name in names}
-        plugins = choices(p, "plugins", accepted)
-        if not plugins:
-            raise ValidationError("Select at least one supported plugin.")
-        renderer = text(p, "renderer", "json")
-        if renderer not in {"json", "pretty"}:
-            raise ValidationError("Renderer must be json or pretty.")
-        symbols = text(p, "symbol_path")
-        if symbols:
-            symbols = normalize(symbols)
-            if not Path(symbols).is_dir() or not allowed(symbols, s.symbol_roots):
-                raise ValidationError("Symbol path is unavailable or outside allowed roots.")
-        prefix = executable(self.tool_id, ["vol", "vol3", "volatility3"], s, not preview)
-        args = prefix + ["--offline", "-q", "-f", source, "-o", OUTPUT, "-r", renderer]
-        if symbols:
-            args += ["-s", symbols]
-        extension = "json" if renderer == "json" else "txt"
-        steps = [Step(args + [name], name, OUTPUT + "/results/" + name.replace(".", "_") + "." + extension,
-                      s.timeout_seconds, True) for name in plugins]
-        return Plan(self.tool_id, source, output, steps, parameters={"plugins": plugins, "renderer": renderer})
 
 
 class TimelineAdapter(ToolAdapter):
@@ -297,6 +188,10 @@ def compile_plan(tool_id, payload, settings, repository, preview=False):
                 raise ValidationError("Image segment is outside allowed input roots.")
             baseline = next((entry["sha256"] for entry in (context or {}).get("input_files", []) if entry["path"] == path), None)
             input_record["related_files"].append({"path": path, "signature": signature(path), "baseline_sha256": baseline})
+    for path in plan.auxiliary_paths:
+        if not allowed(path, settings.input_roots):
+            raise ValidationError("Auxiliary input is outside allowed input roots.")
+        input_record.setdefault("related_files", []).append({"path": path, "signature": signature(path), "baseline_sha256": None})
     if input_record["kind"] == "directory" and not preview:
         input_record["members"] = directory_members(source)
     for item in (case or {}).get("artifacts", []):

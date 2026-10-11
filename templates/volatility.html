@@ -32,158 +32,68 @@
           "/cases/case-name/memory.raw",
           "Source artifact: memory image (raw, crash dump, or LiME)."
         ) }}
-        <input id="symbolPath" type="hidden" value="{{ symbol_path }}" />
-
         <div class="card block volatility-settings">
-          <div class="settings-block">
-            <h2>Output format</h2>
-            <div class="toggle-row">
-              <label class="toggle">
-                <input id="jsonOutput" type="checkbox" checked />
-                JSON output
-              </label>
-              <label class="toggle">
-                <input id="tableOutput" type="checkbox" />
-                Render table
-              </label>
-            </div>
-          </div>
+          {% if discovery_error %}<p class="helper" role="alert">{{ discovery_error }}</p>
+          {% else %}<p class="helper">Installed Volatility 3: {{ installed.version }}. Plugins and options come from this installation.</p>{% endif %}
+          {% if installed.import_failures %}<p class="helper">Unavailable plugin modules: {{ installed.import_failures | join(', ') }}</p>{% endif %}
+          <label class="input-stack">Output format
+            <select id="renderer"><option value="json">JSON (up to 64 MiB per plugin)</option><option value="jsonl">JSON Lines (large results)</option><option value="pretty">Readable table</option></select>
+          </label>
+          <label class="toggle"><input id="offline" type="checkbox" />Offline: use available symbols only</label>
+          <p class="helper">Automatic symbol downloads are enabled by default and saved in a writable directory for this user. Linux and macOS require symbols matching the captured kernel.</p>
+          <label class="input-stack">Additional local symbol directory
+            <input id="symbolPath" type="text" list="symbolDirectories" placeholder="Leave empty for installed and downloaded symbols" />
+            <datalist id="symbolDirectories">{% for path in symbol_roots %}<option value="{{ path }}"></option>{% endfor %}</datalist>
+            <span class="helper">Additional directories must be within configured symbol roots{% if symbol_roots %}: {{ symbol_roots | join(', ') }}{% else %}; none are configured{% endif %}.</span>
+          </label>
         </div>
-
         <div class="card block volatility-plugins">
-          <div>
-            <h2>Plugin selection</h2>
-            <p class="helper">Choose an OS tab, apply a bundle, then refine with search and filters.</p>
-          </div>
+          <h2>Plugin selection</h2>
+          <p class="helper">Only plugins selected in the active tab run. Expand a selected plugin to set its options.</p>
           <div class="tab-row" role="tablist" aria-label="Operating system tabs">
-            <button class="tab-button active" type="button" data-tab="windows" role="tab" aria-selected="true">
-              Windows
-            </button>
-            <button class="tab-button" type="button" data-tab="linux" role="tab" aria-selected="false">
-              Linux
-            </button>
-            <button class="tab-button" type="button" data-tab="mac" role="tab" aria-selected="false">
-              macOS
-            </button>
+            {% for os, label in [('windows', 'Windows'), ('linux', 'Linux'), ('mac', 'macOS'), ('general', 'General / identify')] %}
+              <button class="tab-button{% if loop.first %} active{% endif %}" type="button" data-tab="{{ os }}" role="tab" aria-selected="{{ 'true' if loop.first else 'false' }}">{{ label }}</button>
+            {% endfor %}
           </div>
           <div class="plugin-toolbar">
-            <label class="input-stack">
-              Search plugins
-              <input id="pluginSearch" type="text" placeholder="Find a plugin (pslist, netscan)" />
-            </label>
-            <div class="plugin-toggle">
-              <label class="toggle">
-                <input id="pluginSelectedOnly" type="checkbox" />
-                Selected only
-              </label>
-              <span class="helper" id="pluginCount"></span>
-            </div>
+            <label class="input-stack">Search plugins<input id="pluginSearch" type="text" placeholder="Find a plugin (pslist, netscan)" /></label>
+            <label class="toggle"><input id="pluginSelectedOnly" type="checkbox" />Selected only</label>
+            <span class="helper" id="pluginCount"></span>
           </div>
-
-          <div class="tab-panel volatility-panel" data-tab-panel="windows">
-            <div class="panel-section">
-              <h3 class="section-title">Windows triage bundles</h3>
-              <p class="helper">Apply a bundle, then fine-tune plugin selections below.</p>
-              <div class="bundle-grid">
-                {% for bundle in windows_bundles %}
-                  <button
-                    class="bundle-button ghost"
-                    type="button"
-                    data-bundle="{{ bundle.id }}"
-                    data-bundle-os="windows"
-                    data-bundle-plugins="{{ bundle.plugins | join(',') }}"
-                  >
-                    <span class="bundle-title">{{ bundle.label }}</span>
-                    <span class="bundle-desc">{{ bundle.description }}</span>
-                  </button>
+          {% for os, plugins in groups.items() %}
+          <div class="tab-panel volatility-panel" data-tab-panel="{{ os }}" {% if not loop.first %}hidden{% endif %}>
+            <div class="bundle-grid">
+              {% for bundle in bundles[os] if bundle.plugins %}
+                <button class="bundle-button ghost" type="button" data-bundle-os="{{ os }}" data-bundle-plugins="{{ bundle.plugins | join(',') }}">{{ bundle.label }}</button>
+              {% endfor %}
+            </div>
+            {% for name, plugin in plugins.items() %}
+            <div class="plugin-entry" data-plugin-entry="{{ name }}">
+              <label class="chip"><input type="checkbox" data-plugin="{{ name }}" data-os="{{ os }}" />{{ name }}</label>
+              <p class="helper">{{ plugin.description.split('\n')[0] }}</p>
+              {% if plugin.options %}
+              <details data-plugin-options="{{ name }}" hidden>
+                <summary>Plugin options</summary>
+                {% for option in plugin.options %}
+                <label class="{{ 'toggle' if option.type == 'boolean' else 'input-stack' }}">
+                  {{ option.name }}{% if option.required %} (required){% endif %}
+                  {% if option.type == 'boolean' %}
+                    <input type="checkbox" data-option="{{ option.name }}" data-option-type="{{ option.type }}" />
+                  {% elif option.choices %}
+                    <select data-option="{{ option.name }}" data-option-type="{{ option.type }}"><option value="">Default{% if option.default is not none %}: {{ option.default }}{% endif %}</option>{% for choice in option.choices %}<option value="{{ choice }}">{{ choice }}</option>{% endfor %}</select>
+                  {% else %}
+                    <input type="text" data-option="{{ option.name }}" data-option-type="{{ option.type }}" placeholder="{% if option.type == 'integer_list' %}JSON array: [4, &quot;0xffff800000123000&quot;]{% elif option.type == 'string_list' %}JSON array of strings{% elif option.default is not none %}Default: {{ option.default }}{% elif option.type == 'file' %}File path within input roots{% else %}{{ option.name }}{% endif %}" />
+                  {% endif %}
+                  <span class="helper">{{ option.description }}</span>
+                </label>
                 {% endfor %}
-              </div>
-            </div>
-
-            <div class="panel-section">
-              <h3 class="section-title">Windows plugins</h3>
-              {% if windows_plugins %}
-                <div class="plugin-grid" data-plugin-grid="windows">
-                  {% for plugin in windows_plugins %}
-                    <label class="chip">
-                      <input
-                        type="checkbox"
-                        data-plugin="{{ plugin }}"
-                        data-os="windows"
-                        {% if plugin in windows_defaults %}checked{% endif %}
-                      />
-                      {{ plugin }}
-                    </label>
-                  {% endfor %}
-                </div>
-                <p class="helper plugin-empty" data-plugin-empty hidden>
-                  No plugins match the current filters. Turn off "Selected only" to browse everything.
-                </p>
-              {% else %}
-                <p class="helper">No Windows plugins are configured.</p>
+              </details>
               {% endif %}
             </div>
+            {% else %}<p class="helper">No installed plugins available in this group.</p>{% endfor %}
+            <p class="helper plugin-empty" data-plugin-empty hidden>No plugins match the current filters.</p>
           </div>
-
-          <div class="tab-panel volatility-panel" data-tab-panel="linux" hidden>
-            <div class="panel-section">
-              <h3 class="section-title">Linux triage bundles</h3>
-              <p class="helper">Apply a bundle, then fine-tune plugin selections below.</p>
-              <div class="bundle-grid">
-                {% for bundle in linux_bundles %}
-                  <button
-                    class="bundle-button ghost"
-                    type="button"
-                    data-bundle="{{ bundle.id }}"
-                    data-bundle-os="linux"
-                    data-bundle-plugins="{{ bundle.plugins | join(',') }}"
-                  >
-                    <span class="bundle-title">{{ bundle.label }}</span>
-                    <span class="bundle-desc">{{ bundle.description }}</span>
-                  </button>
-                {% endfor %}
-              </div>
-            </div>
-
-            <div class="panel-section">
-              <h3 class="section-title">Linux plugins</h3>
-              {% if linux_plugins %}
-                <div class="plugin-grid" data-plugin-grid="linux">
-                  {% for plugin in linux_plugins %}
-                    <label class="chip">
-                      <input type="checkbox" data-plugin="{{ plugin }}" data-os="linux" /> {{ plugin }}
-                    </label>
-                  {% endfor %}
-                </div>
-                <p class="helper plugin-empty" data-plugin-empty hidden>
-                  No plugins match the current filters. Turn off "Selected only" to browse everything.
-                </p>
-              {% else %}
-                <p class="helper">No Linux plugins are configured.</p>
-              {% endif %}
-            </div>
-          </div>
-
-          <div class="tab-panel volatility-panel" data-tab-panel="mac" hidden>
-            <div class="panel-section">
-              <h3 class="section-title">macOS plugins</h3>
-              <p class="helper">Select the macOS plugins to run.</p>
-              {% if mac_plugins %}
-                <div class="plugin-grid" data-plugin-grid="mac">
-                  {% for plugin in mac_plugins %}
-                    <label class="chip">
-                      <input type="checkbox" data-plugin="{{ plugin }}" data-os="mac" /> {{ plugin }}
-                    </label>
-                  {% endfor %}
-                </div>
-                <p class="helper plugin-empty" data-plugin-empty hidden>
-                  No plugins match the current filters. Turn off "Selected only" to browse everything.
-                </p>
-              {% else %}
-                <p class="helper">No macOS plugins are configured.</p>
-              {% endif %}
-            </div>
-          </div>
+          {% endfor %}
         </div>
       </section>
 
@@ -204,7 +114,7 @@
             <div class="run-results-links" id="runResultsLinks"></div>
           </div>
           <button class="ghost wide" id="openLog">View recent log</button>
-          <button class="action wide" id="runVolatility">Run Volatility</button>
+          <button class="action wide" id="runVolatility" {% if discovery_error %}disabled{% endif %}>Run Volatility</button>
         </div>
       </aside>
     </main>
