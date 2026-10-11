@@ -46,7 +46,7 @@
             </label>
             <label class="toggle">
               <input type="radio" name="encoding" value="S" />
-              Both ASCII and UTF-16
+              8-bit single-byte characters
             </label>
           </div>
         </div>
@@ -83,8 +83,10 @@
               <span class="result-value" id="resultCount">—</span>
             </div>
           </div>
+          {% from "_components.html" import run_results %}
+          {{ run_results() }}
           <p class="run-status" id="runStatus"></p>
-          <button class="ghost wide" id="openLog">View full log</button>
+          <button class="ghost wide" id="openLog">View recent log</button>
           <button class="action wide" id="runStrings">Run Strings</button>
         </div>
       </aside>
@@ -93,7 +95,7 @@
     <div class="log-drawer" id="logDrawer" aria-hidden="true">
       <div class="drawer-surface">
         <div class="drawer-header">
-          <h3>Full log</h3>
+          <h3>Recent log</h3>
           <button class="ghost" id="closeLog">Close</button>
         </div>
         <p class="drawer-status" id="logDrawerStatus"></p>

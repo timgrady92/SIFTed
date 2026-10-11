@@ -1,7 +1,7 @@
 const initCaseContext = () => {
   const caseSelect = document.getElementById("caseSelect");
   const artifactSelect = document.getElementById("artifactSelect");
-  const imagePath = document.getElementById("imagePath");
+  const sourcePath = document.getElementById("sourcePath");
   const outputPath = document.getElementById("outputPath");
   const caseChips = Array.from(document.querySelectorAll(".chip[data-case-id]"));
 
@@ -10,7 +10,6 @@ const initCaseContext = () => {
   }
 
   let autoImage = "";
-  let autoOutput = "";
   let cachedArtifacts = {};
 
   const ARTIFACT_TYPE_LABELS = {
@@ -20,21 +19,6 @@ const initCaseContext = () => {
     event_log: "Event Log",
     artifact_file: "Artifact File",
     other: "Other",
-  };
-
-  const buildDefaultOutput = (caseId) => {
-    if (!caseId) {
-      return "";
-    }
-    const selected = caseSelect.selectedOptions[0];
-    const slug = selected?.dataset?.slug || caseId;
-    const now = new Date();
-    const stamp = now
-      .toISOString()
-      .replace(/[-:]/g, "")
-      .slice(0, 15)
-      .replace("T", "-");
-    return `/cases/${slug}/${caseSelect.dataset.tool || "tool"}/${stamp}`;
   };
 
   const populateArtifactSelect = (artifacts) => {
@@ -109,21 +93,14 @@ const initCaseContext = () => {
     // Fetch and populate artifacts for this case
     fetchCaseArtifacts(caseId);
 
-    if (outputPath) {
-      const nextOutput = buildDefaultOutput(caseId);
-      if (!outputPath.value.trim() || outputPath.value.trim() === autoOutput) {
-        outputPath.value = nextOutput;
-        autoOutput = nextOutput;
-      }
-    }
-    if (imagePath) {
+    if (sourcePath) {
       const selected = caseSelect.selectedOptions[0];
-      const caseImage = selected?.dataset?.image || "";
-      const current = imagePath.value.trim();
+      const caseImage = selected?.dataset?.source || "";
+      const current = sourcePath.value.trim();
       const looksLikeOutput =
         current.includes(`/${tool}/`) || current.includes(`/outputs/${tool}/`);
       if ((!current || current === autoImage || looksLikeOutput) && caseImage) {
-        imagePath.value = caseImage;
+        sourcePath.value = caseImage;
         autoImage = caseImage;
       }
     }
@@ -131,19 +108,19 @@ const initCaseContext = () => {
     if (outputPath) {
       outputPath.dispatchEvent(event);
     }
-    if (imagePath) {
-      imagePath.dispatchEvent(event);
+    if (sourcePath) {
+      sourcePath.dispatchEvent(event);
     }
   };
 
   caseSelect.addEventListener("change", updateCaseContext);
 
   // Handle artifact selection
-  if (artifactSelect && imagePath) {
+  if (artifactSelect && sourcePath) {
     artifactSelect.addEventListener("change", () => {
       const selectedPath = artifactSelect.value;
       if (selectedPath) {
-        imagePath.value = selectedPath;
+        sourcePath.value = selectedPath;
         autoImage = selectedPath;
         // Switch to "Enter Path" tab to show the selected value
         const manualTab = document.querySelector('.source-tab[data-source-mode="manual"]');
@@ -151,27 +128,19 @@ const initCaseContext = () => {
           manualTab.click();
         }
         const event = new Event("change", { bubbles: true });
-        imagePath.dispatchEvent(event);
+        sourcePath.dispatchEvent(event);
       }
     });
   }
 
-  if (imagePath) {
-    imagePath.addEventListener("input", () => {
-      if (imagePath.value.trim() !== autoImage) {
+  if (sourcePath) {
+    sourcePath.addEventListener("input", () => {
+      if (sourcePath.value.trim() !== autoImage) {
         autoImage = "";
         // Clear artifact selection when manually typing
         if (artifactSelect) {
           artifactSelect.value = "";
         }
-      }
-    });
-  }
-
-  if (outputPath) {
-    outputPath.addEventListener("input", () => {
-      if (outputPath.value.trim() !== autoOutput) {
-        autoOutput = "";
       }
     });
   }
@@ -264,41 +233,12 @@ initSourceTabs();
 
 // Guide cards are now handled by guides.js with modal functionality
 
-const ACTIVE_JOBS_KEY = "sifted.activeJobs";
-
-const loadJobs = () => {
-  try {
-    const stored = JSON.parse(localStorage.getItem(ACTIVE_JOBS_KEY) || "[]");
-    if (!Array.isArray(stored)) {
-      return [];
-    }
-    const seen = new Set();
-    return stored.filter((job) => {
-      if (!job || !job.id || seen.has(job.id)) {
-        return false;
-      }
-      seen.add(job.id);
-      return true;
-    });
-  } catch (error) {
-    return [];
-  }
-};
-
-const saveJobs = (jobs) => {
-  try {
-    localStorage.setItem(ACTIVE_JOBS_KEY, JSON.stringify(jobs));
-  } catch (error) {
-    // Ignore storage failures (private mode, quota exceeded, etc.)
-  }
-};
-
 const updateJobPill = (jobs) => {
   const pill = document.getElementById("activeJobs");
   if (!pill) {
     return;
   }
-  const running = jobs.filter((job) => job.status === "running");
+  const running = jobs.filter((job) => ["queued", "running"].includes(job.status));
   if (running.length === 0) {
     pill.hidden = true;
     return;
@@ -309,49 +249,18 @@ const updateJobPill = (jobs) => {
 };
 
 const refreshJobs = async () => {
-  const jobs = loadJobs();
-  if (jobs.length === 0) {
-    updateJobPill([]);
-    return;
+  try {
+    const response = await fetch("/api/runs?status=active");
+    if (!response.ok) return;
+    const data = await response.json();
+    const jobs = (data.runs || []).filter(job =>
+      ["queued", "running"].includes(job.status)
+    );
+    updateJobPill(jobs);
+  } catch (error) {
+    const pill = document.getElementById("activeJobs");
+    if (pill) { pill.hidden = false; pill.textContent = "Job status unavailable"; }
   }
-  // Fetch all job statuses in parallel for better performance
-  const results = await Promise.all(
-    jobs.map(async (job) => {
-      try {
-        const response = await fetch(`/api/run/${job.id}/status`);
-        if (!response.ok) {
-          return response.status !== 404 ? job : null;
-        }
-        const data = await response.json();
-        const status = data.status || job.status;
-        const completedAt = status === "running" ? null : Date.now();
-        return {
-          ...job,
-          status,
-          completedAt: job.completedAt || completedAt,
-        };
-      } catch (error) {
-        return job;
-      }
-    })
-  );
-  const updated = results.filter(Boolean);
-  const pruned = updated.filter((job) => {
-    // Prune jobs that have been "running" for more than 1 hour (likely stale)
-    if (job.status === "running" && job.startedAt) {
-      const ageMs = Date.now() - job.startedAt;
-      if (ageMs > 60 * 60 * 1000) {
-        return false;
-      }
-      return true;
-    }
-    if (!job.completedAt) {
-      return true;
-    }
-    return Date.now() - job.completedAt < 5 * 60 * 1000;
-  });
-  saveJobs(pruned);
-  updateJobPill(pruned);
 };
 
 const toggleJobsDrawer = (isOpen) => {
@@ -383,12 +292,11 @@ const loadActiveJobs = async () => {
       if (Number.isNaN(created)) {
         return false;
       }
-      // For "running" jobs, only show if less than 1 hour old (otherwise likely stale/abandoned)
-      if (run.status === "running") {
-        return now - created < 60 * 60 * 1000;
+      if (["queued", "running"].includes(run.status)) {
+        return true;
       }
       // For completed jobs, show if less than 5 minutes old
-      return now - created < 5 * 60 * 1000;
+      return now - Date.parse(run.completed_at || run.created_at) < 5 * 60 * 1000;
     });
     renderJobs(runs);
     if (status) {
@@ -467,7 +375,7 @@ const renderJobs = (runs) => {
 
     const imageLine = document.createElement("div");
     imageLine.className = "job-meta";
-    imageLine.textContent = run.image_path ? `Image: ${run.image_path}` : "Image: (not set)";
+    imageLine.textContent = run.source_path ? `Source: ${run.source_path}` : "Source: (not set)";
 
     const outputLine = document.createElement("div");
     outputLine.className = "job-meta";
@@ -488,6 +396,46 @@ const renderJobs = (runs) => {
     output.className = "job-output";
     output.hidden = !jobState.expanded.has(run.id);
 
+    const controls = document.createElement("div");
+    if (["queued", "running"].includes(run.status)) {
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "ghost";
+      cancel.textContent = "Cancel run";
+      cancel.addEventListener("click", async () => {
+        cancel.disabled = true;
+        try {
+          const response = await fetch(`/api/run/${run.id}/cancel`, { method: "POST" });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Unable to cancel run.");
+          loadActiveJobs();
+        } catch (error) {
+          status.textContent = error.message;
+          cancel.disabled = false;
+        }
+      });
+      controls.appendChild(cancel);
+    } else if (["error", "cancelled", "interrupted"].includes(run.status) && run.adapter_id) {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "ghost";
+      retry.textContent = "Retry in a new folder";
+      retry.addEventListener("click", async () => {
+        retry.disabled = true;
+        try {
+          const response = await fetch(`/api/run/${run.id}/retry`, { method: "POST" });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Unable to retry run.");
+          window.registerActiveJob({ id: data.run_id, tool: run.tool });
+          loadActiveJobs();
+        } catch (error) {
+          status.textContent = error.message;
+          retry.disabled = false;
+        }
+      });
+      controls.appendChild(retry);
+    }
+
     toggle.addEventListener("click", () => {
       if (jobState.expanded.has(run.id)) {
         jobState.expanded.delete(run.id);
@@ -501,7 +449,7 @@ const renderJobs = (runs) => {
       }
     });
 
-    card.append(header, caseLine, imageLine, outputLine, command, toggle, output);
+    card.append(header, caseLine, imageLine, outputLine, command, controls, toggle, output);
     fragment.appendChild(card);
 
     if (jobState.expanded.has(run.id)) {
@@ -516,27 +464,23 @@ const renderJobs = (runs) => {
   pendingTails.forEach(({ runId, output }) => fetchTail(runId, output));
 };
 
-window.registerActiveJob = (job) => {
-  if (!job || !job.id) {
-    return;
+window.registerActiveJob = () => refreshJobs();
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-run-action]");
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const response = await fetch(`/api/run/${button.dataset.runId}/${button.dataset.runAction}`, { method: "POST" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Unable to update run.");
+    button.textContent = button.dataset.runAction === "retry" ? "Retry queued" : data.message;
+    refreshJobs();
+  } catch (error) {
+    button.textContent = error.message;
+    button.disabled = false;
   }
-  const jobs = loadJobs();
-  const existing = jobs.find((entry) => entry.id === job.id);
-  if (existing) {
-    existing.tool = job.tool || existing.tool || "job";
-    existing.status = "running";
-    existing.startedAt = existing.startedAt || Date.now();
-  } else {
-    jobs.push({
-      id: job.id,
-      tool: job.tool || "job",
-      status: "running",
-      startedAt: Date.now(),
-    });
-  }
-  saveJobs(jobs);
-  updateJobPill(jobs);
-};
+});
 
 refreshJobs();
 setupJobsDrawer();

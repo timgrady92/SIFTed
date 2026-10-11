@@ -135,8 +135,8 @@
                       </span>
                     </td>
                     <td class="file-actions">
-                      <a class="ghost small" href="{{ url_for('view_file') }}?path={{ file.path|urlencode }}">View</a>
-                      <a class="ghost small" href="{{ url_for('view_file') }}?path={{ file.path|urlencode }}&view=raw">Raw</a>
+                      <a class="ghost small" href="{{ url_for('web.view_file') }}?path={{ file.path|urlencode }}">View</a>
+                      <a class="ghost small" href="{{ url_for('web.view_file') }}?path={{ file.path|urlencode }}&view=raw">Raw</a>
                     </td>
                   </tr>
                 {% endfor %}
@@ -160,11 +160,13 @@
               <div class="run-card">
                 <div class="run-card-header">
                   <span class="tool-chip">{{ run.tool }}</span>
-                  <span class="run-status-pill" data-status="{{ (run.status or 'logged')|lower }}">
-                    {{ run.status or "logged" }}
+                  <span class="run-status-pill" data-status="{{ run.status }}">
+                    {{ run.status }}
                   </span>
                 </div>
                 <div class="run-card-body">
+                  {% from "_components.html" import run_controls %}
+                  {{ run_controls(run) }}
                   <div class="run-card-meta">
                     <span class="run-card-date">{{ run.created_at[:19] if run.created_at else "—" }}</span>
                   </div>
@@ -184,14 +186,14 @@
       </section>
 
       <div class="results-nav">
-        <a class="ghost" href="{{ url_for('cases') }}#case-{{ case.id }}">Back to Cases</a>
+        <a class="ghost" href="{{ url_for('web.cases') }}#case-{{ case.id }}">Back to Cases</a>
       </div>
     </main>
     {% else %}
     <main class="single">
       <section class="card block">
         <p class="run-status" data-tone="error">{{ error or "Case not found." }}</p>
-        <a class="ghost" href="{{ url_for('cases') }}">Back to Cases</a>
+        <a class="ghost" href="{{ url_for('web.cases') }}">Back to Cases</a>
       </section>
     </main>
     {% endif %}

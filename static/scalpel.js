@@ -2,7 +2,7 @@ const tooling = window.SiftedTooling;
 
 // Get common elements using helper
 const common = tooling?.getCommonElements() || {};
-const imagePath = common.imagePath;
+const sourcePath = common.sourcePath;
 const outputPath = common.outputPath;
 const commandPreview = common.commandPreview;
 const caseSelect = common.caseSelect;
@@ -29,30 +29,13 @@ const gatherTypes = () => {
 };
 
 const buildCommand = () => {
-  const types = gatherTypes();
-  const args = [
-    "scalpel",
-    "-c",
-    "<generated_config>",
-    "-o",
-    outputPath?.value.trim() || "<output_dir>",
-  ];
-  if (!organizeByType?.checked) {
-    args.push("-O");
-  }
-  args.push(imagePath?.value.trim() || "<image_path>");
-  if (types.length) {
-    args.push(`# ${types.join(", ")}`);
-  }
-  if (commandPreview) {
-    commandPreview.textContent = args.join(" ");
-  }
+  tooling?.requestPreview("scalpel", buildPayload);
 };
 
 const buildPayload = () => ({
-  tool: "scalpel",
+
   case_id: caseSelect?.value || "",
-  image_path: imagePath?.value.trim() || "",
+  source_path: sourcePath?.value.trim() || "",
   output_path: outputPath?.value.trim() || "",
   types: gatherTypes(),
   organize: organizeByType?.checked ?? true,
@@ -64,8 +47,8 @@ if (tooling) {
     ...common,
     getRunId: () => currentRunId,
     onSelectPath: (path) => {
-      if (imagePath) {
-        imagePath.value = path;
+      if (sourcePath) {
+        sourcePath.value = path;
       }
       buildCommand();
     },
@@ -95,7 +78,7 @@ if (tooling) {
 // Attach input listeners using helper
 if (tooling) {
   tooling.attachInputListeners(
-    [imagePath, outputPath, organizeByType],
+    [sourcePath, outputPath, organizeByType],
     buildCommand,
   );
   tooling.attachChipListeners(".chip input", buildCommand);

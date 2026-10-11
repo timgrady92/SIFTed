@@ -18,9 +18,9 @@
           <button class="ghost" id="closeViewer">Back</button>
         </div>
         <div class="viewer-actions">
-          <a class="ghost{% if view_mode == 'raw' %} active{% endif %}" href="{{ url_for('view_file') }}?path={{ path|urlencode }}&view=raw">Raw</a>
+          <a class="ghost{% if view_mode == 'raw' %} active{% endif %}" href="{{ url_for('web.view_file') }}?path={{ path|urlencode }}&view=raw">Raw</a>
           {% if table_available %}
-            <a class="ghost{% if view_mode == 'table' %} active{% endif %}" href="{{ url_for('view_file') }}?path={{ path|urlencode }}&view=table">Table</a>
+            <a class="ghost{% if view_mode == 'table' %} active{% endif %}" href="{{ url_for('web.view_file') }}?path={{ path|urlencode }}&view=table">Table</a>
           {% endif %}
         </div>
         <div class="viewer-meta">
@@ -53,12 +53,12 @@
                 </div>
                 <div class="table-actions-row">
                   <div class="table-search-wrap">
-                    <input type="text" id="globalSearch" class="table-search-input" placeholder="Search all columns..." />
+                    <input type="text" id="globalSearch" class="table-search-input" placeholder="Search loaded rows..." />
                     <button class="table-search-clear" id="clearSearch" type="button" hidden>&times;</button>
                   </div>
                   <button class="ghost table-control-btn" id="columnToggleBtn" type="button">Filter Columns</button>
                   <button class="ghost table-control-btn" id="columnFilterBtn" type="button">Column Filters</button>
-                  <button class="ghost table-control-btn" id="exportCsvBtn" type="button">Export CSV</button>
+                  <button class="ghost table-control-btn" id="exportCsvBtn" type="button">Export loaded rows</button>
                 </div>
               </div>
               <!-- Column filters dropdown -->

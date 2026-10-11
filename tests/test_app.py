@@ -1,125 +1,129 @@
-import os
-import shlex
-import sys
-import tempfile
-import threading
-import unittest
-
+"""HTTP workflows against isolated application instances."""
+import pytest
 import app as sifted_app
+from sifted_core.worker import Worker
 
 
-class SiftedAppTestCase(unittest.TestCase):
-    def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp_dir.cleanup)
-        self.data_dir = os.path.join(self.temp_dir.name, "data")
-        os.makedirs(self.data_dir, exist_ok=True)
-
-        self.image_file = os.path.join(self.temp_dir.name, "image.dd")
-        with open(self.image_file, "w", encoding="utf-8") as handle:
-            handle.write("test")
-
-        self._orig_paths = {
-            "ALLOWED_PATHS": sifted_app.ALLOWED_PATHS,
-            "OUTPUT_ROOTS": sifted_app.OUTPUT_ROOTS,
-            "INPUT_ROOTS": sifted_app.INPUT_ROOTS,
-            "CASES_PATH": sifted_app.CASES_PATH,
-            "RUNS_PATH": sifted_app.RUNS_PATH,
-        }
-
-        sifted_app.ALLOWED_PATHS = [self.temp_dir.name]
-        sifted_app.OUTPUT_ROOTS = [self.temp_dir.name]
-        sifted_app.INPUT_ROOTS = [self.temp_dir.name]
-        sifted_app.CASES_PATH = os.path.join(self.data_dir, "cases.json")
-        sifted_app.RUNS_PATH = os.path.join(self.data_dir, "runs.json")
-        sifted_app.app.config["TESTING"] = True
-
-        self.client = sifted_app.app.test_client()
-
-    def tearDown(self):
-        for key, value in self._orig_paths.items():
-            setattr(sifted_app, key, value)
-
-    def test_filetype_command_preview_recursive(self):
-        source_dir = os.path.join(self.temp_dir.name, "evidence")
-        os.makedirs(source_dir, exist_ok=True)
-        with open(os.path.join(source_dir, "sample.bin"), "w", encoding="utf-8") as handle:
-            handle.write("content")
-        output_path = os.path.join(self.temp_dir.name, "filetype-output")
-
-        original_runner = sifted_app.start_filetype_run
-        sifted_app.start_filetype_run = lambda *args, **kwargs: None
-        try:
-            response = self.client.post(
-                "/api/filetype/run",
-                json={
-                    "image_path": source_dir,
-                    "output_path": output_path,
-                    "mode": "mime",
-                    "recursive": True,
-                },
-            )
-        finally:
-            sifted_app.start_filetype_run = original_runner
-
-        self.assertEqual(response.status_code, 200)
-        data = response.get_json()
-        expected = f"find {shlex.quote(source_dir)} -type f -exec file --mime-type -b {{}} \\;"
-        self.assertEqual(data["command"], expected)
-
-    def test_exiftool_rejects_unknown_format(self):
-        output_path = os.path.join(self.temp_dir.name, "exif-output")
-
-        original_runner = sifted_app.start_exiftool_run
-        sifted_app.start_exiftool_run = lambda *args, **kwargs: None
-        try:
-            response = self.client.post(
-                "/api/exiftool/run",
-                json={
-                    "image_path": self.image_file,
-                    "output_path": output_path,
-                    "output_format": "weird",
-                },
-            )
-        finally:
-            sifted_app.start_exiftool_run = original_runner
-
-        self.assertEqual(response.status_code, 200)
-        data = response.get_json()
-        self.assertIn("-csv", data["command"])
-        self.assertIn("metadata.csv", data["command"])
-
-    def test_post_process_failure_sets_exit_code(self):
-        run_id = "test-post-process"
-        log_path = os.path.join(self.temp_dir.name, "generic.log")
-        done = threading.Event()
-        captured = {}
-
-        def finalize_stub(run_id_arg, status, exit_code, log_path_arg, extra_updates=None):
-            captured["status"] = status
-            captured["exit_code"] = exit_code
-            done.set()
-
-        original_finalize = sifted_app.finalize_run
-        original_mark = sifted_app.mark_run_done
-        sifted_app.finalize_run = finalize_stub
-        sifted_app.mark_run_done = lambda *_args, **_kwargs: None
-        try:
-            sifted_app.start_generic_run(
-                run_id,
-                [sys.executable, "-c", "print('ok')"],
-                log_path,
-                post_process=lambda: (_ for _ in ()).throw(RuntimeError("boom")),
-            )
-            completed = done.wait(timeout=5)
-            self.assertTrue(completed)
-            self.assertEqual(captured.get("status"), "error")
-            self.assertEqual(captured.get("exit_code"), 1)
-        finally:
-            sifted_app.finalize_run = original_finalize
-            sifted_app.mark_run_done = original_mark
-            sifted_app.RUN_STATE.pop(run_id, None)
+@pytest.fixture
+def application(tmp_path):
+    app = sifted_app.create_app({"TESTING": True, "SIFTED_DATABASE_PATH": str(tmp_path / "sifted.db"),
+                               "SIFTED_INPUT_ROOTS": [str(tmp_path)], "SIFTED_OUTPUT_ROOTS": [str(tmp_path)]})
+    with app.app_context():
+        yield app.test_client(), tmp_path
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_exiftool_rejects_unknown_format(application):
+    client, root = application
+    source = root / "source"
+    source.write_bytes(b"test")
+    response = client.post("/api/exiftool/run", json={"source_path": str(source), "output_path": str(root / "out"), "output_format": "weird"})
+    assert response.status_code == 400
+    assert sifted_app.runtime_repository().runs() == []
+
+
+def test_preview_is_read_only_and_uses_execution_argv(application):
+    client, root = application
+    source = root / "source with spaces"
+    source.write_bytes(b"test")
+    data = {"source_path": str(source), "output_path": str(root / "out"), "mode": "mime", "recursive": True}
+    preview = client.post("/api/filetype/preview", json=data)
+    run = client.post("/api/filetype/run", json=data)
+    assert preview.status_code == 200 and run.status_code == 202
+    assert preview.json["commands"] == run.json["commands"]
+    assert "--mime-type -b" in preview.json["command"]
+    assert not (root / "out").exists()
+    assert client.get(f"/api/run/{run.json['run_id']}/status").json["status"] == "queued"
+
+
+def test_malformed_requests_do_not_create_jobs(application):
+    client, _ = application
+    for payload in ([1], None, {"source_path": 1}, {"output_path": []}):
+        assert client.post("/api/strings/run", json=payload).status_code == 400
+    assert sifted_app.runtime_repository().runs() == []
+
+
+def test_input_root_enforcement_in_case_creation(application, monkeypatch):
+    client, root = application
+    allowed = root / "allowed"
+    allowed.mkdir()
+    sifted_app.runtime_settings().input_roots = [str(allowed)]
+    assert client.post("/cases", data={"name": "test", "source_path": str(root / "outside")}).status_code == 403
+
+
+def test_workflow_and_case_pages_render(application):
+    client, root = application
+    response = client.post("/cases", data={"name": "Review case"})
+    assert response.status_code == 302
+    case_id = sifted_app.runtime_repository().cases()[0]["id"]
+    for path in ("/", "/cases", "/tools", "/strings", "/foremost", "/scalpel", "/bulk-extractor", "/volatility", "/artifact-timeline", "/eric-zimmerman", "/exiftool", "/filetype", "/guides", "/glossary", f"/case/{case_id}/results"):
+        assert client.get(path).status_code == 200, path
+
+
+def test_durable_events_replay_for_independent_viewers(application):
+    client, root = application
+    source = root / "source"
+    source.write_bytes(b"meaningful strings sample\x00")
+    created = client.post("/api/strings/run", json={"source_path": str(source), "output_path": str(root / "out")}).json
+    Worker(sifted_app.runtime_repository(), sifted_app.runtime_settings()).run_once()
+    url = f"/api/run/{created['run_id']}/events"
+    first = client.get(url).data
+    assert first == client.get(url).data and b"event: done" in first
+    last_event = sifted_app.runtime_repository().events(created["run_id"])[-1]["id"]
+    replay = client.get(url, headers={"Last-Event-ID": str(last_event - 1)}).data
+    assert b"event: done" in replay and b"Queued for execution" not in replay
+    assert client.get(f"/api/run/{created['run_id']}/results").json["files"]
+
+
+def test_cancellation_and_retry_preserve_original_run(application):
+    client, root = application
+    source = root / "source"
+    source.write_bytes(b"retry this sample\x00")
+    created = client.post("/api/strings/run", json={"source_path": str(source), "output_path": str(root / "out")}).json
+    run_id = created["run_id"]
+    assert client.post(f"/api/run/{run_id}/cancel").json["status"] == "cancelled"
+    retried = client.post(f"/api/run/{run_id}/retry")
+    assert retried.status_code == 202 and retried.json["output_path"] != created["output_path"]
+    assert len(sifted_app.runtime_repository().runs()) == 2
+    assert client.post("/api/run/missing/cancel").status_code == 404
+
+
+def test_artifacts_are_the_case_evidence_source(application):
+    client, root = application
+    source = root / "evidence.txt"
+    source.write_text("registered evidence")
+    assert client.post("/cases", data={"name": "Case", "source_path": str(source)}).status_code == 302
+    case = sifted_app.runtime_repository().cases()[0]
+    assert "source_path" not in case and "file_hash" not in case
+    artifact = case["artifacts"][0]
+    assert artifact["hash"]
+    assert client.delete(f"/api/case/{case['id']}/artifacts/{artifact['id']}").status_code == 200
+    assert client.get(f"/api/case/{case['id']}").json["case"]["artifacts"] == []
+    for payload in ([1], {"path": 1}, {"path": str(source), "type": "invalid"}):
+        assert client.post(f"/api/case/{case['id']}/artifacts", json=payload).status_code == 400
+
+
+def test_disallowed_text_is_never_opened_for_format_detection(application, monkeypatch):
+    client, root = application
+    outside = root.parent / "outside.txt"
+    outside.write_text("sensitive text")
+    monkeypatch.setattr("sifted_core.web.detect_text_table_format", lambda *_: pytest.fail("Read disallowed file"))
+    assert client.get("/api/table-rows", query_string={"path": str(outside)}).status_code == 400
+    response = client.get("/view-file", query_string={"path": str(outside)})
+    assert b"Access denied" in response.data
+
+
+def test_log_reads_are_bounded_and_running_logs_are_visible(application):
+    client, root = application
+    source = root / "source"
+    source.write_bytes(b"test")
+    created = client.post("/api/strings/run", json={"source_path": str(source), "output_path": str(root / "out")}).json
+    repo = sifted_app.runtime_repository()
+    run = repo.claim()
+    worker = Worker(repo, sifted_app.runtime_settings())
+    workspace = worker.workspace(run)
+    workspace.mkdir(parents=True)
+    (workspace / "run.log").write_text("prefix\n" + "line\n" * 300000 + "last\n")
+    response = client.get(f"/api/run/{created['run_id']}/log")
+    assert response.json["truncated"] and len(response.json["log"].encode()) <= 1024 * 1024
+    tail = client.get(f"/api/run/{created['run_id']}/tail", query_string={"lines": 2})
+    assert tail.json["lines"] == ["line\n", "last\n"]

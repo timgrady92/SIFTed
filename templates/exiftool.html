@@ -48,19 +48,6 @@
         </div>
 
         <div class="card block">
-          <h2>Metadata focus</h2>
-          <p class="helper">Select which metadata categories to extract. All selected by default.</p>
-          <div class="chip-grid">
-            <label class="chip"><input type="checkbox" value="gps" checked /> GPS Location</label>
-            <label class="chip"><input type="checkbox" value="time" checked /> Timestamps</label>
-            <label class="chip"><input type="checkbox" value="camera" checked /> Camera/Device</label>
-            <label class="chip"><input type="checkbox" value="author" checked /> Author/Creator</label>
-            <label class="chip"><input type="checkbox" value="software" checked /> Software</label>
-            <label class="chip"><input type="checkbox" value="file" checked /> File Properties</label>
-          </div>
-        </div>
-
-        <div class="card block">
           <h2>Options</h2>
           <div class="toggle-row">
             <label class="toggle">
@@ -91,17 +78,15 @@
               <span class="result-label">Metadata output</span>
               <span class="result-value" id="resultOutput">metadata.csv</span>
             </div>
-            <div class="result-item">
-              <span class="result-label">Files processed</span>
-              <span class="result-value" id="resultCount">—</span>
-            </div>
           </div>
           <div class="milestones">
             <p class="milestone-title">Milestones</p>
             <ul id="milestoneList"></ul>
           </div>
+          {% from "_components.html" import run_results %}
+          {{ run_results() }}
           <p class="run-status" id="runStatus"></p>
-          <button class="ghost wide" id="openLog">View full log</button>
+          <button class="ghost wide" id="openLog">View recent log</button>
           <button class="action wide" id="runExiftool">Run ExifTool</button>
         </div>
       </aside>
@@ -110,7 +95,7 @@
     <div class="log-drawer" id="logDrawer" aria-hidden="true">
       <div class="drawer-surface">
         <div class="drawer-header">
-          <h3>Full log</h3>
+          <h3>Recent log</h3>
           <button class="ghost" id="closeLog">Close</button>
         </div>
         <p class="drawer-status" id="logDrawerStatus"></p>

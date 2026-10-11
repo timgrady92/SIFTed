@@ -23,7 +23,7 @@
           <select id="caseSelect" data-tool="{{ tool_slug }}">
             <option value="">No case selected</option>
             {% for case in cases|reverse %}
-              <option value="{{ case.id }}" data-slug="{{ case.slug }}" data-image="{{ case.image_path }}">
+              <option value="{{ case.id }}" data-slug="{{ case.slug }}" data-source="{{ case.artifacts[0].path if case.artifacts else "" }}">
                 {{ case.name }}
               </option>
             {% endfor %}
@@ -61,7 +61,7 @@
               </div>
               <div class="source-panel" data-panel="manual">
                 <input
-                  id="imagePath"
+                  id="sourcePath"
                   type="text"
                   placeholder="{{ source_placeholder }}"
                 />
@@ -75,11 +75,30 @@
 
         <div class="block">
           <h3>Output</h3>
+          <p class="helper">Leave blank with a case selected to create a new run folder automatically.</p>
           <input id="outputPath" type="text" placeholder="{{ output_placeholder }}" />
         </div>
       </div>
     </div>
   </section>
+{% endmacro %}
+
+{% macro run_results() %}
+  <div class="run-results" id="runResults" hidden>
+    <h3>Published files</h3>
+    <div class="run-results-links" id="runResultsLinks"></div>
+  </div>
+{% endmacro %}
+
+{% macro run_controls(run) %}
+  {% if run.adapter_id %}
+    {% if run.status in ["queued", "running"] %}
+      <button class="ghost" type="button" data-run-action="cancel" data-run-id="{{ run.id }}">Cancel run</button>
+    {% elif run.status in ["error", "interrupted", "cancelled"] %}
+      <button class="ghost" type="button" data-run-action="retry" data-run-id="{{ run.id }}">Retry in a new folder</button>
+    {% endif %}
+  {% endif %}
+  {% if run.error %}<p class="helper" role="status">{{ run.error }}</p>{% endif %}
 {% endmacro %}
 
 {% macro site_nav(active=None) %}

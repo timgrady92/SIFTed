@@ -1920,7 +1920,8 @@ main {
 }
 
 .job-card[data-status="error"],
-.job-card[data-status="failed"] {
+.job-card[data-status="interrupted"],
+.job-card[data-status="cancelled"] {
   --job-accent: var(--neon-pink);
 }
 
@@ -3353,7 +3354,8 @@ main {
   --pill-glow: 0 0 12px rgba(var(--neon-green-rgb), 0.2);
 }
 
-.run-status-pill[data-status="failed"],
+.run-status-pill[data-status="interrupted"],
+.run-status-pill[data-status="cancelled"],
 .run-status-pill[data-status="error"] {
   --pill-border: rgba(var(--neon-pink-rgb), 0.5);
   --pill-bg: rgba(var(--neon-pink-rgb), 0.08);
@@ -3384,13 +3386,13 @@ main {
   }
 }
 
-.run-status-pill[data-status="logged"] {
+.run-status-pill[data-status="queued"] {
   --pill-border: rgba(var(--neon-teal-rgb), 0.2);
   --pill-bg: rgba(7, 10, 18, 0.8);
   --pill-color: var(--text-muted);
 }
 
-.run-status-pill[data-status="logged"]::before {
+.run-status-pill[data-status="queued"]::before {
   opacity: 0.5;
 }
 

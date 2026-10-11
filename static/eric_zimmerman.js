@@ -10,7 +10,7 @@ const toolsById = toolData.reduce((acc, tool) => {
 
 // Get common elements using helper
 const common = tooling?.getCommonElements() || {};
-const sourcePath = common.imagePath;
+const sourcePath = common.sourcePath;
 const outputPath = common.outputPath;
 const commandPreview = common.commandPreview;
 const caseSelect = common.caseSelect;
@@ -32,54 +32,6 @@ const runResultsLinks = document.getElementById("runResultsLinks");
 let currentRunId = "";
 let selectedToolId = "";
 
-const renderResultsLinks = (items, truncated = false) => {
-  if (!runResults || !runResultsLinks) {
-    return;
-  }
-  runResultsLinks.innerHTML = "";
-  const existingNote = runResults.querySelector(".run-results-note");
-  if (existingNote) {
-    existingNote.remove();
-  }
-  if (!items || items.length === 0) {
-    runResults.hidden = true;
-    return;
-  }
-  items.forEach((item) => {
-    if (!item || !item.path) {
-      return;
-    }
-    const link = document.createElement("a");
-    link.className = "run-result-link";
-    link.href = `/view-file?path=${encodeURIComponent(item.path)}`;
-    link.textContent = item.name || item.path.split("/").pop() || "results.csv";
-    runResultsLinks.appendChild(link);
-  });
-  if (truncated) {
-    const note = document.createElement("span");
-    note.className = "run-results-note";
-    note.textContent = `Showing first ${items.length} files.`;
-    runResults.appendChild(note);
-  }
-  runResults.hidden = false;
-};
-
-const fetchRunResults = async (runId) => {
-  if (!runId) {
-    return;
-  }
-  try {
-    const response = await fetch(`/api/run/${runId}/results`);
-    if (!response.ok) {
-      return;
-    }
-    const data = await response.json();
-    const items = Array.isArray(data.files) ? data.files : [];
-    renderResultsLinks(items, Boolean(data.truncated));
-  } catch (error) {
-  }
-};
-
 const updateOutputForTool = (toolId) => {
   if (!caseSelect) {
     return;
@@ -90,41 +42,7 @@ const updateOutputForTool = (toolId) => {
 };
 
 const buildCommand = () => {
-  if (!commandPreview) {
-    return;
-  }
-  const tool = toolsById[selectedToolId];
-  if (!tool) {
-    commandPreview.textContent = "Select a parser to preview the command.";
-    return;
-  }
-  const source = sourcePath?.value.trim() || "<source_path>";
-  const outputDir = outputPath?.value.trim() || "<output_dir>";
-  const binary = tool.binary_display || tool.label;
-  let inputFlag = "-f";
-  let note = "";
-  if (tool.input_mode === "dir") {
-    inputFlag = "-d";
-  } else if (tool.input_mode === "file_or_dir") {
-    inputFlag = source.endsWith("/") ? "-d" : "-f";
-    note = " # use -d for directories";
-  }
-  const args = [
-    binary,
-    inputFlag,
-    source,
-    "--csv",
-    outputDir,
-  ];
-  // Add batch file for RECmd
-  if (tool.batch_file) {
-    args.push("--bn", tool.batch_file);
-  }
-  // Add custom output filename if supported
-  if (tool.supports_csvf !== false) {
-    args.push("--csvf", tool.csv_name);
-  }
-  commandPreview.textContent = `${args.join(" ")}${note}`;
+  tooling?.requestPreview("eric-zimmerman", buildPayload);
 };
 
 const selectTool = (toolId) => {
@@ -166,7 +84,7 @@ const selectTool = (toolId) => {
   } else if (tooling) {
     tooling.setRunStatus(runStatus, "Ready to run.", "neutral");
   }
-  renderResultsLinks([]);
+  if (runResults) runResults.hidden = true;
   updateOutputForTool(toolId);
   buildCommand();
 };
@@ -223,86 +141,27 @@ if (toggleCatalog && toolGrid) {
   });
 }
 
-// Run button handler - custom because of dynamic tool selection
-if (runButton && tooling) {
-  const resetRunButton = () => {
-    runButton.textContent = runButton.dataset.defaultLabel || runButton.textContent || "Run";
-    runButton.disabled = false;
-  };
+const buildPayload = () => ({
+  tool_id: selectedToolId,
+  case_id: caseSelect?.value || "",
+  source_path: sourcePath?.value.trim() || "",
+  output_path: outputPath?.value.trim() || "",
+});
 
-  runButton.addEventListener("click", async () => {
-    const tool = toolsById[selectedToolId];
-    if (!tool) {
-      tooling.setRunStatus(runStatus, "Select a parser first.", "error");
-      return;
-    }
-    if (!tool.installed) {
-      tooling.setRunStatus(runStatus, `${tool.label} is not available on PATH.`, "error");
-      return;
-    }
-    runButton.disabled = true;
-    runButton.textContent = "Running...";
-    tooling.setRunStatus(runStatus, `Running ${tool.label}...`, "neutral");
-    renderResultsLinks([]);
-
-    try {
-      const response = await fetch("/api/eric-zimmerman/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tool_id: selectedToolId,
-          case_id: caseSelect?.value || "",
-          source_path: sourcePath?.value.trim() || "",
-          output_path: outputPath?.value.trim() || "",
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to run parser.");
-      }
-      if (data.output_path && outputPath) {
-        outputPath.value = data.output_path;
-      }
-      if (data.output_file) {
-        renderResultsLinks([
-          {
-            name: data.output_file.split("/").pop() || "results.csv",
-            path: data.output_file,
-          },
-        ]);
-      }
-      if (data.command && commandPreview) {
-        commandPreview.textContent = data.command;
-      }
-      currentRunId = data.run_id || "";
-      if (currentRunId && window.registerActiveJob) {
-        window.registerActiveJob({ id: currentRunId, tool: tool.label });
-      }
-      if (currentRunId && window.EventSource) {
-        tooling.attachRunEvents(currentRunId, {
-          onStatus: (payload) => {
-            tooling.setRunStatus(runStatus, payload.message || "Running...", "neutral");
-          },
-          onDone: (payload) => {
-            const exitCode = Number(payload.message || 0);
-            const { message, tone } = tooling.getCompletionStatus(exitCode);
-            tooling.setRunStatus(runStatus, message, tone);
-            fetchRunResults(currentRunId);
-            resetRunButton();
-          },
-          onError: () => {
-            tooling.setRunStatus(runStatus, tooling.RUN_MESSAGES.FAILED, "error");
-            resetRunButton();
-          },
-        });
-      } else {
-        tooling.setRunStatus(runStatus, tooling.RUN_MESSAGES.STARTED_REFRESH, "neutral");
-        resetRunButton();
-      }
-    } catch (error) {
-      tooling.setRunStatus(runStatus, error.message || tooling.RUN_MESSAGES.FAILED, "error");
-      resetRunButton();
-    }
+if (tooling) {
+  tooling.createRunHandler({
+    runButton, runStatus, apiEndpoint: "/api/eric-zimmerman/run", toolName: "parser", buildPayload,
+    onStart: () => {
+      const tool = toolsById[selectedToolId];
+      if (!tool) throw new Error("Select a parser first.");
+      if (!tool.installed) throw new Error(`${tool.label} is unavailable.`);
+      if (runResults) runResults.hidden = true;
+    },
+    setRunIdRef: id => { currentRunId = id; },
+    onSuccess: data => {
+      if (outputPath) outputPath.value = data.output_path;
+      if (commandPreview) commandPreview.textContent = data.command;
+    },
   });
 }
 

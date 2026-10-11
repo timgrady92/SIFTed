@@ -2,7 +2,7 @@ const tooling = window.SiftedTooling;
 
 // Get common elements using helper
 const common = tooling?.getCommonElements() || {};
-const imagePath = common.imagePath;
+const sourcePath = common.sourcePath;
 const outputPath = common.outputPath;
 const commandPreview = common.commandPreview;
 const caseSelect = common.caseSelect;
@@ -23,34 +23,13 @@ const getEncoding = () => {
 };
 
 const buildCommand = () => {
-  const encoding = getEncoding();
-  const args = ["strings"];
-
-  if (encoding === "l") {
-    args.push("-e", "l");
-  } else if (encoding === "S") {
-    args.push("-e", "S");
-  }
-
-  const length = minLength?.value || "4";
-  args.push("-n", length);
-
-  if (showOffsets?.checked) {
-    args.push("-t", "x");
-  }
-
-  args.push(imagePath?.value.trim() || "<file_path>");
-  args.push(">", "strings.txt");
-
-  if (commandPreview) {
-    commandPreview.textContent = args.join(" ");
-  }
+  tooling?.requestPreview("strings", buildPayload);
 };
 
 const buildPayload = () => ({
-  tool: "strings",
+
   case_id: caseSelect?.value || "",
-  image_path: imagePath?.value.trim() || "",
+  source_path: sourcePath?.value.trim() || "",
   output_path: outputPath?.value.trim() || "",
   encoding: getEncoding(),
   min_length: parseInt(minLength?.value || "4", 10),
@@ -63,8 +42,8 @@ if (tooling) {
     ...common,
     getRunId: () => currentRunId,
     onSelectPath: (path) => {
-      if (imagePath) {
-        imagePath.value = path;
+      if (sourcePath) {
+        sourcePath.value = path;
       }
       buildCommand();
     },
@@ -105,7 +84,7 @@ if (tooling) {
 // Attach input listeners
 if (tooling) {
   tooling.attachInputListeners(
-    [imagePath, outputPath, minLength, showOffsets],
+    [sourcePath, outputPath, minLength, showOffsets],
     buildCommand,
   );
 

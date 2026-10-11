@@ -19,3 +19,9 @@ coverage.xml
 .idea/
 .vscode/
 .DS_Store
+
+# Runtime state and managed attempts
+*.sqlite3
+*.sqlite3-*
+*.worker.lock
+.sifted-staging/

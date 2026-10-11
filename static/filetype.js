@@ -2,7 +2,7 @@ const tooling = window.SiftedTooling;
 
 // Get common elements using helper
 const common = tooling?.getCommonElements() || {};
-const imagePath = common.imagePath;
+const sourcePath = common.sourcePath;
 const outputPath = common.outputPath;
 const commandPreview = common.commandPreview;
 const caseSelect = common.caseSelect;
@@ -24,41 +24,13 @@ const getMode = () => {
 };
 
 const buildCommand = () => {
-  const mode = getMode();
-  const source = imagePath?.value.trim() || "<source_path>";
-  let args = [];
-
-  if (recursiveFlag?.checked) {
-    args.push("find", source, "-type", "f", "-exec", "file");
-  } else {
-    args.push("file");
-  }
-
-  if (mode === "mime") {
-    args.push("--mime-type", "-b");
-  } else if (mode === "brief") {
-    args.push("-b");
-  }
-
-  if (recursiveFlag?.checked) {
-    args.push("{}", "\\;");
-  } else {
-    args.push(source);
-  }
-
-  if (mismatchOnly?.checked) {
-    args.push("# filter mismatches");
-  }
-
-  if (commandPreview) {
-    commandPreview.textContent = args.join(" ");
-  }
+  tooling?.requestPreview("filetype", buildPayload);
 };
 
 const buildPayload = () => ({
-  tool: "filetype",
+
   case_id: caseSelect?.value || "",
-  image_path: imagePath?.value.trim() || "",
+  source_path: sourcePath?.value.trim() || "",
   output_path: outputPath?.value.trim() || "",
   mode: getMode(),
   recursive: recursiveFlag?.checked || false,
@@ -71,8 +43,8 @@ if (tooling) {
     ...common,
     getRunId: () => currentRunId,
     onSelectPath: (path) => {
-      if (imagePath) {
-        imagePath.value = path;
+      if (sourcePath) {
+        sourcePath.value = path;
       }
       buildCommand();
     },
@@ -117,7 +89,7 @@ if (tooling) {
 // Attach input listeners
 if (tooling) {
   tooling.attachInputListeners(
-    [imagePath, outputPath, recursiveFlag, mismatchOnly],
+    [sourcePath, outputPath, recursiveFlag, mismatchOnly],
     buildCommand,
   );
 

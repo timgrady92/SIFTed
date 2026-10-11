@@ -11,7 +11,7 @@ const imageInput = document.getElementById("caseImagePath");
 const imageDisplay = document.getElementById("caseImagePathDisplay");
 const caseNameInput = document.getElementById("caseName");
 
-let currentPath = "/cases";
+let currentPath = "";
 let autoCaseName = "";
 
 const toggleDrawer = (isOpen) => {

@@ -80,17 +80,15 @@
               <span class="result-label">Audit log</span>
               <span class="result-value" id="resultAudit">audit.txt</span>
             </div>
-            <div class="result-item">
-              <span class="result-label">Summary</span>
-              <span class="result-value" id="resultSummary">output.txt</span>
-            </div>
           </div>
           <div class="milestones">
             <p class="milestone-title">Milestones</p>
             <ul id="milestoneList"></ul>
           </div>
+          {% from "_components.html" import run_results %}
+          {{ run_results() }}
           <p class="run-status" id="runStatus"></p>
-          <button class="ghost wide" id="openLog">View full log</button>
+          <button class="ghost wide" id="openLog">View recent log</button>
           <button class="action wide" id="runForemost">Run Foremost</button>
         </div>
       </aside>
@@ -99,7 +97,7 @@
     <div class="log-drawer" id="logDrawer" aria-hidden="true">
       <div class="drawer-surface">
         <div class="drawer-header">
-          <h3>Full log</h3>
+          <h3>Recent log</h3>
           <button class="ghost" id="closeLog">Close</button>
         </div>
         <p class="drawer-status" id="logDrawerStatus"></p>

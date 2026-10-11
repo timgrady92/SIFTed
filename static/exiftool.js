@@ -2,7 +2,7 @@ const tooling = window.SiftedTooling;
 
 // Get common elements using helper
 const common = tooling?.getCommonElements() || {};
-const imagePath = common.imagePath;
+const sourcePath = common.sourcePath;
 const outputPath = common.outputPath;
 const commandPreview = common.commandPreview;
 const caseSelect = common.caseSelect;
@@ -14,7 +14,6 @@ const extractUnknown = document.getElementById("extractUnknown");
 const duplicates = document.getElementById("duplicates");
 const runButton = document.getElementById("runExiftool");
 const resultOutput = document.getElementById("resultOutput");
-const resultCount = document.getElementById("resultCount");
 const milestonesList = document.getElementById("milestoneList");
 
 let currentRunId = "";
@@ -24,48 +23,16 @@ const getOutputFormat = () => {
   return checked ? checked.value : "csv";
 };
 
-const getSelectedFocus = () => {
-  return Array.from(document.querySelectorAll(".chip input:checked")).map(
-    (input) => input.value,
-  );
-};
-
 const buildCommand = () => {
-  const format = getOutputFormat();
-  const args = ["exiftool"];
-
-  if (format === "json") {
-    args.push("-json");
-  } else {
-    args.push("-csv");
-  }
-
-  if (recursiveFlag?.checked) {
-    args.push("-r");
-  }
-  if (extractUnknown?.checked) {
-    args.push("-u");
-  }
-  if (duplicates?.checked) {
-    args.push("-a");
-  }
-
-  args.push("-G1", "-s");
-  args.push(imagePath?.value.trim() || "<source_path>");
-  args.push(">", `metadata.${format}`);
-
-  if (commandPreview) {
-    commandPreview.textContent = args.join(" ");
-  }
+  tooling?.requestPreview("exiftool", buildPayload);
 };
 
 const buildPayload = () => ({
-  tool: "exiftool",
+
   case_id: caseSelect?.value || "",
-  image_path: imagePath?.value.trim() || "",
+  source_path: sourcePath?.value.trim() || "",
   output_path: outputPath?.value.trim() || "",
   output_format: getOutputFormat(),
-  focus: getSelectedFocus(),
   recursive: recursiveFlag?.checked || false,
   extract_unknown: extractUnknown?.checked || false,
   duplicates: duplicates?.checked || false,
@@ -90,8 +57,8 @@ if (tooling) {
     ...common,
     getRunId: () => currentRunId,
     onSelectPath: (path) => {
-      if (imagePath) {
-        imagePath.value = path;
+      if (sourcePath) {
+        sourcePath.value = path;
       }
       buildCommand();
     },
@@ -114,11 +81,6 @@ if (tooling) {
     },
     onMilestone: (payload) => {
       appendMilestone(payload.message || "Milestone");
-      // Update file count if available
-      const match = (payload.message || "").match(/Processed (\d+) files/);
-      if (match && resultCount) {
-        resultCount.textContent = match[1];
-      }
     },
     onSuccess: (data) => {
       if (commandPreview) {
@@ -138,10 +100,9 @@ if (tooling) {
 // Attach input listeners
 if (tooling) {
   tooling.attachInputListeners(
-    [imagePath, outputPath, recursiveFlag, extractUnknown, duplicates],
+    [sourcePath, outputPath, recursiveFlag, extractUnknown, duplicates],
     buildCommand,
   );
-  tooling.attachChipListeners(".chip input", buildCommand);
 
   // Handle format radio buttons
   document.querySelectorAll('input[name="outputFormat"]').forEach((radio) => {

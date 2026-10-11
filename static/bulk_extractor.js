@@ -2,7 +2,7 @@ const tooling = window.SiftedTooling;
 
 // Get common elements using helper
 const common = tooling?.getCommonElements() || {};
-const imagePath = common.imagePath;
+const sourcePath = common.sourcePath;
 const outputPath = common.outputPath;
 const commandPreview = common.commandPreview;
 const caseSelect = common.caseSelect;
@@ -47,38 +47,7 @@ const applyPreset = (preset) => {
 };
 
 const buildCommand = () => {
-  const focusScanners = Array.from(
-    document.querySelectorAll(".focus-scanners input:checked"),
-  ).map((input) => input.value);
-  const advancedScanners = Array.from(
-    document.querySelectorAll(".advanced-scanners input:checked"),
-  ).map((input) => input.value);
-
-  const args = [
-    "bulk_extractor",
-    "-o",
-    outputPath?.value.trim() || "<output_dir>",
-  ];
-
-  if (infoMode?.checked) {
-    args.push("-i");
-  }
-
-  if (!histograms?.checked) {
-    args.push("-S", "enable_histograms=NO");
-  }
-
-  if (focusScanners.length) {
-    args.push("-x", "all");
-    focusScanners.forEach((scanner) => args.push("-e", scanner));
-  }
-  advancedScanners.forEach((scanner) => args.push("-e", scanner));
-
-  args.push(imagePath?.value.trim() || "<image_path>");
-
-  if (commandPreview) {
-    commandPreview.textContent = args.join(" ");
-  }
+  tooling?.requestPreview("bulk-extractor", buildPayload);
 };
 
 const buildPayload = () => {
@@ -90,9 +59,9 @@ const buildPayload = () => {
   ).map((input) => input.value);
 
   return {
-    tool: "bulk-extractor",
+
     case_id: caseSelect?.value || "",
-    image_path: imagePath?.value.trim() || "",
+    source_path: sourcePath?.value.trim() || "",
     output_path: outputPath?.value.trim() || "",
     focus_scanners: focusScanners,
     advanced_scanners: advancedScanners,
@@ -107,8 +76,8 @@ if (tooling) {
     ...common,
     getRunId: () => currentRunId,
     onSelectPath: (path) => {
-      if (imagePath) {
-        imagePath.value = path;
+      if (sourcePath) {
+        sourcePath.value = path;
       }
       buildCommand();
     },
@@ -138,7 +107,7 @@ if (tooling) {
 // Attach input listeners using helper
 if (tooling) {
   tooling.attachInputListeners(
-    [imagePath, outputPath, infoMode, histograms],
+    [sourcePath, outputPath, infoMode, histograms],
     buildCommand,
   );
   tooling.attachChipListeners(".chip input", buildCommand);

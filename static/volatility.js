@@ -2,7 +2,7 @@ const tooling = window.SiftedTooling;
 
 // Get common elements using helper
 const common = tooling?.getCommonElements() || {};
-const imagePath = common.imagePath;
+const sourcePath = common.sourcePath;
 const outputPath = common.outputPath;
 const commandPreview = common.commandPreview;
 const runStatus = common.runStatus;
@@ -69,70 +69,7 @@ const renderCommandPreview = () => {
 };
 
 const buildCommand = () => {
-  const args = ["python3", "volatility3/vol.py", "--offline", "-q"];
-  const imageValue = imagePath?.value.trim() || "<image_path>";
-  args.push("-f", imageValue);
-
-  if (symbolPath?.value.trim()) {
-    args.push("-s", symbolPath.value.trim());
-  } else {
-    args.push("-s", "<symbol_cache>");
-  }
-
-  if (outputPath?.value.trim()) {
-    args.push("-o", outputPath.value.trim());
-  }
-
-  if (jsonOutput?.checked) {
-    args.push("-r", "json");
-  } else if (tableOutput?.checked) {
-    args.push("-r", "pretty");
-  }
-
-  const plugins = Array.from(
-    document.querySelectorAll(".chip input[data-plugin]:checked"),
-  ).map((input) => input.dataset.plugin);
-
-  if (!plugins.length) {
-    commandList = [];
-    if (commandPreview) {
-      commandPreview.textContent = [...args, "<plugin>"].join(" ");
-    }
-    if (commandSummary) {
-      commandSummary.textContent = "Select plugins to build the command list.";
-    }
-    if (toggleCommandView) {
-      toggleCommandView.disabled = true;
-      toggleCommandView.textContent = "Show full list";
-    }
-    return;
-  }
-  commandList = plugins.map((plugin) => [...args, plugin].join(" "));
-  renderCommandPreview();
-};
-
-const renderResultsLinks = (outputDir, plugins, renderer) => {
-  if (!runResults || !runResultsLinks) {
-    return;
-  }
-  if (!outputDir || !plugins.length) {
-    runResults.hidden = true;
-    runResultsLinks.innerHTML = "";
-    return;
-  }
-  const extension = renderer === "json" ? "json" : "txt";
-  const viewMode = renderer === "json" ? "&view=table" : "";
-  runResultsLinks.innerHTML = "";
-  plugins.forEach((plugin) => {
-    const safeName = plugin.replace(/\./g, "_");
-    const filePath = `${outputDir}/results/${safeName}.${extension}`;
-    const link = document.createElement("a");
-    link.className = "run-result-link";
-    link.href = `/view-file?path=${encodeURIComponent(filePath)}${viewMode}`;
-    link.textContent = safeName;
-    runResultsLinks.appendChild(link);
-  });
-  runResults.hidden = false;
+  tooling?.requestPreview("volatility", buildPayload, (data) => { commandList = data.commands || []; renderCommandPreview(); });
 };
 
 // Initialize drawers using helper
@@ -141,8 +78,8 @@ if (tooling) {
     ...common,
     getRunId: () => currentRunId,
     onSelectPath: (path) => {
-      if (imagePath) {
-        imagePath.value = path;
+      if (sourcePath) {
+        sourcePath.value = path;
       }
       buildCommand();
     },
@@ -230,9 +167,9 @@ const buildPayload = () => {
     document.querySelectorAll(".chip input[data-plugin]:checked"),
   ).map((input) => input.dataset.plugin);
   return {
-    tool: "volatility",
+
     case_id: document.getElementById("caseSelect")?.value || "",
-    image_path: imagePath?.value.trim() || "",
+    source_path: sourcePath?.value.trim() || "",
     output_path: outputPath?.value.trim() || "",
     symbol_path: symbolPath?.value.trim() || "",
     plugins,
@@ -240,82 +177,26 @@ const buildPayload = () => {
   };
 };
 
-// Run button handler - custom because of complex payload and results rendering
-if (runButton && tooling) {
-  const defaultLabel = runButton.textContent || "Run Volatility";
-  runButton.dataset.defaultLabel = defaultLabel;
-  const resetRunButton = () => {
-    runButton.textContent = runButton.dataset.defaultLabel || defaultLabel;
-    runButton.disabled = false;
-  };
-
-  runButton.addEventListener("click", async () => {
-    const payload = buildPayload();
-    if (!payload.plugins.length) {
-      tooling.setRunStatus(runStatus, "Select at least one plugin.", "error");
-      return;
-    }
-    if (runResults) {
-      runResults.hidden = true;
-    }
-    runButton.disabled = true;
-    runButton.textContent = "Running...";
-    tooling.setRunStatus(runStatus, "Running Volatility...", "neutral");
-    try {
-      const response = await fetch("/api/volatility/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to run Volatility.");
-      }
-      if (commandPreview) {
-        commandPreview.textContent = data.command || commandPreview.textContent;
-      }
-      if (data.output_path && outputPath) {
-        outputPath.value = data.output_path;
-      }
-      renderResultsLinks(data.output_path, payload.plugins, payload.renderer);
-      currentRunId = data.run_id || "";
-      if (currentRunId && window.registerActiveJob) {
-        window.registerActiveJob({ id: currentRunId, tool: "Volatility 3" });
-      }
-      if (currentRunId && window.EventSource) {
-        tooling.attachRunEvents(currentRunId, {
-          onMilestone: (eventPayload) => {
-            tooling.setRunStatus(runStatus, eventPayload.message || "Running...", "neutral");
-          },
-          onStatus: (eventPayload) => {
-            tooling.setRunStatus(runStatus, eventPayload.message || "Running...", "neutral");
-          },
-          onDone: (eventPayload) => {
-            const exitCode = Number(eventPayload.message || 0);
-            const { message, tone } = tooling.getCompletionStatus(exitCode);
-            tooling.setRunStatus(runStatus, message, tone);
-            resetRunButton();
-          },
-          onError: () => {
-            tooling.setRunStatus(runStatus, tooling.RUN_MESSAGES.FAILED, "error");
-            resetRunButton();
-          },
-        });
-      } else {
-        tooling.setRunStatus(runStatus, tooling.RUN_MESSAGES.STARTED_REFRESH, "neutral");
-        resetRunButton();
-      }
-    } catch (error) {
-      tooling.setRunStatus(runStatus, error.message || tooling.RUN_MESSAGES.FAILED, "error");
-      resetRunButton();
-    }
+if (tooling) {
+  tooling.createRunHandler({
+    runButton, runStatus, apiEndpoint: "/api/volatility/run", toolName: "Volatility", buildPayload,
+    onStart: () => {
+      if (!buildPayload().plugins.length) throw new Error("Select at least one plugin.");
+      if (runResults) runResults.hidden = true;
+    },
+    setRunIdRef: id => { currentRunId = id; },
+    onSuccess: data => {
+      if (outputPath) outputPath.value = data.output_path;
+      commandList = data.commands;
+      renderCommandPreview();
+    },
   });
 }
 
 // Attach input listeners
 if (tooling) {
   tooling.attachInputListeners(
-    [imagePath, outputPath, symbolPath, jsonOutput, tableOutput],
+    [sourcePath, outputPath, symbolPath, jsonOutput, tableOutput],
     buildCommand,
   );
 }

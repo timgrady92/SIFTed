@@ -23,7 +23,7 @@
       <section class="case-form card">
         <h2>Create a case</h2>
         <form method="post" class="form-grid">
-          <input type="hidden" id="caseImagePath" name="image_path" />
+          <input type="hidden" id="caseImagePath" name="source_path" />
           <label class="input-stack">
             Case name
             <input
@@ -81,7 +81,7 @@
               <button class="case-toggle" type="button" aria-expanded="false">
                 <div class="case-toggle-main">
                   <h3>{{ case.name }}</h3>
-                  <p class="case-path">{{ case.image_path or "No image path yet" }}</p>
+                  <p class="case-path">{{ case.artifacts[0].path if case.artifacts else "No evidence registered" }}</p>
                 </div>
                 <div class="case-toggle-cta">
                   <span class="case-toggle-label" data-closed-label="View details" data-open-label="Hide details">
@@ -94,12 +94,7 @@
                 <div class="case-meta">
                   <span class="case-meta-pill">ID {{ case.id[:8] }}</span>
                   <span class="case-meta-pill">Created {{ case.created_at }}</span>
-                  {% if case.file_hash %}
-                    <span class="case-meta-pill case-hash">SHA-256 {{ case.file_hash }}</span>
-                  {% elif case.hash_error %}
-                    <span class="case-meta-pill case-hash warn">{{ case.hash_error }}</span>
-                  {% endif %}
-                  <a class="case-meta-pill case-results-link" href="{{ url_for('case_results', case_id=case.id) }}">View All Results</a>
+                  <a class="case-meta-pill case-results-link" href="{{ url_for('web.case_results', case_id=case.id) }}">View All Results</a>
                 </div>
                 {% if case.summary %}
                   <p class="case-summary">{{ case.summary }}</p>
@@ -155,21 +150,13 @@
                           {% for run in group.runs %}
                             <div class="run-item">
                               <div class="run-meta">
-                                <span class="run-status-pill" data-status="{{ (run.status or 'logged')|lower }}">
-                                  {{ run.status or "logged" }}
+                                <span class="run-status-pill" data-status="{{ run.status }}">
+                                  {{ run.status }}
                                 </span>
                                 <span class="run-time">{{ run.created_at }}</span>
                               </div>
-                              {% if run.failed_plugins %}
-                                <div class="run-failures">
-                                  <span class="run-failures-label">Failed plugins</span>
-                                  <div class="run-failures-list">
-                                    {% for plugin in run.failed_plugins %}
-                                      <span class="run-failure-chip">{{ plugin }}</span>
-                                    {% endfor %}
-                                  </div>
-                                </div>
-                              {% endif %}
+                              {% from "_components.html" import run_controls %}
+                              {{ run_controls(run) }}
                               {% if run.result_files %}
                                 <div class="run-results">
                                   <button class="run-results-toggle" type="button" aria-expanded="false">
@@ -181,7 +168,7 @@
                                   <div class="run-results-body">
                                     <div class="run-results-links">
                                       {% for item in run.result_files %}
-                                        <a class="run-result-link" href="{{ url_for('view_file') }}?path={{ item.path|urlencode }}">{{ item.name }}</a>
+                                        <a class="run-result-link" href="{{ url_for('web.view_file') }}?path={{ item.path|urlencode }}">{{ item.name }}</a>
                                       {% endfor %}
                                     </div>
                                     {% if run.result_truncated %}
