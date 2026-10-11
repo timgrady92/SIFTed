@@ -1,7 +1,6 @@
-"""Standalone validation of native Zimmerman diagnostics and CSV exports."""
+"""Managed validation of native Zimmerman diagnostics and CSV exports."""
 import csv
 import re
-from pathlib import Path
 
 CSV_FIELD_LIMIT = 16 * 1024 * 1024
 
@@ -192,25 +191,3 @@ def validate_export(tool_id, path, check):
                 )
             count += bool(row)
     return count
-
-
-def main():
-    import argparse
-    import json
-    import sys
-
-    parser = argparse.ArgumentParser(description="Validate native Zimmerman CSV exports and diagnostics")
-    parser.add_argument("parameters")
-    parser.add_argument("output")
-    args = parser.parse_args()
-    parameters = json.loads(Path(args.parameters).read_text(encoding="utf-8"))
-    result = process_native_exports(parameters, Path(args.output), lambda: None)
-    (Path(args.output) / "native-summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
-    for error in result["validation_errors"]:
-        print(error, file=sys.stderr)
-    print(f"Validated {result['analysis']['csv_count']} CSV exports ({result['analysis']['entry_count']} rows).")
-    return int(bool(result["validation_errors"]))
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

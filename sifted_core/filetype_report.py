@@ -1,9 +1,7 @@
-"""Standalone CSV reporting around the installed file command."""
+"""CSV presentation of file identifications supplied by the managed worker."""
 import csv
-import json
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 MIME_BY_EXTENSION = {
@@ -16,7 +14,7 @@ MIME_BY_EXTENSION = {
 }
 
 
-def write_report(source, output, argv, parameters, identify=None, check=None, permitted=None):
+def write_report(source, output, parameters, *, identify, check, permitted):
     source = Path(source)
     if source.is_file():
         files = iter([source])
@@ -26,21 +24,14 @@ def write_report(source, output, argv, parameters, identify=None, check=None, pe
     else:
         files = (p for p in sorted(source.iterdir()) if p.is_file())
 
-    def native_identify(path):
-        command = [str(path) if arg == "{selected_file}" else arg for arg in argv]
-        result = subprocess.run(command, capture_output=True, timeout=10, check=True)
-        return result.stdout.decode("utf-8", errors="replace").strip()
-
-    identify = identify or native_identify
     count = mismatches = 0
     failures = []
     with Path(output).open("x", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["Path", "Extension", "Detected Type", "Mismatch"])
         for path in files:
-            if check:
-                check()
-            if path.is_symlink() or not path.is_file() or permitted and not permitted(path):
+            check()
+            if path.is_symlink() or not path.is_file() or not permitted(path):
                 failures.append("Skipped non-regular or disallowed file: " + str(path))
                 continue
             try:
@@ -57,16 +48,3 @@ def write_report(source, output, argv, parameters, identify=None, check=None, pe
                 writer.writerow([str(path), ext, detected, "Yes" if mismatch else "No"])
             handle.flush()
     return {"file_count": count, "mismatch_count": mismatches}, failures
-
-
-def main():
-    request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-    counts, failures = write_report(request["source"], sys.argv[2], request["argv"], request["parameters"])
-    for error in failures:
-        print(error, file=sys.stderr)
-    print(f"Processed {counts['file_count']} files, {counts['mismatch_count']} mismatches")
-    return int(bool(failures))
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

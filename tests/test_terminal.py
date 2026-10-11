@@ -2,9 +2,13 @@
 import csv
 import hashlib
 import os
+import re
 import shutil
+import shlex
 import sqlite3
 import subprocess
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 
 import pytest
@@ -17,18 +21,22 @@ from test_zimmerman import zimmerman_runtime as zimmerman_runtime, input_for, qu
 from test_sqlite_maps import set_map
 
 
-def paste(plan, cwd=None, settings=None):
-    code = recipe(plan, settings)["terminal_command"]
+def paste(plan, settings=None):
+    parent = Path(plan.output_path).parent
+    parent.mkdir(parents=True, exist_ok=True)
+    output = Path(tempfile.mkdtemp(prefix="native-cli-", dir=parent))
+    # The harness supplies an analyst's working directory and home. Neither
+    # setup is embedded in the commands presented by the application.
+    home = output / "analyst-home"
+    home.mkdir()
+    with patch("sifted_core.terminal.Path.home", return_value=home):
+        code = recipe(plan, settings)["terminal_command"]
+    assert not re.search(r"(?m)^(?:\(|set\s|export\s|\w+=|printf\s)", code)
     syntax = subprocess.run(["bash", "-n"], input=code, text=True, capture_output=True)
     assert syntax.returncode == 0, syntax.stderr
-    parent = Path(plan.output_path).parent if plan.output_path != "<output_dir>" else Path.home() / "forensic-results"
-    prefix = plan.parameters.get("parser_id") or plan.tool
-    existing = set(parent.glob(prefix + ".????????"))
-    result = subprocess.run(["bash"], input=code, text=True, capture_output=True, cwd=cwd,
+    result = subprocess.run(["bash"], input=code, text=True, capture_output=True, cwd=output,
                             env={**os.environ, "PYTHONPATH": ""}, timeout=360)
-    outputs = set(parent.glob(prefix + ".????????")) - existing
-    assert len(outputs) <= 1
-    return result, next(iter(outputs), None)
+    return result, output
 
 
 def plan_for(root, tool, source, **options):
@@ -37,26 +45,26 @@ def plan_for(root, tool, source, **options):
                         settings, Repository(root / "state.db"), preview=True)[0]
 
 
-def test_native_strings_are_concise_and_repeated_pastes_preserve_results(tmp_path):
+def test_single_strings_command_quotes_evidence_and_repeats_correctly(tmp_path):
     source = tmp_path / "$(touch injected) `touch injected` 'quotes' ü\nfile.bin"
     source.write_bytes(b"known forensic text\0")
     plan = plan_for(tmp_path, "strings", source)
     chosen = Path(plan.output_path)
     chosen.mkdir()
     (chosen / "original.txt").write_text("preserve this")
-    first, output = paste(plan, tmp_path)
-    second, repeated = paste(plan, tmp_path)
+    first, output = paste(plan)
+    second, repeated = paste(plan)
     assert first.returncode == second.returncode == 0, first.stderr + second.stderr
     assert output != repeated
     assert (output / "strings.txt").read_text() == (repeated / "strings.txt").read_text()
     assert "known forensic text" in (output / "strings.txt").read_text()
     assert (chosen / "original.txt").read_text() == "preserve this"
     assert not (tmp_path / "injected").exists()
+    assert not (output / "injected").exists() and not (repeated / "injected").exists()
     assert source.read_bytes() == b"known forensic text\0"
     code = recipe(plan)["terminal_command"]
-    assert 'strings -a -e s -n 4 -t x -- "$evidence"' in code
-    assert len(code.splitlines()) <= 16
-    for backend_detail in ("sha256sum", "timeout", "trap", "workspace", "SIFT_TERMINAL", "sifted_core", "bash <<"):
+    assert code == "strings -a -e s -n 4 -t x -- " + shlex.quote(str(source)) + " > strings.txt\n"
+    for backend_detail in ("sha256sum", "timeout", "trap", "workspace", "SIFT_TERMINAL", "sifted_core", "bash <<", "mktemp", "set -e", "export ", "$evidence", "$results"):
         assert backend_detail not in code
 
 
@@ -153,6 +161,15 @@ def test_zimmerman_uses_installed_batch_instead_of_embedded_helpers(zimmerman_ru
     settings = zimmerman_runtime[1]
     code = recipe(plan, settings)["terminal_command"]
     assert str(Path(settings.ez_root) / "RECmd/BatchExamples/RegistryASEPs.reb") in code
-    assert "--nl" in code and "cp -p" in code
+    assert "--nl" in code and "cp -p" not in code
+    assert str(plan.source) in code
     for app_detail in ("validate-native", "native-parameters", "--debug", "--dt", "registry-batch.reb", "input/0000"):
         assert app_detail not in code
+
+
+def test_partition_example_is_exactly_the_native_command(tmp_path):
+    source = tmp_path / "disk.E01"
+    source.write_bytes(b"test")
+    plan = plan_for(tmp_path, "mmls", source)
+    assert recipe(plan)["terminal_command"] == f"mmls -B {source} > mmls.txt\n"
+    assert "current directory" in recipe(plan)["terminal_note"]

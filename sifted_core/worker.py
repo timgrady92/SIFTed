@@ -264,7 +264,7 @@ class Worker:
             return detected
 
         counts, failures = write_report(
-            plan.source, output / "filetypes.csv", plan.steps[0].argv, plan.parameters,
+            plan.source, output / "filetypes.csv", plan.parameters,
             identify=identify,
             check=lambda: self._check(run["id"], output, deadline, plan.max_output_bytes),
             permitted=lambda path: allowed(path, self.settings.input_roots),

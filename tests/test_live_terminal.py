@@ -3,6 +3,7 @@ import csv
 import json
 import os
 import shutil
+import shlex
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -82,7 +83,7 @@ def test_native_generic_terminal_workflows(installed_runtime, tool, options):
         text = (output / "filetypes.txt").read_text()
         assert str(source) in text and "image/jpeg" in text
     elif tool == "bulk-extractor":
-        assert "known.user@example.com" in (output / "features/email.txt").read_text()
+        assert "known.user@example.com" in (output / "bulk-features/email.txt").read_text()
     else:
         assert "known-terminal-marker" in (output / "timeline.csv").read_text()
     assert source.read_bytes() == before and runtime[0].runs() == []
@@ -149,7 +150,7 @@ def test_native_carving_terminal_rules_recover_known_bytes(native_carving, tool)
     runtime = native_carving
     plan = terminal_plan(runtime, tool, types=["png", "gif", "pdf", "zip"])
     output = run_terminal(plan)
-    assert (output / "carved/audit.txt").is_file()
+    assert (output / (tool + "-carved") / "audit.txt").is_file()
     for kind in ("png", "gif", "pdf", "zip"):
         expected = next(data for k, _, data in runtime[4] if k == kind)
         assert any(p.read_bytes() == expected for p in output.rglob("*." + kind))
@@ -158,7 +159,7 @@ def test_native_carving_terminal_rules_recover_known_bytes(native_carving, tool)
         assert "png y" in rules and "zip y" in rules
         assert "SIFTed" not in rules
     else:
-        assert "-c" not in recipe(plan)["terminal_command"]
+        assert "-c" not in shlex.split(recipe(plan)["terminal_command"])
 
 
 @pytest.mark.parametrize("tool,name,data,column,expected", [
@@ -171,7 +172,7 @@ def test_native_zimmerman_terminal_known_records(native_zimmerman, tool, name, d
     installed(native_zimmerman, tool)
     source = native_zimmerman[2] / name
     source.write_bytes(data)
-    output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id=tool))
+    output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id=tool)) / (tool + "-csv")
     rows = []
     for p in output.rglob("*.csv"):
         with p.open(newline="", encoding="utf-8-sig") as handle:
@@ -195,7 +196,7 @@ def test_native_zimmerman_terminal_public_artifacts(native_zimmerman, tool, name
         folder.mkdir()
         source.rename(folder / name)
         source = folder
-    output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id=tool, **options))
+    output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id=tool, **options)) / (tool + "-csv")
     rows = []
     for path in output.glob("*.csv"):
         with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -213,7 +214,7 @@ def test_native_registry_terminal_replays_logs_on_copies(native_zimmerman):
     result, output = paste(plan)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "At least one transaction log was applied" in result.stdout
-    assert list(output.glob("*.csv"))
+    assert list((output / "recmd-csv").glob("*.csv"))
     assert all(p.read_bytes() == data for p, data in before.items())
 
 
@@ -229,7 +230,7 @@ def test_native_mft_terminal_on_real_ntfs_metadata(native_zimmerman):
     with source.open("wb") as handle:
         subprocess.run(["icat", str(image), "0"], stdout=handle, stderr=subprocess.PIPE, check=True)
     output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="mftecmd"))
-    with (output / "mft.csv").open(newline="", encoding="utf-8-sig") as handle:
+    with (output / "mftecmd-csv/mft.csv").open(newline="", encoding="utf-8-sig") as handle:
         assert any(row["FileName"] == "$MFT" for row in csv.DictReader(handle))
 
 
@@ -254,9 +255,10 @@ def test_native_volatility_terminal_offline_banner(installed_memory):
     code = recipe(plan)["terminal_command"]
     assert str(settings.volatility_symbols) not in code and "--save-config" not in code
     assert '.local/share/volatility3/symbols' in code
-    assert code.index('-s "$symbol_dirs"') < code.index('banners.Banners >')
+    assert code.index("-s ") < code.index("banners.Banners >")
+    assert "$symbol_dirs" not in code and "export " not in code
     output = run_terminal(plan)
-    assert "Linux version 6.8.0-sifted-test" in (output / "banners.Banners/result.jsonl").read_text()
+    assert "Linux version 6.8.0-sifted-test" in (output / "banners.Banners.jsonl").read_text()
 
 
 def test_native_volatility_terminal_windows_processes(installed_memory):
@@ -268,11 +270,13 @@ def test_native_volatility_terminal_windows_processes(installed_memory):
     source.symlink_to(Path(value).resolve())
     settings.input_roots += [str(Path(value).resolve().parent)]
     plan, _, _ = compile_plan("volatility", {"source_path": str(source), "output_path": str(default.parent / "terminal"),
-                             "plugins": ["windows.pslist.PsList"], "plugin_options": {"windows.pslist.PsList": {"pid": [1812]}},
+                             "plugins": ["windows.pslist.PsList"], "plugin_options": {"windows.pslist.PsList": {"pid": [1812], "dump": True}},
                              "renderer": "jsonl"}, settings, repo, preview=True)
     output = run_terminal(plan)
-    text = (output / "windows.pslist.PsList/result.jsonl").read_text()
+    text = (output / "windows.pslist.PsList.jsonl").read_text()
     assert "explorer.exe" in text and "1812" in text
+    extracted = list(output.glob("*.dmp"))
+    assert extracted and any(path.read_bytes().startswith(b"MZ") for path in extracted)
 
 
 @pytest.mark.parametrize("tool,name,data,column,expected", [
@@ -288,9 +292,9 @@ def test_native_cli_parsers_accept_collected_directories(native_zimmerman, tool,
         (folder / name).write_bytes(data)
     plan = terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id=tool)
     code = recipe(plan)["terminal_command"]
-    assert '-d "$evidence"' in code
+    assert "-d " + shlex.quote(str(source)) in code
     assert "inputs/0000" not in code and "parser-log.txt" not in code
-    output = run_terminal(plan)
+    output = run_terminal(plan) / (tool + "-csv")
     rows = []
     for path in output.glob("*.csv"):
         with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -331,9 +335,12 @@ def test_native_registry_cli_replays_logs_in_a_collected_directory(native_zimmer
         destination = folder / name
         path.rename(destination)
         originals[destination] = destination.read_bytes()
+    for path in originals:
+        path.chmod(0o444)
+    folder.chmod(0o555)
     plan = terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="recmd", batch="UserActivity")
     result, output = paste(plan)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "At least one transaction log was applied" in result.stdout
-    assert list(output.glob("*.csv"))
+    assert list((output / "recmd-csv").glob("*.csv"))
     assert all(path.read_bytes() == data for path, data in originals.items())

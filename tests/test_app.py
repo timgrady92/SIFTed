@@ -32,7 +32,7 @@ def test_terminal_preview_is_read_only_and_matches_submitted_recipe(application)
     assert preview.json["terminal_command"] == run.json["terminal_command"]
     queued = sifted_app.runtime_repository().run(run.json["run_id"])
     assert queued["plan"]["steps"][0]["argv"][1:3] == ["--mime-type", "-b"]
-    assert preview.json["terminal_ready"] and preview.json["terminal_command"].startswith("(\n")
+    assert preview.json["terminal_ready"] and preview.json["terminal_command"].startswith("file --mime-type")
     assert "<staging_output>" not in preview.json["terminal_command"]
     assert "<job_workspace>" not in preview.json["terminal_command"]
     assert not (root / "out").exists()

@@ -36,7 +36,7 @@ Every action teaches:
 
 The UI is explicit about what it's doing. Nothing is hidden. Nothing is magic.
 
-Each paste creates a fresh results folder beside your chosen output path, keeping previous results intact. If no output is selected, results go under `~/forensic-results`. Saved examples run with `bash forensic-commands.sh` and require the corresponding forensic tools installed on SIFT. Commands teach native tool use without embedding SIFTed's orchestration or Python helpers. SQLite examples use `sqlite3` for schema inspection and SQL exports; file identification uses `file` and `find`. [CLI example validation](docs/terminal-validation.md) describes the checks and native output conventions.
+Examples show the native command with the absolute evidence path, such as `mmls -B /cases/disk.E01 > mmls.txt`. Run them from a working results directory; reports use the filenames shown, which you can change for another run. There are no shell variables, environment exports or execution wrappers. Necessary tool preparation appears as ordinary commands, such as creating a writable Volatility symbol directory or defining Scalpel rules. Saved examples run with `bash forensic-commands.sh`. SQLite examples use `sqlite3` for schema inspection and SQL queries; file identification uses `file` and `find`. [CLI example validation](docs/terminal-validation.md) describes the native checks and output conventions.
 
 ### Structured Output
 

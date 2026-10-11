@@ -1,5 +1,6 @@
 """Optional Chromium checks of the actual shared frontend execution flow."""
 import sys
+import shlex
 import threading
 from pathlib import Path
 from urllib.parse import urlencode, parse_qs, urlparse
@@ -104,7 +105,10 @@ def test_preview_queue_completion_and_polling_without_event_stream(tmp_path):
             page.fill('#outputPath', str(tmp_path / "results"))
             page.wait_for_function("!document.querySelector('#copyTerminal').disabled")
             assert '-n 4' in ' '.join(page.locator('#commandPreview').inner_text().replace('\\\n', ' ').split())
-            assert page.locator('#commandPreview').inner_text().startswith("(\n")
+            command = page.locator('#commandPreview').inner_text()
+            assert command.count('\n') == 1
+            assert shlex.quote(str(source)) in command
+            assert command.endswith(' > strings.txt\n')
             assert '<staging_output>' not in page.locator('#commandPreview').inner_text()
             # Copy includes every line, even when the displayed block scrolls.
             page.evaluate("() => { window.copiedSnippet = ''; document.execCommand = () => { window.copiedSnippet = document.querySelector('textarea').value; return true; }; }")
