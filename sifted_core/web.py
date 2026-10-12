@@ -324,14 +324,10 @@ def cases():
         groups.sort(key=lambda item: item["tool"])
         grouped_runs[case_id] = groups
 
-    # Build artifact type labels for template
-    artifact_type_labels = {k: v.get("label", k) for k, v in ARTIFACT_TYPES.items()}
-
     return render_template(
         "cases.html",
         cases=cases,
         runs_by_case=grouped_runs,
-        artifact_type_labels=artifact_type_labels,
     )
 
 

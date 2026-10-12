@@ -383,7 +383,7 @@ def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tm
             assert page.locator('[data-triage-entry]').count() == 1
             page.locator('[data-workspace-tab="derived"]').click()
             page.wait_for_selector('#derivedExamination')
-            assert page.locator('.workspace-derived-list').count() == 0
+            assert page.locator('#workspaceTabPanel [data-evidence-key]').count() == 0
             page.locator('[data-evidence-action="xxd"] [data-workspace-tool]').click()
             page.wait_for_function("!document.querySelector('#copyOperation').disabled")
             assert parse_qs(urlparse(page.url).query)['input'][0] == key
@@ -475,8 +475,9 @@ def test_workspace_jobs_follow_their_evidence_and_can_be_cancelled(workspace_run
             page.goto(f'http://127.0.0.1:{server.server_port}/case/{case}/workspace?' + urlencode({'input': key}))
             page.get_by_role('button', name='Map disk', exact=True).click()
             page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
-            page.select_option('#workspaceInput', second_key)
-            page.wait_for_function('(key) => document.querySelector("#workspaceInput").value === key && location.search.includes(encodeURIComponent(key))', arg=second_key)
+            page.get_by_role('link', name='All evidence', exact=True).click()
+            page.locator(f'[data-evidence-key="{second_key}"]').click()
+            page.get_by_role('heading', name=second.name, exact=True).wait_for()
             Worker(repo, settings).run_once()
             page.reload()
             page.get_by_role('button', name='Map disk', exact=True).wait_for()
@@ -487,7 +488,8 @@ def test_workspace_jobs_follow_their_evidence_and_can_be_cancelled(workspace_run
             page.wait_for_function("document.querySelector('#operationStatus').dataset.tone === 'error'")
             assert sorted(run['status'] for run in repo.runs() if run['tool'] != 'evidence-intake') == ['cancelled', 'success']
             assert page.locator('[data-filesystem-offset]').count() == 0
-            page.select_option('#workspaceInput', key)
+            page.get_by_role('link', name='All evidence', exact=True).click()
+            page.locator(f'[data-evidence-key="{key}"]').click()
             page.wait_for_selector('[data-filesystem-offset]')
             assert parse_qs(urlparse(page.url).query)['input'] == [key]
             assert len(repo.runs()) == 4 and not errors
@@ -592,7 +594,7 @@ def test_evidence_intake_from_browser_to_verified_overview(intake_runtime, metho
             page.on('pageerror', lambda error: errors.append(str(error)))
             page.goto(f'http://127.0.0.1:{server.server_port}/cases')
             page.locator('.case-toggle').click()
-            page.get_by_role('button', name='+ Add evidence').click()
+            page.locator('.add-artifact-btn').click()
             page.select_option('#intakeMethod', method)
             if method == 'upload':
                 page.set_input_files('#evidenceFiles', str(sample))
@@ -601,21 +603,21 @@ def test_evidence_intake_from_browser_to_verified_overview(intake_runtime, metho
             page.fill('#intakeCustodian', 'Browser examiner')
             page.locator('#addArtifactForm summary').click()
             page.fill('#intakeHash', expected)
-            page.get_by_role('button', name='Add evidence', exact=True).click()
+            page.locator('#addArtifactForm').get_by_role('button', name='Add evidence', exact=True).click()
             page.wait_for_url('**/workspace?**', timeout=10000)
-            assert 'pending' in page.locator('#workspaceTabPanel').inner_text()
+            assert 'Verifying' in page.locator('#workspaceTabPanel').inner_text()
             assert repo.runs()[0]['status'] == 'queued'
             Worker(repo, settings).run_once()
             page.get_by_role('button', name='Continue to Analysis').wait_for(timeout=15000)
             text = page.locator('#workspaceTabPanel').inner_text()
-            assert expected in text and 'PDF document' in text and 'ready' in text
+            assert expected in text and 'PDF document' in text and 'Verified' in text
             page.get_by_text('Custody and file manifest', exact=True).click()
             with page.expect_download() as download:
                 page.get_by_role('link', name='Download custody record and hashes').click()
             audit = json.loads(Path(download.value.path()).read_text())
             assert audit['evidence']['hash'] == expected and audit['custody']['event_count'] == 4
             page.get_by_role('button', name='Verify integrity', exact=True).click()
-            page.wait_for_function("document.querySelector('#workspaceTabPanel').textContent.includes('pending')")
+            page.wait_for_function("document.querySelector('#workspaceTabPanel').textContent.includes('Verifying')")
             Worker(repo, settings).run_once()
             page.get_by_role('button', name='Verify integrity', exact=True).wait_for(timeout=15000)
             assert len(repo.runs()) == 2 and all(run['status'] == 'success' for run in repo.runs())
@@ -694,10 +696,22 @@ def test_guided_memory_journey_resume_process_scope_and_mobile(memory_workspace,
             page.get_by_role('button', name='Extract executable', exact=True).click()
             page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             worker.run_once()
-            page.locator('#operationResult [data-examine]').wait_for()
-            page.locator('#operationResult [data-examine]').click()
+            capture = page.locator('#operationResult .evidence-card[data-examine]')
+            capture.wait_for()
+            captured_key = capture.get_attribute('data-examine')
+            captured_url = capture.get_attribute('href')
+            assert parse_qs(urlparse(captured_url).query)['input'] == [key]
+            assert parse_qs(urlparse(captured_url).query)['examine'] == [captured_key]
+            capture.click()
             page.wait_for_selector('#derivedExamination')
+            assert page.locator('#derivedExamination').evaluate('(el) => el === document.activeElement')
             assert 'process.dmp' in page.locator('#derivedExamination').inner_text()
+            page.get_by_role('button', name='All captured files', exact=True).click()
+            card = page.locator(f'#workspaceTabPanel .evidence-card[data-examine="{captured_key}"]')
+            card.wait_for()
+            assert card.evaluate('(el) => el === document.activeElement')
+            page.keyboard.press('Enter')
+            page.wait_for_selector('#derivedExamination')
             page.get_by_role('tab', name='Processes', exact=True).click()
             page.wait_for_selector('#memoryFilters')
             assert page.locator('[name=process_q]').input_value() == 'process-42.exe'
@@ -766,6 +780,102 @@ def test_guided_memory_journey_resume_process_scope_and_mobile(memory_workspace,
             page.get_by_role('button', name='Close process', exact=True).click()
             page.wait_for_function("document.activeElement.dataset.processRow === '43'")
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert not errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize('width', [390, 1440])
+def test_evidence_cards_unify_case_hubs_and_analysis(workspace_runtime, tmp_path, width):
+    app, client, repo, settings, source, outputs, case, disk_key = workspace_runtime
+    worker = Worker(repo, settings)
+
+    def add(name, content, **metadata):
+        path = source.parent / name
+        path.write_bytes(content)
+        response = client.post(f'/api/case/{case}/artifacts', json={'path': str(path), **metadata})
+        assert response.status_code == 202
+        return response.json['artifact']
+
+    memory = add('memory.raw', b'\0' * 4096, type='memory_dump')
+    worker.run_once()
+    # The card must follow observed content, as the analysis does, rather than a
+    # misleading extension or registered disk type.
+    document = add('document.E01', b'%PDF-1.7\n', type='disk_image', label='Report <review> & notes')
+    worker.run_once()
+    failed = add('mismatched.txt', b'known evidence', expected_sha256='0' * 64)
+    worker.run_once()
+    retired = add('retired.txt', b'old evidence')
+    worker.run_once()
+    assert client.delete(f"/api/case/{case}/artifacts/{retired['id']}").status_code == 200
+    pending = add('pending.txt', b'pending evidence', label='Pending ' + 'long-evidence-name-' * 10)
+    client.post('/cases', data={'name': 'Empty case'})
+    empty_case = repo.cases()[-1]['id']
+    run_count = len(repo.runs())
+    server = make_server('127.0.0.1', 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():
+                pytest.skip('Chromium is not installed.')
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': width, 'height': 900})
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            base = f'http://127.0.0.1:{server.server_port}'
+            hub = base + f'/case/{case}/workspace'
+            for route in ['/cases', '/evidence', f'/case/{case}/workspace']:
+                page.goto(base + route)
+                if route == '/cases':
+                    page.locator(f'#case-{case} .case-toggle').click()
+                cards = page.locator('.evidence-card')
+                assert cards.count() == 5
+                assert page.locator(f'[data-evidence-key="e:{retired["id"]}"]').count() == 0
+                assert 'Memory image' in page.locator(f'[data-evidence-key="e:{memory["id"]}"]').inner_text()
+                pdf = page.locator(f'[data-evidence-key="e:{document["id"]}"]')
+                assert 'PDF document' in pdf.inner_text() and 'Report <review> & notes' in pdf.inner_text()
+                assert pdf.get_by_role('button').count() == 0  # One accessible link per card.
+                assert 'Verification failed' in page.locator(f'[data-evidence-key="e:{failed["id"]}"]').inner_text()
+                assert 'Verifying' in page.locator(f'[data-evidence-key="e:{pending["id"]}"]').inner_text()
+                assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                page.screenshot(path=str(tmp_path / f'evidence-{route.split("/")[1]}-{width}.png'), full_page=True)
+            assert page.locator('[role=tablist]').count() == 0
+            assert len(repo.runs()) == run_count  # Browsing cards never profiles or launches work.
+            # Keyboard entry chooses this evidence, and browser Back returns to the hub.
+            page.locator(f'[data-evidence-key="e:{memory["id"]}"]').focus()
+            page.keyboard.press('Enter')
+            page.get_by_role('tab', name='Processes', exact=True).wait_for()
+            assert parse_qs(urlparse(page.url).query)['input'] == ['e:' + memory['id']]
+            assert 'Memory image' in page.locator('.workspace-header').inner_text()
+            page.screenshot(path=str(tmp_path / f'memory-prepare-{width}.png'), full_page=True)
+            page.go_back()
+            page.locator(f'[data-evidence-key="{disk_key}"]').click()
+            page.get_by_role('button', name='Map disk', exact=True).wait_for()
+            page.get_by_role('link', name='All evidence', exact=True).click()
+            page.locator(f'[data-evidence-key="e:{failed["id"]}"]').click()
+            page.get_by_role('button', name='Verify integrity', exact=True).wait_for()
+            assert page.get_by_role('button', name='Continue to Analysis').count() == 0
+            page.get_by_text('Manage evidence', exact=True).click()
+            page.once('dialog', lambda dialog: dialog.accept())
+            page.get_by_role('button', name='Retire evidence', exact=True).click()
+            page.wait_for_url(hub)
+            assert page.locator('.evidence-card').count() == 4
+            assert (source.parent / 'mismatched.txt').is_file()
+            assert client.get(f"/api/case/{case}/evidence/{failed['id']}/custody").status_code == 200
+            page.get_by_role('button', name='Add evidence', exact=True).click()
+            page.get_by_role('dialog', name='Add evidence').wait_for()
+            assert page.locator('#artifactCaseId').input_value() == case
+            page.keyboard.press('Escape')
+            assert page.locator('.add-artifact-btn').evaluate('(el) => el === document.activeElement')
+            page.goto(base + f'/case/{empty_case}/workspace')
+            page.get_by_role('heading', name='No evidence yet').wait_for()
+            page.get_by_role('button', name='Add evidence', exact=True).click()
+            assert page.locator('#artifactCaseId').input_value() == empty_case
             assert not errors
             browser.close()
     finally:

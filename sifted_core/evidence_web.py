@@ -151,7 +151,7 @@ def workspace(case_id):
     repo, settings = runtime_repository(), runtime_settings()
     case = case_or_error(case_id)
     inputs = workspace_inputs(case, repo)
-    key = request.args.get("input", inputs[0]["key"] if inputs else "")
+    key = request.args.get("input", "")
     selected = select_input(case, repo, key) if key else None
     parent_input = None
     if selected and selected["origin"] == "derived":

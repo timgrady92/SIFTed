@@ -1,3 +1,40 @@
+{% macro evidence_icon(icon) %}
+<svg class="evidence-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  {% if icon == 'disk' %}<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 14h18M7 17h.01M11 17h.01"/>
+  {% elif icon == 'memory' %}<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 1v4m6-4v4M9 19v4m6-4v4M1 9h4m-4 6h4m14-6h4m-4 6h4M9 9h6v6H9z"/>
+  {% elif icon == 'registry' %}<path d="M9 3h6v6H9zM3 15h6v6H3zm12 0h6v6h-6zM12 9v3M6 15v-3h12v3"/>
+  {% elif icon == 'database' %}<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 4 16 4 16 0V5M4 12c0 4 16 4 16 0"/>
+  {% elif icon == 'folder' %}<path d="M3 7V4h6l3 3h9v13H3z"/>
+  {% else %}<path d="M14 2H5v20h14V7zM14 2v6h5M8 12h8M8 16h8"/>{% if icon == 'log' %}<path d="M8 19h5"/>{% endif %}{% endif %}
+</svg>
+{% endmacro %}
+
+{% macro evidence_identity(item, observed=None, heading='h3') %}
+{% set info = item|evidence_presentation(observed) %}
+<div class="evidence-identity">
+  <span class="evidence-icon-wrap" data-kind="{{ info.icon }}">{{ evidence_icon(info.icon) }}</span>
+  <div class="evidence-name"><span class="evidence-kind">{{ info.label }}</span><{{ heading }}>{{ item.label }}</{{ heading }}></div>
+</div>
+{% endmacro %}
+
+{% macro evidence_card(item, case_id, captured=false, source_key=None) %}
+{% set info = item|evidence_presentation %}
+{% set key = item.key if captured else 'e:' + item.id %}
+<a class="card evidence-card" data-evidence-key="{{ key }}" {% if captured %}data-examine="{{ key }}"{% endif %}
+   href="{{ url_for('evidence.case_workspace', case_id=case_id, input=source_key, tab='derived', examine=key) if source_key else url_for('evidence.case_workspace', case_id=case_id, input=key) }}" aria-label="{{ info.action }}: {{ item.label }}">
+  <div class="evidence-card-top"><span class="evidence-icon-wrap" data-kind="{{ info.icon }}">{{ evidence_icon(info.icon) }}</span><span class="evidence-status" data-tone="{{ info.tone }}" {% if item.verified_at %}title="Last verified {{ item.verified_at }}"{% endif %}>{{ info.state }}</span></div>
+  <div class="evidence-name"><span class="evidence-kind">{{ info.label }}</span><h3 title="{{ item.label }}">{{ item.label }}</h3><span class="evidence-path" title="{{ item.path }}">{{ item.path }}</span></div>
+  <div class="evidence-card-footer"><span class="evidence-fingerprint" {% if item.hash %}title="SHA-256 {{ item.hash }}"{% endif %}>{{ 'SHA-256 · ' + item.hash[:12] if item.hash else 'Awaiting hash' }}</span><span class="evidence-card-cta">{{ info.action }} <span aria-hidden="true">↗</span></span></div>
+</a>
+{% endmacro %}
+
+{% macro evidence_grid(case) %}
+<div class="evidence-grid" aria-label="{{ case.name }} evidence">
+{% for item in case.artifacts if item.status != 'retired' %}{{ evidence_card(item, case.id) }}
+{% else %}<div class="card card-static evidence-empty"><h3>{{ "No active evidence" if case.artifacts else "No evidence yet" }}</h3><p class="helper">Add a file or collected directory to begin.</p></div>{% endfor %}
+</div>
+{% endmacro %}
+
 {% macro run_context(
   cases,
   output_placeholder,

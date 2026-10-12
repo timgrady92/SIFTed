@@ -69,7 +69,8 @@ def identify(item, settings):
     try:
         if item["origin"] == "registered":
             if item.get("status") != "ready":
-                return {**observed, "note": "Evidence intake: " + item.get("status", "needs_intake") + ". Verify evidence before analysis."}
+                note = {"pending": "Verification is pending.", "failed": "Verification failed. Review the intake error before retrying."}
+                return {**observed, "note": note.get(item.get("status"), "Verify evidence before analysis.")}
             observed = interpretation(item, item["profile"])
             if signature(path) != item["profile"]["signature"]:
                 return {**observed, "available": False, "note": "Evidence has changed since verification. Reverify it before analysis."}

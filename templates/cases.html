@@ -8,14 +8,14 @@
   </head>
   <body>
     <div class="noise"></div>
-    {% from "_components.html" import site_nav %}
+    {% from "_components.html" import site_nav, evidence_grid %}
     {{ site_nav("cases") }}
 
     <header class="hero compact">
       <div class="hero-text">
         <p class="eyebrow">Casework</p>
         <h1>Cases</h1>
-        <p class="lead">Register evidence, verify its integrity, and keep each examination with its case.</p>
+        <p class="lead">Evidence and results, organized by case.</p>
       </div>
     </header>
 
@@ -38,28 +38,6 @@
           </label>
           <button class="action" type="submit">Create case</button>
         </form>
-        <div class="case-form-footer">
-          <div class="case-help">
-            <h3>Quick tips</h3>
-            <ul class="case-help-list">
-              <li>Use a clear case name and keep summaries short.</li>
-              <li>Add evidence from your device or a stable workstation path.</li>
-              <li>Re-use cases to keep related runs together.</li>
-            </ul>
-          </div>
-          {% if cases %}
-            <div class="case-recent">
-              <h3>Recent cases</h3>
-              <div class="case-recent-list">
-                {% for case in cases|reverse %}
-                  {% if loop.index <= 3 %}
-                    <a class="case-recent-link" href="#case-{{ case.id }}">{{ case.name }}</a>
-                  {% endif %}
-                {% endfor %}
-              </div>
-            </div>
-          {% endif %}
-        </div>
       </section>
 
       <section class="case-list">
@@ -69,7 +47,7 @@
               <button class="case-toggle" type="button" aria-expanded="false">
                 <div class="case-toggle-main">
                   <h3>{{ case.name }}</h3>
-                  <p class="case-path">{{ case.artifacts[0].path if case.artifacts else "No evidence registered" }}</p>
+                  <p class="case-path">{{ case.artifacts|rejectattr('status', 'equalto', 'retired')|list|length }} evidence items</p>
                 </div>
                 <div class="case-toggle-cta">
                   <span class="case-toggle-label" data-closed-label="View details" data-open-label="Hide details">
@@ -81,9 +59,9 @@
               <div class="case-body">
                 <div class="case-meta">
                   <span class="case-meta-pill">ID {{ case.id[:8] }}</span>
-                  <span class="case-meta-pill">Created {{ case.created_at }}</span>
-                  <a class="case-meta-pill case-results-link" href="{{ url_for('web.case_results', case_id=case.id) }}">View All Results</a>
-                  <a class="case-meta-pill" href="{{ url_for('evidence.case_workspace', case_id=case.id) }}">Evidence workspace</a>
+                  <time class="case-meta-pill" datetime="{{ case.created_at }}" title="{{ case.created_at }}">Created {{ case.created_at[:10] }}</time>
+                  <a class="case-meta-pill case-results-link" href="{{ url_for('web.case_results', case_id=case.id) }}">Results</a>
+                  <a class="case-meta-pill" href="{{ url_for('evidence.case_workspace', case_id=case.id) }}">Evidence hub</a>
                 </div>
                 {% if case.summary %}
                   <p class="case-summary">{{ case.summary }}</p>
@@ -93,32 +71,10 @@
                   <div class="case-artifacts-header">
                     <h4>Evidence</h4>
                     <button class="ghost add-artifact-btn" data-case-id="{{ case.id }}" type="button">
-                      + Add evidence
+                      Add evidence
                     </button>
                   </div>
-                  {% if case.artifacts %}
-                    <div class="artifact-groups">
-                      {% set artifacts_by_type = {} %}
-                      {% for artifact in case.artifacts if artifact.status != "retired" %}
-                        {% set _ = artifacts_by_type.setdefault(artifact.type, []).append(artifact) %}
-                      {% endfor %}
-                      {% for type_key, type_artifacts in artifacts_by_type.items() %}
-                        <div class="artifact-group" data-type="{{ type_key }}">
-                          <span class="artifact-type-label">{{ artifact_type_labels.get(type_key, type_key) }}</span>
-                          <div class="artifact-chips">
-                            {% for artifact in type_artifacts %}
-                              <span class="artifact-chip" data-artifact-id="{{ artifact.id }}" title="{{ artifact.path }}">
-                                <a class="artifact-chip-label" href="{{ url_for('evidence.case_workspace', case_id=case.id, input='e:' + artifact.id) }}" title="Triage this evidence">{{ artifact.label }}</a><span class="helper">{{ artifact.status|default("needs_intake") }}</span>
-                                <button class="artifact-remove" type="button" data-artifact-id="{{ artifact.id }}" title="Retire evidence">&times;</button>
-                              </span>
-                            {% endfor %}
-                          </div>
-                        </div>
-                      {% endfor %}
-                    </div>
-                  {% else %}
-                    <p class="case-empty artifacts-empty">No artifacts yet. Add evidence files to this case.</p>
-                  {% endif %}
+                  {{ evidence_grid(case) }}
                 </div>
 
                 {% set retired = case.artifacts|selectattr('status', 'equalto', 'retired')|list %}

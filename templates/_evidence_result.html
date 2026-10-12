@@ -1,7 +1,7 @@
 <div class="workspace-result-meta"><strong>{{ run.plan.parameters.parser_id|default(run.tool) }}</strong><span class="workspace-badge">{{ run.status }}</span><time datetime="{{ run.created_at }}">{{ run.created_at[:19]|replace("T", " ") }} UTC</time></div>
 {% if run.error %}<p>{{ run.error }}</p>{% endif %}
 {% if run.status == 'success' and run.tool == 'fls' %}<a class="action" data-workspace-link href="{{ url_for('evidence.case_workspace', case_id=workspace.case.id, input=workspace.selected.key, tab='triage', context_run_id=run.id) }}">Explore this listing</a>{% endif %}
-{% if captured %}<div class="tool-actions">{% for item in captured %}<button class="action" type="button" data-examine="{{ item.key }}">Examine {{ item.label }}</button>{% endfor %}</div>{% endif %}
+{% if captured %}{% from '_components.html' import evidence_card %}<div class="evidence-grid workspace-captures">{% for item in captured %}{{ evidence_card(item, workspace.case.id, captured=true, source_key=workspace.selected.key) }}{% endfor %}</div>{% endif %}
 {% if reports %}
 {% if reports|length > 1 %}<label>Report<select id="operationReport" data-run="{{ run.id }}">{% for item in reports %}<option value="{{ item.name }}" {% if report == item.name %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></label>{% else %}<p class="helper">{{ report }}</p>{% endif %}
 {% if table %}

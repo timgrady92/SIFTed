@@ -53,7 +53,7 @@ def test_workspace_is_optional_and_empty_cases_are_usable(tmp_path):
     client.post('/cases', data={'name': 'Empty'})
     with app.app_context():
         case = runtime_repository().cases()[0]
-    assert b'Add evidence to this case' in client.get(f"/case/{case['id']}/workspace").data
+    assert b'No evidence yet' in client.get(f"/case/{case['id']}/workspace").data
     for route in ('/', '/tools', '/cases', '/disk-analysis', '/file-examination', '/strings', '/workflow/mmls'):
         assert client.get(route).status_code == 200
     assert client.get('/case/missing/workspace').status_code == 404
@@ -90,6 +90,8 @@ def test_content_overrides_misleading_extension_and_declared_type(workspace_runt
     assert 'differs' in result['observed']['note']
     misleading.write_bytes(b'replaced evidence')
     assert not view(client, case, key)['observed']['available']
+    overview = client.get(f'/case/{case}/workspace', query_string={'input': key, 'tab': 'overview'})
+    assert b'Reverify' in overview.data and b'Continue to Analysis' not in overview.data
 
 
 def test_disabled_missing_tools_and_missing_evidence(workspace_runtime):

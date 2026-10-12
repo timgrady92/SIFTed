@@ -3,7 +3,7 @@
   {% set triage = workspace.triage %}
   {% set prepared = workspace.journey|selectattr('inventory_run_id')|list %}
   {% if prepared|length > 1 %}<label class="workspace-filesystem-picker">Filesystem<select id="triageFilesystem"><option value="">Choose a prepared filesystem</option>{% for card in prepared %}<option value="{{ card.inventory_run_id }}" {% if workspace.context and workspace.context.id == card.inventory_run_id %}selected{% endif %}>{{ card.description }} · sector {{ card.offset_sector }}</option>{% endfor %}</select></label>{% endif %}
-  {% if not triage %}<div class="workspace-start"><h3>{{ 'Choose a filesystem' if prepared else 'Prepare a filesystem first' }}</h3><p>{{ 'Select a prepared filesystem above to browse its files.' if prepared else 'Build a file inventory in Analysis to begin triage.' }}</p>{% if not prepared %}<button class="action" type="button" data-workspace-tab="analysis">Go to Analysis</button>{% endif %}</div>
+  {% if not triage %}<div class="card card-static workspace-start"><h3>{{ 'Choose a filesystem' if prepared else 'Prepare a filesystem first' }}</h3><p>{{ 'Select a prepared filesystem above to browse its files.' if prepared else 'Build a file inventory in Analysis to begin triage.' }}</p>{% if not prepared %}<button class="action" type="button" data-workspace-tab="analysis">Go to Analysis</button>{% endif %}</div>
   {% elif triage.error %}<p class="run-status" data-tone="error">{{ triage.error }}</p><button class="ghost" type="button" data-workspace-tab="analysis">Return to Analysis</button>
   {% else %}
   <p class="helper">Sector {{ workspace.context.plan.parameters.offset_sector }} · {{ triage.counts.total }} names · {{ triage.counts.deleted }} deleted · {{ triage.counts.reallocated }} reallocated</p>

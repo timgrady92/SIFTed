@@ -89,13 +89,7 @@ runResults.forEach((block) => {
       status.textContent = ''; progress.hidden = true; methodChanged();
       modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); byId('intakeMethod').focus();
     }
-    const remove = event.target.closest('.artifact-remove');
-    if (remove && confirm('Retire this evidence from active casework? Its files and custody record will be retained.')) {
-      try {
-        await json(`/api/case/${remove.closest('.case-artifacts').dataset.caseId}/artifacts/${remove.dataset.artifactId}`, {method: 'DELETE'});
-        location.reload();
-      } catch (error) { alert(error.message); }
-    }
+
   });
   const toggleDrawer = open => { drawer.classList.toggle('open', open); drawer.setAttribute('aria-hidden', String(!open)); };
   const choose = path => { byId('artifactPath').value = path; toggleDrawer(false); byId('artifactPath').focus(); };

@@ -176,7 +176,7 @@
     for (const [key, value] of Object.entries(changes)) {
       if (value === null) url.searchParams.delete(key); else url.searchParams.set(key, value);
     }
-    await render(url, 'push', {scroll: tabs[name]?.scroll, focus: focus ? `#tab-${name}` : null});
+    await render(url, 'push', {scroll: tabs[name]?.scroll, focus: typeof focus === 'string' ? focus : focus ? `#tab-${name}` : null});
   }
   function payload() {
     const data = structuredClone(operation.payload);
@@ -409,6 +409,12 @@
       const url = new URL(button.href);
       if (url.pathname !== location.pathname || url.origin !== location.origin || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       event.preventDefault(); void navigate(url);
+    } else if (button.dataset.retireEvidence) {
+      if (!confirm('Retire this evidence? Files and custody records will be retained.')) return;
+      button.disabled = true;
+      void json(`/api/case/${caseId}/artifacts/${button.dataset.retireEvidence}`, {method: 'DELETE'})
+        .then(() => { location.href = `/case/${caseId}/workspace`; })
+        .catch(error => { announce(error.message, true); button.disabled = false; });
     } else if (button.dataset.verifyEvidence) {
       button.disabled = true;
       void (async () => {
@@ -436,8 +442,11 @@
       if (operation?.slot === `entry-${button.dataset.closeEntry}`) { operation.dismissed = true; mountOperation(); }
       const url = new URL(location.href); url.searchParams.delete('entry'); url.searchParams.delete('run'); history.replaceState(null, '', url);
     } else if (button.dataset.workspaceTool) { void openAction(button); }
-    else if (button.dataset.examine) { void tab('derived', {examine: button.dataset.examine}); }
-    else if (button.matches('[data-close-examination]')) { void tab('derived', {examine: null}); }
+    else if (button.dataset.examine) {
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault(); void tab('derived', {examine: button.dataset.examine}, '#derivedExamination');
+    }
+    else if (button.matches('[data-close-examination]')) { void tab('derived', {examine: null}, at('data-examine', state().examine)); }
     else if (button.dataset.workspaceResult) { void openResult(button.dataset.workspaceResult, button); }
   });
   root.addEventListener('keydown', event => {
@@ -449,9 +458,7 @@
     void tab(buttons[next].dataset.workspaceTab, {}, true);
   });
   root.addEventListener('change', event => {
-    if (event.target.id === 'workspaceInput') {
-      const url = new URL(location.pathname, location.origin); url.searchParams.set('input', event.target.value); void navigate(url);
-    } else if (event.target.id === 'triageFilesystem') {
+    if (event.target.id === 'triageFilesystem') {
       const url = new URL(location.href);
       for (const key of ['directory', 'q', 'kind', 'state', 'scope', 'offset', 'entry', 'run']) url.searchParams.delete(key);
       if (event.target.value) url.searchParams.set('context_run_id', event.target.value); else url.searchParams.delete('context_run_id');

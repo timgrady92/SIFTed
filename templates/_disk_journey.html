@@ -1,26 +1,26 @@
 {% set mapping = workspace.actions|selectattr('id','equalto','mmls')|first %}
-<header class="workspace-stage-heading"><p class="workspace-step">Step 1 of 3</p><h2>Prepare the filesystem</h2><p class="helper">Locate a filesystem, inspect its structure, then build an inventory to browse.</p></header>
+<header class="workspace-stage-heading"><p class="workspace-step">Step 1 of 3</p><h2>Prepare the filesystem</h2><p class="helper">Locate, inspect, then index a filesystem.</p></header>
 {% if not workspace.journey %}
-<section class="workspace-start" data-operation-slot="disk-map">
+<section class="card card-static workspace-start" data-operation-slot="disk-map">
   <h3>{{ 'No filesystems located' if mapping.result_run_id else 'Start with the disk map' }}</h3>
-  <p>{{ 'Review the partition map or use a known filesystem offset in disk options below.' if mapping.result_run_id else 'SIFTed reads the partition layout and carries the detected geometry into each analysis step.' }}</p>
+  <p>{{ 'Review the partition map or use a known filesystem offset in disk options below.' if mapping.result_run_id else 'Locate partitions and filesystem offsets.' }}</p>
   {% if mapping.result_run_id %}<button class="ghost" type="button" data-workspace-result="{{ mapping.result_run_id }}">Review partition map</button>
   {% else %}{{ execute('mmls', mapping.payload, 'Map disk', reason=mapping.reason if not mapping.enabled else '') }}{% endif %}
 </section>
 {% else %}
 <section data-operation-slot="partition-map"><div class="workspace-map-summary"><span>{{ workspace.journey|length }} filesystem{{ 's' if workspace.journey|length != 1 }} available</span>{% if mapping.result_run_id %}<button class="workspace-text-button" type="button" data-workspace-result="{{ mapping.result_run_id }}">Partition map</button>{% endif %}</div></section>
 {% for card in workspace.journey %}
-<article class="workspace-filesystem" data-filesystem-offset="{{ card.offset_sector }}" data-operation-slot="filesystem-{{ card.offset_sector }}-{{ card.sector_size or 'auto' }}">
+<article class="card card-static workspace-filesystem" data-filesystem-offset="{{ card.offset_sector }}" data-operation-slot="filesystem-{{ card.offset_sector }}-{{ card.sector_size or 'auto' }}">
   <div class="workspace-heading"><div><h3>{{ card.description }}</h3><p class="helper">Sector {{ card.offset_sector }} · {{ (card.sector_size|string + '-byte sectors') if card.sector_size else 'automatic sector size' }}</p></div><span class="workspace-badge">{{ 'Ready to browse' if card.inventory_run_id else 'Structure inspected' if card.stat_run_id else 'Located' }}</span></div>
   <ol class="workspace-preparation" aria-label="Filesystem preparation"><li class="complete">Located</li><li class="{{ 'complete' if card.stat_run_id else '' }}">Structure</li><li class="{{ 'complete' if card.inventory_run_id else '' }}">File inventory</li></ol>
   <div class="workspace-next">
-    <p>{% if card.inventory_run_id %}{{ card.entry_count }} names indexed. Browse directories or search for files of interest.{% elif card.stat_run_id %}The filesystem structure is recorded. Build an inventory of file and directory names.{% else %}Inspect this filesystem before browsing its files.{% endif %}</p>
+    <p>{% if card.inventory_run_id %}{{ card.entry_count }} entries indexed.{% elif card.stat_run_id %}Structure recorded. Index files and directories next.{% else %}Inspect the structure before indexing files.{% endif %}</p>
     {% if card.inventory_run_id %}<a class="action" data-workspace-link href="{{ card.triage_url }}">Explore files</a>
     {% elif card.stat_run_id or card.stat_reason %}{{ execute('fls',card.inventory_payload,'Build file inventory',reason=card.inventory_reason) }}
     {% else %}{{ execute('fsstat',card.stat_payload,'Analyze filesystem') }}{% endif %}
     {% if card.stat_reason and not card.stat_run_id %}<p class="helper">Filesystem inspection is unavailable. You can still build an inventory.</p>{% endif %}
   </div>
-  <details data-disclosure="filesystem-{{ card.offset_sector }}-{{ card.sector_size or 'auto' }}"><summary>Filesystem details and advanced actions</summary>
+  <details data-disclosure="filesystem-{{ card.offset_sector }}-{{ card.sector_size or 'auto' }}"><summary>Details and block analysis</summary>
     {% if card.stat_run_id %}<button type="button" class="ghost" data-workspace-result="{{ card.stat_run_id }}">View filesystem details</button>{% endif %}
     {% if card.stat_run_id or card.inventory_run_id %}<div class="tool-actions">{% if card.stat_run_id %}{{ execute('fsstat',card.stat_payload,'Reanalyze filesystem',reason=card.stat_reason) }}{% endif %}{% if card.inventory_run_id %}{{ execute('fls',card.inventory_payload,'Rebuild inventory',reason=card.inventory_reason) }}{% endif %}</div>{% endif %}
     {% if card.blocks %}<p class="helper">For block examination, use filesystem data-unit addresses reported by the metadata.</p><div class="tool-actions">{% for block in card.blocks %}{{ execute(block.tool,block.payload,block.label,reason=block.reason,configure=true,fields=block.fields) }}{% endfor %}</div>{% endif %}

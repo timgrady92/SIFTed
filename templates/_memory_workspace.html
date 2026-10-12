@@ -1,35 +1,35 @@
 {% set memory = workspace.memory %}
-{% macro memory_action(action, advance=false) %}
-  {% if action.run_id %}<button type="button" class="ghost" data-workspace-result="{{ action.run_id }}">{{ action.label }} · View result</button>{% if action.fields %}<details><summary>Run another examination</summary>{{ execute(action.tool, action.payload, action.label, reason=action.reason, configure=true, fields=action.fields) }}</details>{% endif %}
-  {% else %}{{ execute(action.tool, action.payload, action.label, reason=action.reason, advance=advance, configure=action.fields|length > 0, fields=action.fields) }}{% endif %}
+{% macro memory_action(action, advance=false, compact=false) %}
+  {% if action.run_id %}<button type="button" class="ghost" data-workspace-result="{{ action.run_id }}" aria-label="{{ action.label }} · View result">{{ "View result" if compact else action.label + " · View result" }}</button>{% if action.fields %}<details><summary>Run another examination</summary>{{ execute(action.tool, action.payload, action.label, reason=action.reason, configure=true, fields=action.fields) }}</details>{% endif %}
+  {% else %}{{ execute(action.tool, action.payload, action.label, reason=action.reason, advance=advance, configure=action.fields|length > 0, fields=action.fields, button_label=('Configure' if action.fields else 'Run') if compact else '') }}{% endif %}
 {% endmacro %}
 {% if workspace.tab == 'analysis' %}
-<header class="workspace-stage-heading"><p class="workspace-step">Step 1 of 4</p><h2>Prepare memory analysis</h2><p class="helper">Confirm the acquisition context, inspect the image, then build a process inventory.</p></header>
+<header class="workspace-stage-heading"><p class="workspace-step">Step 1 of 4</p><h2>Prepare memory analysis</h2><p class="helper">Identify the image, then index its processes.</p></header>
 <form id="memoryContextForm" class="workspace-fields">
-  <label>Acquisition operating system<select name="memory_os" id="memoryOS">{% for os, label in memory.systems.items() %}<option value="{{ os }}" {% if os == memory.os %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label>Acquisition OS<select name="memory_os" id="memoryOS">{% for os, label in memory.systems.items() %}<option value="{{ os }}" {% if os == memory.os %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
 </form>
-<p class="helper">This is analysis context, not an operating system inferred from the filename.{% if memory.os != 'windows' %} Linux and macOS require symbols that match the captured kernel. Use the plugin examiner to configure a symbol directory when needed.{% endif %}</p>
-<section class="workspace-start" data-operation-slot="memory-prepare">
+<p class="helper">Use the operating system recorded at acquisition.{% if memory.os != 'windows' %} Linux and macOS require symbols that match the captured kernel. Use the plugin examiner to configure a symbol directory when needed.{% endif %}</p>
+<section class="card card-static workspace-start" data-operation-slot="memory-prepare">
   <ol class="workspace-preparation" aria-label="Memory preparation"><li class="{{ 'complete' if workspace.observed.available else '' }}">Evidence verified</li><li class="{{ 'complete' if memory.identify.run_id else '' }}">Image context</li><li class="{{ 'complete' if memory.inventory else '' }}">Processes</li></ol>
-  {% if memory.inventory and not memory.error %}<h3>Ready to review processes</h3><div class="workspace-next"><p>{{ memory.processes.total }} processes recorded. Review names, parent IDs and timestamps, then select a process for closer examination.</p><a class="action" data-workspace-link href="{{ memory.processes_url }}">Review processes</a></div>
-  {% elif memory.identify.run_id %}<h3>Build the process inventory</h3><div class="workspace-next"><p>The identification run is recorded. Enumerate processes using this operating system's installed plugin.</p>{{ memory_action(memory.inventory_action, advance=true) }}</div>
+  {% if memory.inventory and not memory.error %}<h3>Ready to review processes</h3><div class="workspace-next"><p>{{ memory.processes.total }} processes recorded. Select one to investigate.</p><a class="action" data-workspace-link href="{{ memory.processes_url }}">Review processes</a></div>
+  {% elif memory.identify.run_id %}<h3>Build the process inventory</h3><div class="workspace-next"><p>Image identified. Enumerate active processes next.</p>{{ memory_action(memory.inventory_action, advance=true) }}</div>
   {% else %}<h3>Start with image identification</h3><div class="workspace-next"><p>{{ 'Read kernel and capture details with Volatility 3.' if memory.os == 'windows' else 'Scan for kernel banners to help establish the required symbols.' }}</p>{{ memory_action(memory.identify, advance=true) }}</div>{% endif %}
   {% if memory.error %}<p role="alert">{{ memory.error }}</p>{% endif %}
-  {% if memory.identify.run_id or memory.inventory %}<details data-disclosure="memory-preparation-results"><summary>Preparation results and new inventory</summary><div class="tool-actions">{% if memory.identify.run_id %}{{ memory_action(memory.identify) }}{% endif %}{{ execute('volatility', memory.inventory_action.payload, 'Build a new process inventory', reason=memory.inventory_action.reason, advance=true) }}</div></details>{% endif %}
+  {% if memory.identify.run_id or memory.inventory %}<details data-disclosure="memory-preparation-results"><summary>Results and reanalysis</summary><div class="tool-actions">{% if memory.identify.run_id %}{{ memory_action(memory.identify) }}{% endif %}{{ execute('volatility', memory.inventory_action.payload, 'Build a new process inventory', reason=memory.inventory_action.reason, advance=true) }}</div></details>{% endif %}
 </section>
 {% elif workspace.tab == 'investigate' %}
-<header class="workspace-stage-heading"><p class="workspace-step">Step 3 of 4</p><h2>Investigate and corroborate</h2><p class="helper">Choose the question raised by your process review. Each examination adds evidence to assess alongside the other results.</p></header>
-<form id="memoryQuestionForm"><label>Investigation question<select id="memoryQuestion" name="memory_question">{% for id, question in memory.questions.items() %}<option value="{{ id }}" {% if id == memory.question %}selected{% endif %}>{{ question[0] }}</option>{% endfor %}</select></label></form>
+<header class="workspace-stage-heading"><p class="workspace-step">Step 3 of 4</p><h2>Investigate and corroborate</h2><p class="helper">Follow a lead from the process review.</p></header>
+<form id="memoryQuestionForm"><label>Investigate<select id="memoryQuestion" name="memory_question">{% for id, question in memory.questions.items() %}<option value="{{ id }}" {% if id == memory.question %}selected{% endif %}>{{ question[0] }}</option>{% endfor %}</select></label></form>
 <h3>{{ memory.questions[memory.question][1] }}</h3><p class="helper">{{ memory.questions[memory.question][2] }}</p>
 <div class="workspace-examinations">
-{% for action in memory.investigations %}<article data-operation-slot="investigation-{{ action.id }}"><div class="workspace-heading"><div><h3>{{ action.label }}</h3>{% if action.note %}<p class="helper">{{ action.note }}</p>{% endif %}</div>{{ memory_action(action) }}</div></article>{% endfor %}
+{% for action in memory.investigations %}<article class="card card-static workspace-examination" data-operation-slot="investigation-{{ action.id }}"><div class="workspace-heading"><div><h3>{{ action.label }}</h3>{% if action.note %}<p class="helper">{{ action.note }}</p>{% endif %}</div>{{ memory_action(action, compact=true) }}</div></article>{% endfor %}
 </div>
 <p class="helper">Select a recorded PID in a report to return to its process context. Review timestamps and names too: PID reuse or stale objects can make a match ambiguous.</p>
-<div class="workspace-next"><p>Follow extracted objects into file examination, then corroborate findings with disk artifacts, logs and acquisition context.</p><button class="action" type="button" data-workspace-tab="derived">Examine captured files</button></div>
+<div class="workspace-next"><p>Review captured files next; corroborate findings with disk evidence and logs.</p><button class="action" type="button" data-workspace-tab="derived">Examine captured files</button></div>
 {% else %}
 <header class="workspace-stage-heading"><p class="workspace-step">Step 2 of 4</p><h2>Review processes</h2><p class="helper">Compare process names, parent IDs and timestamps. A process list is one view of the capture; missing or unusual entries require corroboration.</p></header>
 {% if memory.error %}<p role="alert">{{ memory.error }}</p><button class="action" data-workspace-tab="analysis" type="button">Return to preparation</button>
-{% elif not memory.processes %}<div class="workspace-start"><h3>No process inventory yet</h3><p>Prepare this image to establish a process list before selecting an examination.</p><button class="action" data-workspace-tab="analysis" type="button">Prepare image</button></div>
+{% elif not memory.processes %}<div class="card card-static workspace-start"><h3>No process inventory yet</h3><p>Prepare this image to establish a process list before selecting an examination.</p><button class="action" data-workspace-tab="analysis" type="button">Prepare image</button></div>
 {% else %}
 {% set table = memory.processes %}
 <form id="memoryFilters">
@@ -55,8 +55,8 @@
 {% else %}<tr><td colspan="{{ visible|length + 1 }}">No processes matched this view. An empty result does not establish that the capture contains no processes.</td></tr>{% endfor %}
 </tbody></table>
 <div class="tool-actions">{% if table.offset %}<button class="ghost" type="button" data-process-page="{{ [0, table.offset - 50]|max }}">Previous</button>{% endif %}{% if table.more %}<button class="ghost" type="button" data-process-page="{{ table.offset + 50 }}">Next</button>{% endif %}</div>
-<div class="workspace-next"><p>Use process observations to investigate network activity, injection, kernel integrity and known indicators.</p><button class="action" type="button" data-workspace-tab="investigate">Continue investigation</button></div>
+<div class="workspace-next"><p>Follow leads into network activity, injection, persistence or kernel integrity.</p><button class="action" type="button" data-workspace-tab="investigate">Continue investigation</button></div>
 <details class="workspace-advanced" data-disclosure="memory-checks" data-operation-slot="memory-checks"><summary>Corroborate the process list</summary><p class="helper">Review parent relationships and, where supported, scan for process remnants. Scanner hits can include terminated processes; they are not automatically hidden or malicious.</p><div class="tool-actions">{% for action in memory.checks %}{{ memory_action(action) }}{% endfor %}<button class="ghost" type="button" data-workspace-result="{{ memory.inventory.id }}">Complete process report</button></div></details>
 {% endif %}
 {% endif %}
-<details class="workspace-advanced" data-disclosure="memory-advanced"><summary>More memory examinations</summary><p class="helper">Use the installed plugin catalog for additional plugins, symbols and other focused questions. Its results and captured files stay with this evidence.</p><a href="{{ memory.advanced_url }}">Open plugin examiner</a></details>
+<details class="workspace-advanced" data-disclosure="memory-advanced"><summary>More memory examinations</summary><p class="helper">Additional plugins and symbol settings.</p><a href="{{ memory.advanced_url }}">Open plugin examiner</a></details>
