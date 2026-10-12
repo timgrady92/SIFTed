@@ -55,12 +55,6 @@ def test_malformed_requests_do_not_create_jobs(application):
     assert sifted_app.runtime_repository().runs() == []
 
 
-def test_input_root_enforcement_in_case_creation(application, monkeypatch):
-    client, root = application
-    allowed = root / "allowed"
-    allowed.mkdir()
-    sifted_app.runtime_settings().input_roots = [str(allowed)]
-    assert client.post("/cases", data={"name": "test", "source_path": str(root / "outside")}).status_code == 403
 
 
 def test_workflow_and_case_pages_render(application):
@@ -100,19 +94,6 @@ def test_cancellation_and_retry_preserve_original_run(application):
     assert client.post("/api/run/missing/cancel").status_code == 404
 
 
-def test_artifacts_are_the_case_evidence_source(application):
-    client, root = application
-    source = root / "evidence.txt"
-    source.write_text("registered evidence")
-    assert client.post("/cases", data={"name": "Case", "source_path": str(source)}).status_code == 302
-    case = sifted_app.runtime_repository().cases()[0]
-    assert "source_path" not in case and "file_hash" not in case
-    artifact = case["artifacts"][0]
-    assert artifact["hash"]
-    assert client.delete(f"/api/case/{case['id']}/artifacts/{artifact['id']}").status_code == 200
-    assert client.get(f"/api/case/{case['id']}").json["case"]["artifacts"] == []
-    for payload in ([1], {"path": 1}, {"path": str(source), "type": "invalid"}):
-        assert client.post(f"/api/case/{case['id']}/artifacts", json=payload).status_code == 400
 
 
 def test_disallowed_text_is_never_opened_for_format_detection(application, monkeypatch):

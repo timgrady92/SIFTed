@@ -6,6 +6,8 @@
 
 **Training wheels for forensic analysts.**
 
+[Public demonstration evidence](demos/README.md) includes a camera-card image, Windows artifacts and browser history, with source attribution, hashes, native CLI exercises and verified findings. Samples use the same case intake as other evidence.
+
 Most forensic tools assume you already know what you're doing. SIFTed assumes you're learning.
 
 Every workflow shows how to run the analysis directly in a SIFT terminal. Every output links back to the artifacts that matter. Every guide explains not just *what* to look for, but *why* it matters and *when* to stop looking.
@@ -19,7 +21,7 @@ Every workflow shows how to run the analysis directly in a SIFT terminal. Every 
 Junior analysts can run complex forensic workflows immediately:
 
 - **File carving** with Foremost and Scalpel—select file types, click run, review recovered files
-- **Memory analysis** with Volatility 3—choose investigation bundles like "Malware + Evasion" or "Network Activity"
+- **Memory analysis** with Volatility 3—identify the capture, review processes, inspect selected processes and examine recovered executables
 - **Bulk feature extraction**—scan disk images for emails, URLs, credentials, and other high-value indicators
 - **Timeline creation** with Plaso—build CSV timelines from host artifacts
 - **Artifact parsing** with Eric Zimmerman tools—extract evidence from Amcache, registry hives, Event Logs, and more
@@ -140,7 +142,7 @@ Cases, evidence references, jobs, event cursors, and output manifests live in SQ
 
 Jobs move from `queued` to `running`, then `success`, `error`, `cancelled`, or `interrupted`. Queued jobs survive restarts. Interrupted jobs preserve captured output and require an explicit retry in a new folder. Cancellation kills the tool's process group; cancellation closes when output finalization begins. Output folders are reserved permanently for their original jobs.
 
-Each published file has a SHA-256 manifest entry. The `_sifted` directory contains provenance, actual command arguments, executable fingerprints, input hashes, and generated configuration snapshots. Directory inputs record membership and per-file hashes; symbolic links inside directory evidence are rejected. Input identity is checked before and after execution. Files registered to cases additionally carry a baseline SHA-256 that is verified before tools run.
+Each published file has a SHA-256 manifest entry. The `_sifted` directory contains provenance, actual command arguments, executable fingerprints, input hashes, and generated configuration snapshots. Directory inputs record membership and per-file hashes; symbolic links inside directory evidence are rejected. Input identity is checked before and after execution. Case evidence carries immutable file/collection baselines verified before tools run. Intake, directory/segment manifests, content profiles, browser uploads, and custody exports share one framework; see [Evidence intake](docs/evidence-intake.md).
 
 Events are persisted and replayed using `Last-Event-ID`; multiple viewers do not consume each other's events. The frontend also polls terminal status when an event connection fails. CSV rows are indexed into a disposable SQLite cache for pagination, avoiding repeated full-file scans. Viewer sorting, filtering, and CSV export apply to loaded rows; case search scans persisted text results.
 
@@ -152,17 +154,19 @@ See [the runtime design](docs/runtime.md) for extension points, recovery, and te
 
 ## Evidence workspace and direct tools
 
-Open `/evidence` or choose **Evidence workspace** from a case to start with a registered input. The workspace recommends actions from content signatures, native tool capabilities, acquisition type and existing results. The original Tools pages and URLs remain available; both interfaces use the same adapters, durable queue, case history and copyable native CLI examples.
+Create a case and use **Add evidence** to upload files or select a workstation path. The worker hashes and profiles every input before analysis. Open `/evidence` or choose **Evidence workspace** from a case to start with verified evidence. The workspace recommends actions from content signatures, native tool capabilities, acquisition type and existing results. The original Tools pages and URLs remain available; both interfaces use the same adapters, durable queue, case history and copyable native CLI examples.
 
 Disk evidence opens an integrated tabbed workspace: **Overview**, **Analysis**, **File triage**, **Examine files**, and **Activity**. Map the disk, analyze a filesystem, and build its recursive inventory directly in Analysis. Choose **Explore files** when the inventory is ready. Each entry has one **Inspect** action: its metadata and capture action open directly beneath the row. After extraction or recovery, choose **Examine captured file** to continue. Completed jobs update their stage without changing tabs or scrolling back up the page. Captured-file examination keeps the original disk selected. Geometry is carried forward automatically; adjustable settings and simple native CLI examples are disclosed on request. Reports stay beside the action that produced them. [File triage](docs/file-triage.md) describes the workflow and its forensic limits.
 
 Partition offsets, sector sizes, inode/NTFS stream addresses and deletion flags travel with the selected entry. Search can cover the current directory or entire inventory, with entry type and deletion/reallocation filters and 100-row pages. Tabs remember their directory, filters and selected captured file; queued jobs resume monitoring after a reload. Job completion refreshes results automatically, and transient connection failures retry without re-enqueuing work.
 
+Memory evidence uses **Overview**, **Prepare**, **Processes**, **Investigate**, **Examine files**, and **Activity**. Confirm acquisition context, identify the image and review processes inline. Investigate focuses on network activity, injection, services/registry, kernel integrity or indicators, with examinations appropriate to the installed tools and OS. Search reports and follow recorded PIDs back to verified process rows; capture objects for shared file/registry examination and local ClamAV scanning. Existing standalone inventories can be reused; selections retain the run, row, PID and image hash. [Memory analysis](docs/memory-analysis.md) describes the shared foundation, OS requirements and native validation; [research](docs/memory-investigation-research.md) explains the investigative method.
+
 Complete extracted, carved and plugin-produced files appear in Examine files; supporting reports stay with their producing runs. Captured content is scoped to descendants of the selected evidence. Raw block samples remain labeled blocks and offer identification, byte and string examination. Activity includes disk work and examination of captured files, with previously completed results available without rerunning a tool. Advanced recovery, timeline and memory configuration remains accessible through the standalone tool entry points.
 
 Raw `.raw` files are ambiguous until their acquisition context is known. Use **Overview → Registered type** to select disk or memory. Recognized content signatures take precedence over misleading names; adapters still validate each preview and execution. Missing tools are shown as unavailable. Viewing or switching tabs does not queue work, and recorded processing does not establish forensic findings.
 
-Guided partition choices use up to 100 rows from a hash-verified map no larger than 1 MiB. Inline reports are escaped and bounded to 128 KiB; complete reports remain accessible. Activity shows the latest 100 runs, with all case results available separately.
+Guided partition choices use up to 100 rows from a hash-verified map no larger than 1 MiB. Inline text reports are escaped and bounded to 128 KiB; structured reports use hash-verified, 50-row pages. Complete reports remain accessible. Activity shows the latest 100 runs, with all case results available separately.
 
 Compare **Evidence** and **Tools** against the same case for A/B evaluation. Neither interface requires a separate database or workflow status store.
 
@@ -178,6 +182,7 @@ Web and worker processes must use the same environment and filesystem permission
 | `SIFTED_ALLOWED_PATHS` | Input and output roots | Browsing and result viewing roots |
 | `SIFTED_SYMBOL_ROOTS` | Empty | Permitted local Volatility symbol directories |
 | `SIFTED_VOLATILITY_SYMBOLS` | `~/.cache/sifted/volatility3/symbols` | Writable directory for downloaded Windows symbols |
+| `SIFTED_CLAMAV_DATABASE` | `/var/lib/clamav` | Installed signature directory for read-only captured-file scans |
 | `SIFTED_SCALPEL_CONFIG` | `sifted_core/carving_profiles.conf` | Reviewed Scalpel profiles; override with an explicitly enabled custom profile |
 | `SIFTED_EZ_ROOT` | `/opt/zimmermantools` | Zimmerman assemblies, RECmd batches, EVTX and SQLite maps |
 | `SIFTED_BINARIES` | `{}` | JSON map from tool ID to executable or argument-prefix list |

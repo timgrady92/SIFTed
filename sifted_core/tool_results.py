@@ -17,6 +17,9 @@ def process_results(plan, output, check, step_results=None):
     if output.is_symlink():
         raise ValueError("Tool output directory must not be a symbolic link.")
     tool = plan.postprocess
+    if tool == "clamscan":
+        from .clamav import summarize
+        return summarize(plan, output, check, step_results or [])
     if tool == "carving":
         return verify_recoveries(plan, output, check)
     if tool == "volatility":

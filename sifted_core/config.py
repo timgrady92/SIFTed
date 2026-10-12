@@ -35,15 +35,20 @@ def load_config(overrides=None):
         volatility_symbols=str(value("SIFTED_VOLATILITY_SYMBOLS", Path.home() / ".cache/sifted/volatility3/symbols")),
         scalpel_config=str(value("SIFTED_SCALPEL_CONFIG", BASE_DIR / "sifted_core/carving_profiles.conf")),
         ez_root=str(value("SIFTED_EZ_ROOT", "/opt/zimmermantools")), binaries=binaries,
+        clamav_database=str(value('SIFTED_CLAMAV_DATABASE', '/var/lib/clamav')),
         timeout_seconds=int(value("SIFTED_TOOL_TIMEOUT_SECONDS", 14400)),
         max_output_bytes=int(value("SIFTED_MAX_OUTPUT_BYTES", 10 * 1024 ** 3)),
     )
     browse_roots = roots("SIFTED_ALLOWED_PATHS", input_roots + output_roots)
     result_limit = int(value("SIFTED_RESULT_FILE_LIMIT", 12))
+    upload_limit = int(value("SIFTED_MAX_EVIDENCE_UPLOAD_BYTES", 1024 ** 4))
+    if upload_limit < 1:
+        raise ValueError("Evidence upload limit must be positive.")
     if not browse_roots or result_limit < 1:
         raise ValueError("Browsing roots must be configured and result limit must be positive.")
     return {"DATABASE_PATH": str(Path(value("SIFTED_DATABASE_PATH", BASE_DIR / "data/sifted.sqlite3")).expanduser().resolve()),
             "SETTINGS": settings,
+            "MAX_EVIDENCE_UPLOAD_BYTES": upload_limit,
             "BROWSE_ROOTS": browse_roots,
             "RESULT_FILE_LIMIT": result_limit,
             "TESTING": overrides.get("TESTING", False)}

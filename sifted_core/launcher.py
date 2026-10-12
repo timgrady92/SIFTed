@@ -87,7 +87,7 @@ def main(argv=None):
     parser.add_argument("--lan", action="store_true",
                         help="Listen on all interfaces; use only on a trusted network (no authentication)")
     args = parser.parse_args(argv)
-    missing = [name for name in ("flask", "gunicorn", "yaml") if importlib.util.find_spec(name) is None]
+    missing = [name for name in ("flask", "gunicorn", "yaml", "olefile") if importlib.util.find_spec(name) is None]
     if missing:
         parser.exit(1, f"Missing dependencies: {', '.join(missing)}. Run ./sifted setup first.\n")
     try:

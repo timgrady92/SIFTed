@@ -63,19 +63,27 @@
 .workspace-filesystem-picker { max-width: 520px; margin-bottom: 20px; }
 .triage-breadcrumbs { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; font-size: .9rem; }
 .triage-table { width: 100%; border-collapse: collapse; text-align: left; font-size: .9rem; table-layout: fixed; }
-.triage-table th { font-size: .8rem; color: var(--text-muted); font-weight: 500; }
-.triage-table th:first-child { width: 48%; }
-.triage-table th:nth-child(2) { width: 12%; }
-.triage-table th:last-child { width: 100px; }
-.triage-table th, .triage-table td { padding: 12px 10px; border-bottom: 1px solid rgba(var(--neon-teal-rgb), .15); overflow-wrap: anywhere; }
+.triage-table > thead > tr > th { font-size: .8rem; color: var(--text-muted); font-weight: 500; }
+.triage-table > thead > tr > th:first-child { width: 48%; }
+.triage-table > thead > tr > th:nth-child(2) { width: 12%; }
+.triage-table > thead > tr > th:last-child { width: 100px; }
+.triage-table > thead > tr > th, .triage-table > tbody > tr > td { padding: 12px 10px; border-bottom: 1px solid rgba(var(--neon-teal-rgb), .15); overflow-wrap: anywhere; }
 .triage-table .triage-entry-action { text-align: right; }
-.triage-table tr:has([aria-expanded=true]) { background: rgba(var(--neon-teal-rgb), .05); }
+.triage-table > tbody > tr:has([aria-expanded=true]) { background: rgba(var(--neon-teal-rgb), .05); }
 .triage-detail-row > td { padding: 0; }
 .triage-inspector { padding: 24px; border-left: 2px solid var(--neon-teal); background: rgba(var(--neon-teal-rgb), .03); }
 .triage-metadata { margin-top: 12px; }
 .triage-inspector:has(#workspaceOperation:not([hidden])) [data-entry-metadata-action], .triage-inspector #closeOperation { display: none; }
 .workspace-result-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; font-size: .85rem; }
 .workspace-result-meta time { margin-left: auto; color: var(--text-muted); font-size: .8rem; }
+.workspace-table-scroll { max-width: 100%; overflow: auto; max-height: 500px; }
+.workspace-result-table .workspace-number { white-space: nowrap; }
+.workspace-result-table th { white-space: nowrap; }
+.workspace-result-table { border-collapse: collapse; font-size: .85rem; text-align: left; width: 100%; }
+.workspace-result-table th, .workspace-result-table td { padding: 10px; border-bottom: 1px solid var(--border-glow); vertical-align: top; min-width: 100px; max-width: 600px; overflow-wrap: anywhere; }
+.memory-process-table > thead > tr > th:first-child, .memory-process-table > thead > tr > th:nth-child(2) { width: 9%; }
+.memory-process-table > thead > tr > th:last-child { width: 75px; }
+#memoryContextForm { max-width: 350px; }
 .workspace-state { color: var(--text-muted); }
 .workspace-state.deleted { color: var(--neon-amber); }
 .evidence-workspace dl { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 16px; margin-bottom: 28px; }
@@ -99,14 +107,18 @@
   .workspace-derived-list article { align-items: start; flex-direction: column; gap: 8px; }
   .workspace-next { gap: 12px; }
   .workspace-preparation { font-size: .78rem; }
-  .triage-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .triage-table, .triage-table tbody, .triage-table tr { display: block; }
-  .triage-table tr { border-bottom: 1px solid var(--border-glow); padding: 12px 0; }
-  .triage-table td { display: grid; grid-template-columns: 100px minmax(0,1fr); gap: 12px; border: 0; padding: 8px; }
-  .triage-table td[data-label]::before { content: attr(data-label); color: var(--text-muted); font-size: .8rem; }
-  .triage-table td.triage-entry-action { display: block; text-align: left; }
-  .triage-table td[colspan] { display: block; padding: 0; }
-  .triage-table tr.triage-detail-row { padding: 0; }
+  .triage-table > thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .triage-table, .triage-table > tbody, .triage-table > tbody > tr { display: block; }
+  .triage-table > tbody > tr { border-bottom: 1px solid var(--border-glow); padding: 12px 0; }
+  .triage-table > tbody > tr > td { display: grid; grid-template-columns: 100px minmax(0,1fr); gap: 12px; border: 0; padding: 8px; }
+  .triage-table > tbody > tr > td[data-label]::before { content: attr(data-label); color: var(--text-muted); font-size: .8rem; }
+  .triage-table > tbody > tr > td.triage-entry-action { display: block; text-align: left; }
+  .triage-table > tbody > tr > td[colspan] { display: block; padding: 0; }
+  .triage-table > tbody > tr.triage-detail-row { padding: 0; }
   .evidence-workspace dl { grid-template-columns: minmax(0,1fr); gap: 8px; }
   .evidence-workspace dd { margin-bottom: 12px; }
 }
+
+#memoryQuestionForm { max-width: 500px; margin-bottom: 24px; }
+.workspace-process-action { padding: 8px 0; }
+.workspace-process-action p:empty { display: none; }

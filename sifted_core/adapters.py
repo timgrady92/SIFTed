@@ -5,8 +5,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .evidence_intake import IntakeAdapter, snapshot
+from .integrity import evidence_path
 from .volatility import VolatilityAdapter
 from .carving import CarvingAdapter
+from .clamav import ClamAVAdapter
 from .zimmerman import ZimmermanAdapter
 from .disk_tools import DISK_TOOL_IDS, DiskAdapter
 from .examination_tools import EXAMINATION_TOOL_IDS, ExaminationAdapter
@@ -26,10 +29,12 @@ class StringsAdapter(ToolAdapter):
         if isinstance(length, bool) or not isinstance(length, int) or not 1 <= length <= 100:
             raise ValidationError("Minimum string length must be an integer from 1 to 100.")
         args = executable(self.tool_id, ["strings"], s, not preview) + ["-a", "-e", encoding, "-n", str(length)]
-        if flag(p, "show_offsets", True):
+        offsets = flag(p, "show_offsets", True)
+        if offsets:
             args += ["-t", "x"]
         args += ["--", source]
-        return Plan(self.tool_id, source, output, [Step(args, "Extract strings", OUTPUT + "/strings.txt", s.timeout_seconds)], expected_files=["strings.txt"])
+        return Plan(self.tool_id, source, output, [Step(args, "Extract strings", OUTPUT + "/strings.txt", s.timeout_seconds)],
+                    parameters={'encoding': encoding, 'min_length': length, 'show_offsets': offsets}, expected_files=["strings.txt"])
 
 
 class ExifToolAdapter(ToolAdapter):
@@ -65,7 +70,8 @@ class BulkAdapter(ToolAdapter):
             args += ["-x", "all"]
         for scanner in focus + advanced:
             args += ["-e", scanner]
-        return Plan(self.tool_id, source, output, [Step(args + [source], "Extract features", timeout=s.timeout_seconds)])
+        return Plan(self.tool_id, source, output, [Step(args + [source], "Extract features", timeout=s.timeout_seconds)],
+                    parameters={'focus_scanners': focus, 'advanced_scanners': advanced, 'info_mode': flag(p, 'info_mode'), 'histograms': flag(p, 'histograms', True)})
 
 
 class TimelineAdapter(ToolAdapter):
@@ -109,14 +115,14 @@ class FileTypeAdapter(ToolAdapter):
 
 
 ADAPTERS = {adapter.tool_id: adapter for adapter in (
-    StringsAdapter(), ExifToolAdapter(), CarvingAdapter("foremost"), CarvingAdapter("scalpel"),
+    IntakeAdapter(), ClamAVAdapter(), StringsAdapter(), ExifToolAdapter(), CarvingAdapter("foremost"), CarvingAdapter("scalpel"),
     BulkAdapter(), ZimmermanAdapter(), VolatilityAdapter(), TimelineAdapter(), FileTypeAdapter(),
     *(DiskAdapter(tool) for tool in DISK_TOOL_IDS), *(ExaminationAdapter(tool) for tool in EXAMINATION_TOOL_IDS))}
 
 
 def compile_plan(tool_id, payload, settings, repository, preview=False):
     adapter = ADAPTERS.get(tool_id)
-    if not adapter:
+    if not adapter or tool_id == "evidence-intake":
         raise ValidationError("Unknown or unsupported workflow.")
     if not isinstance(payload, dict):
         raise ValidationError("Request must be a JSON object.")
@@ -127,8 +133,13 @@ def compile_plan(tool_id, payload, settings, repository, preview=False):
     case = repository.case(case_id) if case_id else None
     if case_id and not case:
         raise ValidationError("Case not found.")
-    raw_source = text(payload, "source_path")
-    source = normalize(raw_source) if raw_source else "<source_path>"
+    raw_source = payload.get("source_path", "")
+    if not isinstance(raw_source, str):
+        raise ValidationError("source_path must be text.")
+    try:
+        source = evidence_path(raw_source) if raw_source else "<source_path>"
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
     workspace_input = text(payload, "workspace_input")
     if workspace_input:
         from .evidence_workspace import select_input
@@ -138,6 +149,9 @@ def compile_plan(tool_id, payload, settings, repository, preview=False):
         if normalize(selected["path"]) != source:
             raise ValidationError("Workspace evidence does not match the requested source.")
     derived = repository.artifact_by_path(source) if raw_source else None
+    if raw_source and ".sifted-evidence" in Path(source).parts and not any(
+            x.get("path") == source and x.get("status") == "ready" for x in (case or {}).get("artifacts", [])):
+        raise ValidationError("Uploaded evidence must complete intake in its case before analysis.")
     if derived and (not derived.get("complete") or derived.get("case_id") != case_id or derived.get("status") != "success"):
         derived = None
     if raw_source:
@@ -199,6 +213,10 @@ def compile_plan(tool_id, payload, settings, repository, preview=False):
         input_record["context_run_id"] = context_run_id
     if selection:
         input_record["filesystem_entry"] = selection
+    if 'process_ref' in plan.parameters:
+        from .memory_analysis import validate_process
+        process = validate_process(plan, repository, settings, case_id)
+        input_record.update(process_selection=process, baseline_sha256=process['inventory_sha256'])
     if plan.input_paths and raw_source:
         input_record["image_paths"] = plan.input_paths
         input_record["related_files"] = []
@@ -220,4 +238,13 @@ def compile_plan(tool_id, payload, settings, repository, preview=False):
                 raise ValidationError("Registered evidence baseline differs from the producing or context run.")
             input_record.update(artifact_id=item["id"], baseline_sha256=baseline)
             break
+    if raw_source and not preview and not derived:
+        intake_snapshot = snapshot(source, settings)
+        input_record["dependency_paths"] = intake_snapshot.get("dependency_paths", [])
+        if intake_snapshot.get("image_paths"):
+            input_record["image_paths"] = intake_snapshot["image_paths"]
+        related = {x["path"]: x for x in input_record.get("related_files", [])}
+        for member in intake_snapshot.get("related_files", []):
+            related.setdefault(member["path"], member)
+        input_record["related_files"] = list(related.values())
     return plan, case_id, input_record

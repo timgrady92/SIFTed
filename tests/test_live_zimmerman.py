@@ -321,31 +321,6 @@ def test_native_rejected_artifacts_do_not_claim_success(
     )
 
 
-def test_installed_sqlecmd_maps_execute_on_vanilla_sift(native_zimmerman):
-    import sqlite3
-
-    source = native_zimmerman[2] / "formhistory.sqlite"
-    with sqlite3.connect(source) as connection:
-        connection.execute(
-            "CREATE TABLE moz_formhistory(id INTEGER,fieldname TEXT,value TEXT,timesUsed INTEGER,firstUsed INTEGER,lastUsed INTEGER,guid TEXT)"
-        )
-        connection.execute(
-            "INSERT INTO moz_formhistory VALUES(1,'search','known sqlite marker',2,1704067200000000,1704153600000000,'known-guid')"
-        )
-    before = source.read_bytes()
-    result, _ = execute(native_zimmerman, "sqlecmd", source)
-    assert_complete(native_zimmerman, result)
-    record = next(iter(rows(result).values()))[0]
-    assert (
-        record["Value"] == "known sqlite marker"
-        and record["First Used"] == "2024-01-01 00:00:00"
-    )
-    assert (
-        source.read_bytes() == before
-        and result["analysis"]["engine"] == "SIFTed SQLite maps"
-    )
-
-
 def test_native_process_cancellation_retains_captures_and_stops_process(
     native_zimmerman,
 ):

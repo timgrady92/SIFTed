@@ -108,33 +108,69 @@ def test_native_workspace_partition_to_identified_pdf(tmp_path, sector_size):
     action = next(a for a in view(client, case, material['key'])['actions'] if a['id'] == 'pdftotext')
     assert action['result_run_id'] == rendered['id']
     assert client.get(f'/api/case/{case}/workspace/run/{action["result_run_id"]}', query_string={'input': key}).status_code == 200
-    assert len(repo.runs()) == 4
+    assert len(repo.runs()) == 5
 
 
 from test_live_volatility import installed_memory as installed_memory, windows_sample as windows_sample
 
 
 @pytest.mark.live
-def test_native_workspace_memory_action_on_public_windows_image(installed_memory, windows_sample):
-    import json
-    repo, settings, synthetic, installed = installed_memory
+def test_native_workspace_guided_memory_analysis(installed_memory, windows_sample):
+    import hashlib
+    from sifted_core import published
+
+    repo, settings, _, _ = installed_memory
     app = create_app({'TESTING': True, 'SIFTED_DATABASE_PATH': str(repo.path),
                       'SIFTED_INPUT_ROOTS': settings.input_roots, 'SIFTED_OUTPUT_ROOTS': settings.output_roots,
                       'SIFTED_VOLATILITY_SYMBOLS': settings.volatility_symbols})
     client = app.test_client()
     case, key = register(client, repo, windows_sample, 'memory_dump')
-    workspace = view(client, case, key)
-    assert workspace['observed']['kind'] == 'memory'
-    action = next(a for a in workspace['actions'] if a['id'] == 'volatility')
-    assert action['enabled'] and action['recommended']
-    response = client.post('/api/volatility/run', json={**payload(action), 'plugins': ['windows.pslist.PsList'], 'renderer': 'json'})
-    assert response.status_code == 202, response.json
-    Worker(repo, app.config['SETTINGS']).run_once()
-    run = repo.run(response.json['run_id'])
-    assert run['status'] == 'success', run.get('error')
-    records = json.loads((Path(run['output_path'])/'plugins/windows.pslist.PsList/result.json').read_text())
+    worker = Worker(repo, app.config['SETTINGS'])
+
+    def examine(action):
+        assert not action['reason'], action
+        preview = client.post('/api/volatility/preview', json=action['payload'])
+        assert preview.status_code == 200, preview.json
+        assert str(windows_sample) in preview.json['terminal_command']
+        response = client.post('/api/volatility/run', json=action['payload'])
+        assert response.status_code == 202, response.json
+        worker.run_once()
+        run = repo.run(response.json['run_id'])
+        assert run['status'] == 'success', run.get('error')
+        report = run['plugin_results'][0]['file']
+        rows = published.page(run, report, repo, app.config['SETTINGS'])['rows']
+        response = client.get(f'/api/case/{case}/workspace/run/{run["id"]}', query_string={'input': key})
+        assert response.status_code == 200 and 'workspace-result-table' in response.json['html']
+        return run, [row['values'] for row in rows]
+
+    model = view(client, case, key)
+    assert model['observed']['kind'] == 'memory'
+    _, info = examine(model['memory']['identify'])
+    assert any(row.get('Variable') == 'Kernel Base' for row in info)
+    network = view(client, case, key, tab='investigate', memory_question='network')['memory']['investigations']
+    assert all('Vista' in action['reason'] for action in network)
+    process_run, records = examine(view(client, case, key)['memory']['inventory_action'])
     assert len(records) == 47 and any(row['PID'] == 1812 for row in records)
-    result = view(client, case, key)
-    assert next(a for a in result['actions'] if a['id'] == 'volatility')['result_run_id'] == run['id']
-    assert len(result['inputs']) == 1  # Plugin reports and saved configs are not extracted evidence.
-    assert client.get(f'/api/case/{case}/workspace/run/{run["id"]}', query_string={'input': key}).status_code == 200
+    model = view(client, case, key, tab='processes', process_q='explorer.exe')
+    assert model['memory']['inventory']['id'] == process_run['id']
+    assert model['memory']['processes']['total'] == 1
+    row_id = model['memory']['processes']['rows'][0]['id']
+    model = view(client, case, key, tab='processes', process_row=row_id)
+    assert model['memory']['processes']['selected']['values']['PID'] == 1812
+    results = []
+    for action in (a for a in model['memory']['process_actions'] if a['group'] == 'essential'):
+        run, rows = examine(action)
+        assert rows and {row['PID'] for row in rows} == {1812}
+        selection = repo.input(run['id'])['process_selection']
+        assert selection['run_id'] == process_run['id'] and selection['pid'] == 1812
+        results.append((run, rows))
+    assert any('explorer' in str(row).lower() for row in results[0][1])
+    assert any('kernel32.dll' in str(row).lower() for row in results[1][1])
+    derived = view(client, case, key, tab='derived')['derived']
+    assert len(derived) == 1
+    assert derived[0]['source_run_id'] == results[2][0]['id']
+    assert Path(derived[0]['path']).read_bytes().startswith(b'MZ')
+    assert len(view(client, case, key)['inputs']) == 2  # Reports/configs never become extracted evidence.
+    assert client.get(f'/case/{case}/workspace', query_string={'input': key, 'tab': 'derived', 'examine': derived[0]['key']}).status_code == 200
+    with windows_sample.open('rb') as handle:
+        assert hashlib.file_digest(handle, 'sha256').hexdigest() == repo.case(case)['artifacts'][0]['hash']

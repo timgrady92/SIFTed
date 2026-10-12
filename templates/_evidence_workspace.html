@@ -1,5 +1,5 @@
-{% macro execute(tool, payload, label, reason='', configure=false, fields=[], title='') %}
-<button type="button" class="{{ 'ghost' if configure else 'action' }}" data-workspace-tool="{{ tool }}" data-payload='{{ payload|tojson }}' data-label="{{ title or label }}" data-configure="{{ 'true' if configure else 'false' }}" data-fields='{{ fields|tojson }}' {% if reason %}disabled title="{{ reason }}"{% endif %}>{{ label }}</button>
+{% macro execute(tool, payload, label, reason='', configure=false, fields=[], title='', advance=false) %}
+<button type="button" class="{{ 'ghost' if configure else 'action' }}" data-workspace-tool="{{ tool }}" data-payload='{{ payload|tojson }}' data-label="{{ title or label }}" data-configure="{{ 'true' if configure else 'false' }}" data-advance="{{ 'true' if advance else 'false' }}" data-fields='{{ fields|tojson }}' {% if reason %}disabled title="{{ reason }}"{% endif %}>{{ label }}</button>
 {% if reason %}<p class="helper">{{ reason }}</p>{% endif %}
 {% endmacro %}
 {% macro examination_action(action) %}
@@ -25,29 +25,44 @@
 <header class="workspace-header">
   <div><h1>{{ workspace.selected.label }}</h1><p class="helper">{{ workspace.observed.label }}</p></div>
   {% if workspace.case.artifacts|length > 1 or workspace.selected.origin == 'derived' %}<label class="workspace-picker">Evidence<select id="workspaceInput" aria-label="Evidence input">
-    {% for item in workspace.case.artifacts %}<option value="e:{{ item.id }}" {% if workspace.selected.key == 'e:' + item.id %}selected{% endif %}>{{ item.label }}</option>{% endfor %}
+    {% for item in workspace.case.artifacts if item.status != "retired" %}<option value="e:{{ item.id }}" {% if workspace.selected.key == 'e:' + item.id %}selected{% endif %}>{{ item.label }}</option>{% endfor %}
     {% if workspace.selected.origin == 'derived' %}<option selected value="{{ workspace.selected.key }}">{{ workspace.selected.label }}</option>{% endif %}
   </select></label>{% endif %}
 </header>
 <nav class="workspace-tabs" role="tablist" aria-label="Evidence workflow">
-  {% for tab, label, step in [('overview','Overview',''),('analysis','Analysis','1'),('triage','File triage','2'),('derived','Examine files','3'),('activity','Activity','')] if workspace.is_disk or tab != 'triage' %}
-    <button id="tab-{{ tab }}" type="button" role="tab" data-workspace-tab="{{ tab }}" class="{% if workspace.tab == tab %}active{% endif %}" aria-selected="{{ 'true' if workspace.tab == tab else 'false' }}" aria-controls="workspaceTabPanel" tabindex="{{ '0' if workspace.tab == tab else '-1' }}">{% if step and workspace.is_disk %}<span class="workspace-tab-step" aria-hidden="true">{{ step }}</span>{% endif %}{{ label }}{% if tab == 'derived' and workspace.derived %}<span class="workspace-tab-count">{{ workspace.derived|length }}</span>{% endif %}{% if tab == 'activity' and workspace.active %}<span class="workspace-tab-count">{{ workspace.active|length }} running</span>{% endif %}</button>
+  {% for tab, label, step in workspace.tabs %}
+    <button id="tab-{{ tab }}" type="button" role="tab" data-workspace-tab="{{ tab }}" class="{% if workspace.tab == tab %}active{% endif %}" aria-selected="{{ 'true' if workspace.tab == tab else 'false' }}" aria-controls="workspaceTabPanel" tabindex="{{ '0' if workspace.tab == tab else '-1' }}">{% if step %}<span class="workspace-tab-step" aria-hidden="true">{{ step }}</span>{% endif %}{{ label }}{% if tab == 'derived' and workspace.derived %}<span class="workspace-tab-count">{{ workspace.derived|length }}</span>{% endif %}{% if tab == 'activity' and workspace.active %}<span class="workspace-tab-count">{{ workspace.active|length }} running</span>{% endif %}</button>
   {% endfor %}
 </nav>
 <section id="workspaceTabPanel" class="workspace-tab-content" role="tabpanel" aria-labelledby="tab-{{ workspace.tab }}" tabindex="0" data-active-tab="{{ workspace.tab }}">
 {% if workspace.tab == 'overview' %}
   <header class="workspace-stage-heading"><h2>Evidence overview</h2><p class="helper">Confirm the source and its classification before analysis.</p></header>
-  <dl><dt>Source</dt><dd>{{ workspace.selected.path }}</dd><dt>SHA-256</dt><dd class="workspace-hash">{{ workspace.selected.hash or 'Directory members are verified when submitted' }}</dd><dt>Content</dt><dd>{{ workspace.observed.label }}{% if workspace.observed.mime %} · {{ workspace.observed.mime }}{% endif %}</dd><dt>Classification basis</dt><dd>{{ workspace.observed.basis }}</dd></dl>
+  <dl><dt>Source</dt><dd>{{ workspace.selected.path }}</dd><dt>SHA-256</dt><dd class="workspace-hash">{{ workspace.selected.hash or 'Awaiting verification' }}</dd><dt>Content</dt><dd>{{ workspace.observed.label }}{% if workspace.observed.mime %} · {{ workspace.observed.mime }}{% endif %}</dd><dt>Classification basis</dt><dd>{{ workspace.observed.basis }}</dd></dl>
   {% if workspace.observed.note %}<p>{{ workspace.observed.note }}</p>{% endif %}
-  <button class="action" type="button" data-workspace-tab="analysis">Continue to Analysis</button>
+  {% if workspace.observed.available %}<button class="action" type="button" data-workspace-tab="analysis">{{ 'Prepare memory analysis' if workspace.is_memory else 'Continue to Analysis' }}</button>{% endif %}
+  {% if workspace.selected.origin == 'registered' %}
+    <p role="status">Intake: {{ workspace.selected.status }}{% if workspace.selected.verified_at %} · Last verified {{ workspace.selected.verified_at[:19]|replace("T", " ") }} UTC{% endif %}</p>
+    {% if workspace.selected.error %}<p>{{ workspace.selected.error }}</p>{% endif %}
+    {% if workspace.selected.status == 'pending' %}<p class="helper">Hashing and profiling are queued with the worker. This view updates when verification finishes.</p>
+    {% else %}<button class="ghost" type="button" data-verify-evidence="{{ workspace.selected.id }}">Verify integrity</button>{% endif %}
+    <details data-disclosure="custody"><summary>Custody and file manifest</summary>
+      <p class="helper">{{ workspace.selected.intake.custodian }}{% if workspace.selected.intake.source %} · Source: {{ workspace.selected.intake.source }}{% endif %}</p>
+      {% if workspace.selected.intake.notes %}<p>{{ workspace.selected.intake.notes }}</p>{% endif %}
+      <p class="helper">{{ 'The SHA-256 above identifies the canonical directory manifest.' if workspace.observed.kind == 'directory' else 'The SHA-256 above identifies the primary file. Companion files have independent hashes below.' }}</p>
+      <a href="/api/case/{{ workspace.case.id }}/evidence/{{ workspace.selected.id }}/custody">Download custody record and hashes</a>
+      {% for entry in workspace.selected.manifest %}<p class="workspace-hash">{{ entry.path }} · {{ entry.sha256|default('Directory') }}</p>{% endfor %}
+      <p class="helper">The record covers actions recorded by SIFTed. Analyst names are declared, not authenticated. Keep an exported copy outside the workstation to compare the event-chain digest later.</p>
+    </details>
+  {% endif %}
   {% if workspace.selected.origin == 'registered' %}<details data-disclosure="classification"><summary>Change registered type</summary><p class="helper">Use this when the evidence needs an analyst-supplied classification.</p>
     <form class="workspace-fields" id="evidenceTypeForm" method="post" action="{{ url_for('evidence.set_evidence_type', case_id=workspace.case.id, artifact_id=workspace.selected.id) }}"><label>Registered type<select name="type">{% for key,spec in workspace.types.items() %}<option value="{{ key }}" {% if key == workspace.selected.type %}selected{% endif %}>{{ spec.label }}</option>{% endfor %}</select></label><button class="ghost" type="submit">Save type</button></form>
   </details>{% endif %}
 {% elif workspace.tab == 'analysis' %}
-  {% if workspace.is_disk %}{% include '_disk_journey.html' %}{% else %}<header class="workspace-stage-heading"><h2>Examine evidence</h2><p class="helper">Choose an examination suited to this content. Each result stays with its source.</p></header>{{ examine_actions(workspace.actions) }}{% endif %}
+  {% if workspace.is_disk %}{% include '_disk_journey.html' %}{% elif workspace.is_memory %}{% include '_memory_workspace.html' %}{% else %}<header class="workspace-stage-heading"><h2>Examine evidence</h2><p class="helper">Choose an examination suited to this content. Each result stays with its source.</p></header>{{ examine_actions(workspace.actions) }}{% endif %}
 {% elif workspace.tab == 'triage' %}{% include '_file_triage.html' %}
+{% elif workspace.tab in ['processes', 'investigate'] %}{% include '_memory_workspace.html' %}
 {% elif workspace.tab == 'derived' %}
-  <header class="workspace-stage-heading">{% if workspace.is_disk %}<p class="workspace-step">Step 3 of 3</p>{% endif %}<h2>Examine captured files</h2><p class="helper">Identify content and examine it while keeping the source evidence in context.</p></header>
+  <header class="workspace-stage-heading">{% if workspace.is_disk or workspace.is_memory %}<p class="workspace-step">{{ "Step 4 of 4" if workspace.is_memory else "Step 3 of 3" }}</p>{% endif %}<h2>Examine captured files</h2><p class="helper">Identify content and examine it while keeping the source evidence in context.</p></header>
   {% if workspace.examination %}
   <section id="derivedExamination"><div class="workspace-heading"><div><h3>{{ workspace.examination.input.label }}</h3><p class="helper">{{ workspace.examination.observed.label }}</p></div><button class="workspace-text-button" type="button" data-close-examination>All captured files</button></div>
     <details data-disclosure="captured-provenance" data-operation-slot="captured-provenance"><summary>Captured file and provenance</summary><p>{{ workspace.examination.input.path }}</p><p class="workspace-hash">SHA-256 {{ workspace.examination.input.hash }}</p><p class="helper">{{ workspace.examination.observed.basis }}{% if workspace.examination.observed.mime %} · {{ workspace.examination.observed.mime }}{% endif %}</p><button type="button" class="ghost" data-workspace-result="{{ workspace.examination.input.source_run_id }}">Producing run</button></details>
@@ -61,4 +76,4 @@
 <div data-operation-slot="tab-result"></div>
 </section>
 {% else %}<section><h2>Add evidence to this case</h2><p>Register a file or collected directory to begin.</p><a class="action" href="/cases#case-{{ workspace.case.id }}">Manage evidence</a></section>{% endif %}
-<script type="application/json" id="workspaceState">{{ {'active': workspace.active, 'tab':workspace.tab, 'context':workspace.context.id if workspace.context else '', 'examine':workspace.examination.input.key if workspace.examination else '', 'input':workspace.selected.key if workspace.selected else ''}|tojson }}</script>
+<script type="application/json" id="workspaceState">{{ {'active': workspace.active, 'tab':workspace.tab, 'context':workspace.context.id if workspace.context else '', 'memory_os': workspace.memory.os if workspace.memory else '', 'memory_question': workspace.memory.question if workspace.memory else '', 'inventory':workspace.memory.inventory.id if workspace.memory and workspace.memory.inventory else '', 'examine':workspace.examination.input.key if workspace.examination else '', 'input':workspace.selected.key if workspace.selected else ''}|tojson }}</script>

@@ -328,7 +328,7 @@ def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tm
             page.get_by_role('button', name='Configure disk map', exact=True).click()
             page.select_option('[data-field="sector_size"]', '4096')
             page.wait_for_function("!document.querySelector('#copyOperation').disabled && document.querySelector('#operationCommand').textContent.includes('-b 4096')")
-            assert repo.runs() == []
+            assert all(run['tool'] == 'evidence-intake' for run in repo.runs())
             page.click('#closeOperation')
             with page.expect_request('**/api/mmls/run') as submitted:
                 page.get_by_role('button', name='Map disk', exact=True).click()
@@ -395,7 +395,7 @@ def test_evidence_workspace_disk_journey_and_mobile_layout(workspace_runtime, tm
             page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             worker.run_once()
             page.wait_for_selector('[data-evidence-action="xxd"] [data-workspace-result]', state='attached')
-            assert len(repo.runs()) == 6 and all(r['status'] == 'success' for r in repo.runs())
+            assert len(repo.runs()) == 7 and all(r['status'] == 'success' for r in repo.runs())
             assert urlparse(page.url).path == urlparse(workspace_url).path
             assert page.evaluate('window.workspaceDocument') == 'kept through the journey'
             page.reload()
@@ -459,6 +459,7 @@ def test_workspace_jobs_follow_their_evidence_and_can_be_cancelled(workspace_run
     second = source.parent / 'second disk.img'
     second.write_bytes(source.read_bytes())
     registered = client.post(f'/api/case/{case}/artifacts', json={'path': str(second), 'type': 'disk_image'}).json['artifact']
+    Worker(repo, settings).run_once()
     second_key = 'e:' + registered['id']
     server = make_server('127.0.0.1', 0, app, threaded=True)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -484,12 +485,12 @@ def test_workspace_jobs_follow_their_evidence_and_can_be_cancelled(workspace_run
             page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
             page.click('#cancelOperation')
             page.wait_for_function("document.querySelector('#operationStatus').dataset.tone === 'error'")
-            assert sorted(run['status'] for run in repo.runs()) == ['cancelled', 'success']
+            assert sorted(run['status'] for run in repo.runs() if run['tool'] != 'evidence-intake') == ['cancelled', 'success']
             assert page.locator('[data-filesystem-offset]').count() == 0
             page.select_option('#workspaceInput', key)
             page.wait_for_selector('[data-filesystem-offset]')
             assert parse_qs(urlparse(page.url).query)['input'] == [key]
-            assert len(repo.runs()) == 2 and not errors
+            assert len(repo.runs()) == 4 and not errors
             browser.close()
     finally:
         server.shutdown()
@@ -556,6 +557,214 @@ def test_workspace_inspection_keeps_position_drafts_and_keyboard_context(workspa
             page.go_back()
             page.wait_for_selector('[data-active-tab=triage]')
             assert page.locator('.triage-detail-row:not([hidden])').count() == 1
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert not errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+from test_evidence_intake import intake_runtime as intake_runtime
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize(('method', 'width'), [('upload', 390), ('path', 1280)])
+def test_evidence_intake_from_browser_to_verified_overview(intake_runtime, method, width, tmp_path):
+    import hashlib
+    import json
+    client, repo, settings, case, inputs = intake_runtime
+    app = client.application
+    sample = inputs / 'a document.raw'
+    sample.write_bytes(b'%PDF-1.7\nKnown uploaded evidence\n')
+    expected = hashlib.sha256(sample.read_bytes()).hexdigest()
+    server = make_server('127.0.0.1', 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():
+                pytest.skip('Chromium is not installed.')
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': width, 'height': 900})
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            page.goto(f'http://127.0.0.1:{server.server_port}/cases')
+            page.locator('.case-toggle').click()
+            page.get_by_role('button', name='+ Add evidence').click()
+            page.select_option('#intakeMethod', method)
+            if method == 'upload':
+                page.set_input_files('#evidenceFiles', str(sample))
+            else:
+                page.fill('#artifactPath', str(sample))
+            page.fill('#intakeCustodian', 'Browser examiner')
+            page.locator('#addArtifactForm summary').click()
+            page.fill('#intakeHash', expected)
+            page.get_by_role('button', name='Add evidence', exact=True).click()
+            page.wait_for_url('**/workspace?**', timeout=10000)
+            assert 'pending' in page.locator('#workspaceTabPanel').inner_text()
+            assert repo.runs()[0]['status'] == 'queued'
+            Worker(repo, settings).run_once()
+            page.get_by_role('button', name='Continue to Analysis').wait_for(timeout=15000)
+            text = page.locator('#workspaceTabPanel').inner_text()
+            assert expected in text and 'PDF document' in text and 'ready' in text
+            page.get_by_text('Custody and file manifest', exact=True).click()
+            with page.expect_download() as download:
+                page.get_by_role('link', name='Download custody record and hashes').click()
+            audit = json.loads(Path(download.value.path()).read_text())
+            assert audit['evidence']['hash'] == expected and audit['custody']['event_count'] == 4
+            page.get_by_role('button', name='Verify integrity', exact=True).click()
+            page.wait_for_function("document.querySelector('#workspaceTabPanel').textContent.includes('pending')")
+            Worker(repo, settings).run_once()
+            page.get_by_role('button', name='Verify integrity', exact=True).wait_for(timeout=15000)
+            assert len(repo.runs()) == 2 and all(run['status'] == 'success' for run in repo.runs())
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            page.screenshot(path=str(tmp_path / f'intake-{method}.png'), full_page=True)
+            assert not errors
+            browser.close()
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+from test_memory_workspace import memory_workspace as memory_workspace
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize('width', [390, 1440])
+def test_guided_memory_journey_resume_process_scope_and_mobile(memory_workspace, width, tmp_path):
+    app, client, repo, settings, source, case, key, _ = memory_workspace
+    worker = Worker(repo, settings)
+    server = make_server('127.0.0.1', 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():
+                pytest.skip('Chromium is not installed.')
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': width, 'height': 844})
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            page.goto(f'http://127.0.0.1:{server.server_port}/case/{case}/workspace?' + urlencode({'input': key}))
+            page.get_by_role('button', name='Identify image', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            page.reload()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('progress')")
+            page.evaluate("window.memoryDocument = 'same document'")
+            worker.run_once()
+            page.get_by_role('button', name='Build process inventory', exact=True).wait_for()
+            assert page.locator('#workspaceOperation').is_hidden()
+            page.get_by_role('button', name='Build process inventory', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            worker.run_once()
+            page.get_by_role('link', name='Review processes', exact=True).click()
+            page.wait_for_selector('#memoryFilters')
+            assert page.locator('[data-process-entry]').count() == 50
+            page.get_by_role('button', name='Next', exact=True).click()
+            page.wait_for_function("document.querySelector('[data-process-entry]').dataset.processEntry === '51'")
+            page.fill('[name=process_q]', 'process-42.exe')
+            page.get_by_role('button', name='Search', exact=True).click()
+            page.wait_for_function("document.querySelectorAll('[data-process-entry]').length === 1")
+            page.get_by_role('button', name='Inspect', exact=True).click()
+            page.get_by_role('button', name='Read command line', exact=True).wait_for()
+            assert page.locator('.memory-process-table > thead > tr > th').all_text_contents()[:2] == ['PID', 'PPID']
+            page.get_by_text('Recorded process details', exact=True).click()
+            assert '18446735277616529450' in page.locator('.triage-inspector').inner_text()
+            page.get_by_role('button', name='Read command line', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            assert '--pid 42' in page.locator('#operationCommand').text_content()
+            assert str(source) in page.locator('#operationCommand').text_content()
+            first = parse_qs(urlparse(page.url).query)['run'][0]
+            # A different plugin for the same image/PID must create its own job.
+            page.get_by_role('button', name='Inspect loaded modules', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            second = parse_qs(urlparse(page.url).query)['run'][0]
+            assert first != second
+            worker.run_once()
+            worker.run_once()
+            page.wait_for_function("document.querySelector('#operationResult').textContent.includes('18446735277616529450')")
+            assert page.locator('#workspaceOperation').locator('xpath=ancestor::section[@data-operation-slot]').get_attribute('data-operation-slot') == 'process-43'
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert page.locator('.workspace-result-table thead').evaluate('(el) => getComputedStyle(el).clipPath') == 'none'
+            assert page.locator('.workspace-result-table tbody tr').first.evaluate('(el) => getComputedStyle(el).display') == 'table-row'
+            page.evaluate('window.scrollTo(0, 0)')
+            page.screenshot(path=str(tmp_path/f'memory-process-{width}.png'), full_page=True)
+            page.get_by_role('button', name='Extract executable', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            worker.run_once()
+            page.locator('#operationResult [data-examine]').wait_for()
+            page.locator('#operationResult [data-examine]').click()
+            page.wait_for_selector('#derivedExamination')
+            assert 'process.dmp' in page.locator('#derivedExamination').inner_text()
+            page.get_by_role('tab', name='Processes', exact=True).click()
+            page.wait_for_selector('#memoryFilters')
+            assert page.locator('[name=process_q]').input_value() == 'process-42.exe'
+            assert page.locator('.triage-inspector').count() == 1
+            count = len(repo.runs())
+            page.get_by_role('button', name='Read command line · View result', exact=True).click()
+            page.wait_for_selector('.workspace-result-table')
+            assert len(repo.runs()) == count
+            page.get_by_text('Known indicators', exact=True).click()
+            page.get_by_role('button', name='Scan process with YARA rules', exact=True).click()
+            rules = source.parent / 'reviewed rules.yar'
+            rules.write_text('rule dos_message { strings: $a="DOS mode" condition: $a }')
+            rule_field = page.get_by_label('YARA rules file on SIFT (absolute path)', exact=True)
+            assert rule_field.is_visible()
+            rule_field.fill(str(rules))
+            page.get_by_role('button', name='Run volatility', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            rules_run = parse_qs(urlparse(page.url).query)['run'][0]
+            assert '--pid 42' in page.locator('#operationCommand').text_content()
+            page.reload()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('progress')")
+            page.evaluate("window.memoryDocument = 'same document'")
+            worker.run_once()
+            page.get_by_role('button', name='Scan process with YARA rules · View result', exact=True).wait_for()
+            assert any(record['path'] == str(rules) for record in repo.input(rules_run)['related_files'])
+            page.get_by_role('tab', name='Investigate', exact=True).click()
+            page.select_option('#memoryQuestion', 'injection')
+            page.get_by_role('heading', name='Do executable regions and loaded modules agree?', exact=True).wait_for()
+            page.get_by_role('button', name='Inspect potential injection', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            worker.run_once()
+            page.locator('#workspaceReportSearch').wait_for()
+            page.locator('[name=report_q]').fill('process-42.exe')
+            page.get_by_role('button', name='Search report', exact=True).click()
+            page.wait_for_function("document.querySelectorAll('.workspace-result-table tbody tr').length === 1")
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            page.screenshot(path=str(tmp_path/f'memory-investigate-{width}.png'), full_page=True)
+            page.get_by_role('link', name='Review PID 42', exact=True).click()
+            page.get_by_role('heading', name='Process 42', exact=True).wait_for()
+            page.get_by_role('tab', name='Investigate', exact=True).click()
+            page.wait_for_function("document.querySelector('#memoryQuestion')?.value === 'injection'")
+            page.select_option('#memoryQuestion', 'persistence')
+            page.get_by_role('button', name='Locate registry hives', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            worker.run_once()
+            page.locator('[data-operation-slot="investigation-hives"] [data-workspace-result]').wait_for(state='attached')
+            page.get_by_role('button', name='Extract a registry hive', exact=True).click()
+            page.get_by_label('Registry hive', exact=True).select_option('SYSTEM')
+            page.get_by_role('button', name='Run volatility', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            assert '--filter=SYSTEM' in page.locator('#operationCommand').text_content()
+            worker.run_once()
+            page.locator('[data-operation-slot="investigation-capture_hives"] [data-workspace-result]').wait_for(state='attached')
+            page.get_by_role('tab', name='Prepare', exact=True).click()
+            page.select_option('#memoryOS', 'linux')
+            page.wait_for_function("JSON.parse(document.querySelector('#workspaceState').textContent).memory_os === 'linux'")
+            page.get_by_role('tab', name='Processes', exact=True).click()
+            page.get_by_role('heading', name='No process inventory yet').wait_for()
+            page.get_by_role('tab', name='Prepare', exact=True).click()
+            page.select_option('#memoryOS', 'windows')
+            page.wait_for_function("JSON.parse(document.querySelector('#workspaceState').textContent).memory_os === 'windows'")
+            page.get_by_role('tab', name='Processes', exact=True).click()
+            page.wait_for_selector('#memoryFilters')
+            assert page.locator('.triage-inspector').count() == 1
+            assert page.evaluate('window.memoryDocument') == 'same document'
+            page.get_by_role('button', name='Close process', exact=True).click()
+            page.wait_for_function("document.activeElement.dataset.processRow === '43'")
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             assert not errors
             browser.close()

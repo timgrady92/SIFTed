@@ -5,12 +5,11 @@ It contains names reported by TSK, never content classifications inferred from n
 """
 from contextlib import closing, contextmanager
 import csv
-import hashlib
-import os
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 import sqlite3
 
-from .tool_base import ValidationError, allowed, signature
+from .tool_base import ValidationError
+from .published import artifact
 
 
 INDEX_NAME = "inventory.sqlite3"
@@ -66,21 +65,8 @@ def build_index(output, check):
 def verified_index(run, repository, settings):
     if not run or run["tool"] != "fls" or run["status"] != "success" or not run.get("analysis", {}).get("inventory"):
         raise ValidationError("Build a file inventory to open triage.")
-    path = Path(run["output_path"]) / INDEX_NAME
-    entry = next((item for item in repository.artifacts(run["id"])
-                  if item["path"] == str(path) and item.get("complete")), None)
-    if not entry or not allowed(str(path), settings.output_roots):
-        raise ValidationError("File inventory is outside allowed roots or has no complete manifest.")
     try:
-        before = signature(path)
-        digest = hashlib.sha256()
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-        # Keep the verified file descriptor open while SQLite reads that inode.
-        with os.fdopen(descriptor, "rb") as handle:
-            while chunk := handle.read(1024 * 1024):
-                digest.update(chunk)
-            if digest.hexdigest() != entry["sha256"] or signature(path) != before:
-                raise ValidationError("File inventory changed; rebuild it before continuing triage.")
+        with artifact(run, INDEX_NAME, repository, settings) as handle:
             uri = f"file:/proc/self/fd/{handle.fileno()}?mode=ro&immutable=1"
             db = sqlite3.connect(uri, uri=True)
             db.row_factory = sqlite3.Row
@@ -88,8 +74,6 @@ def verified_index(run, repository, settings):
                 if db.execute("PRAGMA user_version").fetchone()[0] != 1:
                     raise ValidationError("Unsupported file inventory format; rebuild the inventory.")
                 yield db
-                if signature(path) != before:
-                    raise ValidationError("File inventory changed while reading; rebuild it before continuing triage.")
             finally:
                 db.close()
     except (OSError, sqlite3.Error) as exc:

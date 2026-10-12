@@ -1,162 +1,3 @@
-const browseButton = document.getElementById("caseBrowse");
-const drawer = document.getElementById("browserDrawer");
-const drawerList = document.getElementById("drawerList");
-const drawerError = document.getElementById("drawerError");
-const currentPathLabel = document.getElementById("currentPath");
-const closeBrowser = document.getElementById("closeBrowser");
-const pathChips = Array.from(document.querySelectorAll(".path-chip"));
-const manualPath = document.getElementById("manualPath");
-const useManualPath = document.getElementById("useManualPath");
-const imageInput = document.getElementById("caseImagePath");
-const imageDisplay = document.getElementById("caseImagePathDisplay");
-const caseNameInput = document.getElementById("caseName");
-
-let currentPath = "";
-let autoCaseName = "";
-
-const toggleDrawer = (isOpen) => {
-  drawer.classList.toggle("open", isOpen);
-  drawer.setAttribute("aria-hidden", String(!isOpen));
-};
-
-const renderDrawer = (data) => {
-  drawerList.innerHTML = "";
-  drawerError.hidden = true;
-  currentPathLabel.textContent = data.path;
-
-  if (data.parent) {
-    const upButton = document.createElement("button");
-    upButton.className = "drawer-item";
-    upButton.dataset.type = "dir";
-    upButton.dataset.path = data.parent;
-    upButton.textContent = "..";
-    drawerList.appendChild(upButton);
-  }
-
-  data.entries.forEach((entry) => {
-    const button = document.createElement("button");
-    button.className = "drawer-item";
-    button.dataset.type = entry.type;
-    button.dataset.path = entry.path;
-    button.textContent = entry.name;
-    drawerList.appendChild(button);
-  });
-};
-
-const loadDirectory = async (path) => {
-  try {
-    const response = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
-    if (!response.ok) {
-      throw new Error("browse-failed");
-    }
-    const data = await response.json();
-    currentPath = data.path;
-    renderDrawer(data);
-  } catch (error) {
-    drawerError.hidden = false;
-  }
-};
-
-const updateImagePath = (path) => {
-  if (!path) {
-    return;
-  }
-  imageInput.value = path;
-  imageDisplay.value = path;
-  updateCaseNameFromPath(path);
-};
-
-const buildCaseName = (path) => {
-  const trimmed = path.trim();
-  if (!trimmed) {
-    return "";
-  }
-  const fileName = trimmed.split("/").filter(Boolean).pop() || "case";
-  const stamp = new Date()
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .slice(0, 15)
-    .replace("T", "-");
-  return `${fileName} ${stamp}`;
-};
-
-const updateCaseNameFromPath = (path) => {
-  if (!caseNameInput) {
-    return;
-  }
-  const next = buildCaseName(path);
-  if (!caseNameInput.value.trim() || caseNameInput.value.trim() === autoCaseName) {
-    caseNameInput.value = next;
-    autoCaseName = next;
-  }
-};
-
-if (browseButton) {
-  browseButton.addEventListener("click", () => {
-    toggleDrawer(true);
-    loadDirectory(currentPath);
-  });
-}
-
-if (closeBrowser) {
-  closeBrowser.addEventListener("click", () => toggleDrawer(false));
-}
-
-if (drawerList) {
-  drawerList.addEventListener("click", (event) => {
-    const target = event.target.closest(".drawer-item");
-    if (!target) {
-      return;
-    }
-    const entryPath = target.dataset.path || "";
-    const entryType = target.dataset.type || "file";
-    if (entryType === "dir") {
-      loadDirectory(entryPath);
-      return;
-    }
-    updateImagePath(entryPath);
-    toggleDrawer(false);
-  });
-}
-
-pathChips.forEach((chip) => {
-  chip.addEventListener("click", () => {
-    const nextPath = chip.dataset.path || "/cases";
-    loadDirectory(nextPath);
-  });
-});
-
-if (useManualPath) {
-  useManualPath.addEventListener("click", () => {
-    if (manualPath.value.trim()) {
-      updateImagePath(manualPath.value.trim());
-      manualPath.value = "";
-      toggleDrawer(false);
-    }
-  });
-}
-
-if (imageDisplay) {
-  let imageInputTimeout;
-  imageDisplay.addEventListener("input", () => {
-    // Debounce input to avoid expensive operations on every keystroke
-    clearTimeout(imageInputTimeout);
-    imageInputTimeout = setTimeout(() => {
-      const next = imageDisplay.value.trim();
-      imageInput.value = next;
-      updateCaseNameFromPath(next);
-    }, 150);
-  });
-}
-
-if (caseNameInput) {
-  caseNameInput.addEventListener("input", () => {
-    if (caseNameInput.value.trim() !== autoCaseName) {
-      autoCaseName = "";
-    }
-  });
-}
-
 const runGroups = Array.from(document.querySelectorAll(".run-group"));
 runGroups.forEach((group) => {
   const toggle = group.querySelector(".run-group-toggle");
@@ -197,169 +38,131 @@ runResults.forEach((block) => {
   });
 });
 
-// Artifact management
-const artifactModal = document.getElementById("addArtifactModal");
-const artifactForm = document.getElementById("addArtifactForm");
-const artifactCaseIdInput = document.getElementById("artifactCaseId");
-const artifactPathInput = document.getElementById("artifactPath");
-const artifactTypeSelect = document.getElementById("artifactType");
-const artifactLabelInput = document.getElementById("artifactLabel");
-const closeArtifactModalBtn = document.getElementById("closeArtifactModal");
-const cancelArtifactBtn = document.getElementById("cancelArtifact");
-const browseArtifactBtn = document.getElementById("browseArtifact");
 
-let artifactBrowseMode = false;
-
-const toggleArtifactModal = (isOpen) => {
-  if (!artifactModal) return;
-  artifactModal.classList.toggle("open", isOpen);
-  artifactModal.setAttribute("aria-hidden", String(!isOpen));
-  if (!isOpen) {
-    artifactForm?.reset();
-    artifactCaseIdInput.value = "";
-  }
-};
-
-const openAddArtifactModal = (caseId) => {
-  if (!caseId) return;
-  artifactCaseIdInput.value = caseId;
-  toggleArtifactModal(true);
-};
-
-// Event delegation for add artifact buttons
-document.addEventListener("click", (event) => {
-  const addBtn = event.target.closest(".add-artifact-btn");
-  if (addBtn) {
-    const caseId = addBtn.dataset.caseId;
-    openAddArtifactModal(caseId);
-    return;
-  }
-
-  const removeBtn = event.target.closest(".artifact-remove");
-  if (removeBtn) {
-    event.stopPropagation();
-    const artifactId = removeBtn.dataset.artifactId;
-    const caseContainer = removeBtn.closest(".case-artifacts");
-    const caseId = caseContainer?.dataset.caseId;
-    if (artifactId && caseId) {
-      removeArtifact(caseId, artifactId, removeBtn.closest(".artifact-chip"));
-    }
-  }
-});
-
-if (closeArtifactModalBtn) {
-  closeArtifactModalBtn.addEventListener("click", () => toggleArtifactModal(false));
-}
-
-if (cancelArtifactBtn) {
-  cancelArtifactBtn.addEventListener("click", () => toggleArtifactModal(false));
-}
-
-// Browse for artifact path - reuse the existing drawer
-if (browseArtifactBtn && drawer) {
-  browseArtifactBtn.addEventListener("click", () => {
-    artifactBrowseMode = true;
-    toggleDrawer(true);
-    loadDirectory(currentPath);
+(() => {
+  const byId = id => document.getElementById(id);
+  const modal = byId('addArtifactModal'), form = byId('addArtifactForm');
+  const status = byId('intakeStatus'), progress = byId('intakeProgress');
+  const drawer = byId('browserDrawer');
+  let currentPath = '', busy = false, opener;
+  const stored = key => { try { return localStorage.getItem(key); } catch { return null; } };
+  const store = (key, value) => { try { if (value) localStorage.setItem(key, value); else localStorage.removeItem(key); } catch { /* Transfers still work without browser storage. */ } };
+  const json = async (url, options = {}) => {
+    const response = await fetch(url, options);
+    const value = await response.json();
+    if (!response.ok) throw new Error(value.error || `Request failed (${response.status})`);
+    return value;
+  };
+  const post = (url, data) => json(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
+  const methodChanged = () => {
+    const upload = byId('intakeMethod').value === 'upload';
+    byId('intakePathField').hidden = upload;
+    byId('intakeUploadFields').hidden = !upload;
+    byId('artifactPath').required = !upload;
+    byId('evidenceFiles').required = upload;
+  };
+  byId('intakeMethod').addEventListener('change', methodChanged);
+  byId('evidenceFiles').addEventListener('change', () => {
+    const files = [...byId('evidenceFiles').files], select = byId('intakePrimary');
+    select.replaceChildren(new Option('Collected directory', ''));
+    files.forEach((file, index) => select.add(new Option(`Primary file: ${file.name}`, String(index))));
+    select.value = files.length === 1 ? '0' : '';
+    byId('intakePrimaryField').hidden = files.length <= 1;
   });
-}
-
-// Override drawer item click when in artifact browse mode
-if (drawerList) {
-  const originalHandler = drawerList.onclick;
-  drawerList.addEventListener("click", (event) => {
-    if (!artifactBrowseMode) return;
-    const target = event.target.closest(".drawer-item");
-    if (!target) return;
-    const entryPath = target.dataset.path || "";
-    const entryType = target.dataset.type || "file";
-    if (entryType === "dir") {
-      loadDirectory(entryPath);
-      return;
+  const close = () => {
+    if (busy) return;
+    modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); opener?.focus();
+  };
+  byId('closeArtifactModal').addEventListener('click', close);
+  modal.addEventListener('keydown', event => {
+    if (event.key === 'Escape') close();
+    if (event.key !== 'Tab') return;
+    const controls = [...modal.querySelectorAll('button,input,select,textarea,summary')].filter(e => !e.disabled && e.getClientRects().length);
+    const first = controls[0], last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
+  document.addEventListener('click', async event => {
+    const add = event.target.closest('.add-artifact-btn');
+    if (add) {
+      opener = add; form.reset(); byId('artifactCaseId').value = add.dataset.caseId;
+      status.textContent = ''; progress.hidden = true; methodChanged();
+      modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); byId('intakeMethod').focus();
     }
-    if (artifactPathInput) {
-      artifactPathInput.value = entryPath;
+    const remove = event.target.closest('.artifact-remove');
+    if (remove && confirm('Retire this evidence from active casework? Its files and custody record will be retained.')) {
+      try {
+        await json(`/api/case/${remove.closest('.case-artifacts').dataset.caseId}/artifacts/${remove.dataset.artifactId}`, {method: 'DELETE'});
+        location.reload();
+      } catch (error) { alert(error.message); }
     }
-    artifactBrowseMode = false;
-    toggleDrawer(false);
-    event.stopPropagation();
-  }, true);
-}
-
-// Allow useManualPath in artifact browse mode
-if (useManualPath) {
-  const originalUseManual = useManualPath.onclick;
-  useManualPath.addEventListener("click", () => {
-    if (!artifactBrowseMode) return;
-    if (manualPath.value.trim() && artifactPathInput) {
-      artifactPathInput.value = manualPath.value.trim();
-      manualPath.value = "";
-      artifactBrowseMode = false;
-      toggleDrawer(false);
-    }
-  }, true);
-}
-
-// Submit artifact form
-if (artifactForm) {
-  artifactForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const caseId = artifactCaseIdInput?.value;
-    const path = artifactPathInput?.value?.trim();
-    const type = artifactTypeSelect?.value || "";
-    const label = artifactLabelInput?.value?.trim() || "";
-
-    if (!caseId || !path) return;
-
+  });
+  const toggleDrawer = open => { drawer.classList.toggle('open', open); drawer.setAttribute('aria-hidden', String(!open)); };
+  const choose = path => { byId('artifactPath').value = path; toggleDrawer(false); byId('artifactPath').focus(); };
+  const browse = async path => {
     try {
-      const response = await fetch(`/api/case/${caseId}/artifacts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, type, label }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        alert(data.error || "Failed to add artifact.");
-        return;
+      const data = await json(`/api/browse?path=${encodeURIComponent(path)}`);
+      currentPath = data.path; byId('currentPath').textContent = currentPath;
+      const list = byId('drawerList'); list.replaceChildren(); byId('drawerError').hidden = true;
+      const folder = document.createElement('button'); folder.type = 'button'; folder.className = 'drawer-item'; folder.textContent = 'Use this directory'; folder.addEventListener('click', () => choose(currentPath)); list.append(folder);
+      for (const entry of [...(data.parent ? [{path: data.parent, name: '..', type: 'dir'}] : []), ...data.entries]) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'drawer-item'; button.textContent = entry.name;
+        button.addEventListener('click', () => entry.type === 'dir' ? browse(entry.path) : choose(entry.path)); list.append(button);
       }
-      // Reload page to show new artifact
-      window.location.reload();
-    } catch (error) {
-      alert("Failed to add artifact: " + error.message);
-    }
-  });
-}
-
-const removeArtifact = async (caseId, artifactId, chipElement) => {
-  if (!confirm("Remove this artifact from the case?")) return;
-
-  try {
-    const response = await fetch(`/api/case/${caseId}/artifacts/${artifactId}`, {
-      method: "DELETE",
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      alert(data.error || "Failed to remove artifact.");
-      return;
-    }
-    // Remove the chip from DOM
-    if (chipElement) {
-      const group = chipElement.closest(".artifact-group");
-      chipElement.remove();
-      // If group is now empty, remove it too
-      if (group && !group.querySelector(".artifact-chip")) {
-        group.remove();
-      }
-      // If no more artifacts, show empty message
-      const container = document.querySelector(`.case-artifacts[data-case-id="${caseId}"]`);
-      if (container && !container.querySelector(".artifact-chip")) {
-        const groups = container.querySelector(".artifact-groups");
-        if (groups) {
-          groups.innerHTML = '<p class="case-empty artifacts-empty">No artifacts yet. Add evidence files to this case.</p>';
+    } catch (error) { byId('drawerError').textContent = error.message; byId('drawerError').hidden = false; }
+  };
+  byId('browseArtifact').addEventListener('click', () => { toggleDrawer(true); browse(currentPath); });
+  byId('closeBrowser').addEventListener('click', () => toggleDrawer(false));
+  byId('useManualPath').addEventListener('click', () => choose(byId('manualPath').value.trim()));
+  document.querySelectorAll('.path-chip').forEach(chip => chip.addEventListener('click', () => browse(chip.dataset.path)));
+  form.addEventListener('submit', async event => {
+    event.preventDefault(); if (busy) return;
+    const caseId = byId('artifactCaseId').value;
+    const info = {custodian: byId('intakeCustodian').value, label: byId('artifactLabel').value,
+      source: byId('intakeSource').value, notes: byId('intakeNotes').value, expected_sha256: byId('intakeHash').value};
+    busy = true;
+    const controls = [...form.querySelectorAll('input,select,textarea,button'), byId('closeArtifactModal')];
+    controls.forEach(control => control.disabled = true);
+    try {
+      let result;
+      if (byId('intakeMethod').value === 'path') {
+        status.textContent = 'Queueing evidence verification…';
+        result = await post(`/api/case/${caseId}/artifacts`, {path: byId('artifactPath').value, ...info});
+      } else {
+        const files = [...byId('evidenceFiles').files];
+        const primary = byId('intakePrimary').value === '' ? null : Number(byId('intakePrimary').value);
+        const spec = {files: files.map(file => ({name: file.name, size: file.size})), primary, metadata: info};
+        const storageKey = `sifted-upload:${caseId}:${JSON.stringify(spec)}`;
+        let session;
+        const saved = stored(storageKey);
+        if (saved) {
+          try { session = await json(`/api/case/${caseId}/uploads/${saved}`); } catch { store(storageKey, null); }
         }
+        if (!session || session.status === 'discarded') {
+          session = await post(`/api/case/${caseId}/uploads`, spec); store(storageKey, session.id);
+        }
+        const base = `/api/case/${caseId}/uploads/${session.id}`;
+        progress.hidden = false;
+        if (session.status === 'uploading') {
+          let sent = 0;
+          const total = files.reduce((n, file) => n + file.size, 0);
+          for (const [index, file] of files.entries()) {
+            // Replaying the prefix checks that a reselected file matches every
+            // byte already received; name and size alone never establish identity.
+            for (let offset = 0; offset < file.size; offset += session.chunk_bytes) {
+              const chunk = file.slice(offset, offset + session.chunk_bytes);
+              status.textContent = `Transferring ${file.name} · ${Math.floor(100 * sent / Math.max(total, 1))}%`;
+              await json(`${base}/${index}`, {method: 'PUT', headers: {'Upload-Offset': String(offset), 'Content-Type': 'application/octet-stream'}, body: chunk});
+              sent += chunk.size; progress.value = 100 * sent / Math.max(total, 1);
+            }
+          }
+        }
+        status.textContent = 'Transfer complete. Queueing verification…';
+        result = await post(`${base}/complete`, {}); store(storageKey, null);
       }
-    }
-  } catch (error) {
-    alert("Failed to remove artifact: " + error.message);
-  }
-};
+      location.href = `/case/${caseId}/workspace?input=e:${result.artifact.id}&tab=overview`;
+    } catch (error) {
+      status.textContent = `${error.message} You can retry; interrupted transfers resume with their received bytes checked.`;
+    } finally { busy = false; controls.forEach(control => control.disabled = false); }
+  });
+})();

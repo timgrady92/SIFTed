@@ -19,10 +19,27 @@
   let polling = false, needsRefresh = false, previewTimer, tabs = {};
   const state = () => JSON.parse(document.getElementById('workspaceState').textContent);
   const inputKey = () => state().input;
-  const savedKey = () => `sifted-workspace:${caseId}:${inputKey()}`;
+  const savedKey = () => `sifted-workspace:${caseId}:${inputKey()}:${state().memory_os || ''}`;
   const at = (attribute, value) => `[${attribute}="${CSS.escape(String(value))}"]`;
   const scopeKey = () => state().tab === 'derived' ? state().examine
-    : state().tab === 'triage' ? state().context : '';
+    : state().tab === 'triage' ? state().context
+    : state().tab === 'investigate' ? `${state().memory_os}:${state().memory_question}`
+    : state().tab === 'processes' ? `${state().memory_os}:${state().inventory}` : state().memory_os || '';
+  const canonical = value => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
+  function matchesAction(job, tool, values, specs = []) {
+    if (job.tool !== tool || job.payload?.source_path !== values.source_path) return false;
+    const actual = structuredClone(job.payload);
+    for (const spec of specs) {
+      const path = spec.path || [spec.name], name = path.at(-1);
+      if (path.reduce((obj, key) => obj?.[key], values) === undefined) {
+        const target = path.slice(0, -1).reduce((obj, key) => obj?.[key], actual);
+        if (target) delete target[name];
+      }
+    }
+    return Object.entries(values).filter(([key]) => !['case_id', 'source_path', 'output_path', 'workspace_input'].includes(key))
+      .every(([name, value]) => canonical(actual[name] ?? (name === 'tool_id' ? actual.parser_id : '') ?? '') === canonical(value ?? ''));
+  }
   function mountOperation() {
     const host = operation && view.querySelector(at('data-operation-slot', operation.slot));
     panel.hidden = !host || operation.dismissed || operation.tab !== state().tab || operation.scope !== scopeKey();
@@ -55,7 +72,7 @@
   function focusSelector(element) {
     if (!element || element === document.body) return null;
     if (element.id) return '#' + CSS.escape(element.id);
-    for (const name of ['data-inspect-entry', 'data-workspace-tab', 'data-examine', 'data-workspace-result']) {
+    for (const name of ['data-inspect-entry', 'data-process-row', 'data-workspace-tab', 'data-examine', 'data-workspace-result']) {
       if (element.hasAttribute(name)) return at(name, element.getAttribute(name));
     }
     if (element.dataset.workspaceTool) {
@@ -66,11 +83,11 @@
     return null;
   }
   function viewport() {
-    const anchor = [...view.querySelectorAll('[data-triage-entry], [data-operation-slot]')]
+    const anchor = [...view.querySelectorAll('[data-triage-entry], [data-process-entry], [data-operation-slot]')]
       .find(element => element.getBoundingClientRect().top <= 180 && element.getBoundingClientRect().bottom > 180);
     return {scroll: window.scrollY, focus: focusSelector(document.activeElement), operationFocus: panel.contains(document.activeElement),
-      anchor: anchor ? at(anchor.hasAttribute('data-triage-entry') ? 'data-triage-entry' : 'data-operation-slot',
-        anchor.dataset.triageEntry || anchor.dataset.operationSlot) : null,
+      anchor: anchor ? at(anchor.hasAttribute('data-triage-entry') ? 'data-triage-entry' : anchor.hasAttribute('data-process-entry') ? 'data-process-entry' : 'data-operation-slot',
+        anchor.dataset.triageEntry || anchor.dataset.processEntry || anchor.dataset.operationSlot) : null,
       top: anchor?.getBoundingClientRect().top,
       disclosures: new Map([...view.querySelectorAll('[data-disclosure]')].map(element => [element.dataset.disclosure, element.open]))};
   }
@@ -80,8 +97,8 @@
     try {
       const data = await json(endpoint('/view', url));
       if (version !== rendering) return false;
-      const previous = viewport(), previousTab = state().tab, previousInput = inputKey(), previousScope = scopeKey();
-      const draft = navigation.background && view.querySelector('#triageFilters');
+      const previous = viewport(), previousTab = state().tab, previousInput = inputKey(), previousScope = scopeKey(), previousOS = state().memory_os;
+      const draft = navigation.background && view.querySelector('#triageFilters, #memoryFilters');
       const draftValues = draft ? new FormData(draft) : null;
       const selection = draft?.contains(document.activeElement) && document.activeElement.tagName === 'INPUT'
         ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
@@ -97,6 +114,11 @@
         ++resultVersion;
         active.clear();
         loadTabs();
+      } else if (state().memory_os !== previousOS) {
+        operation = null;
+        ++previewVersion;
+        ++resultVersion;
+        loadTabs();
       }
       const sameView = previousInput === inputKey() && previousTab === state().tab && previousScope === scopeKey();
       if (sameView) for (const element of view.querySelectorAll('[data-disclosure]')) {
@@ -105,7 +127,7 @@
       mountOperation();
       seedActive(data.active);
       if (sameView && draftValues) for (const [name, value] of draftValues) {
-        const field = view.querySelector(`#triageFilters ${at('name', name)}`);
+        const field = view.querySelector(`#${draft.id} ${at('name', name)}`);
         if (field) field.value = value;
       }
       const focus = navigation.focus || (sameView ? previous.focus : null);
@@ -137,16 +159,16 @@
     if (tabBounds.right > bounds.right) bar.scrollLeft += tabBounds.right - bounds.right;
     else if (tabBounds.left < bounds.left) bar.scrollLeft -= bounds.left - tabBounds.left;
   }
-  async function navigate(url) {
+  async function navigate(url, navigation = {}) {
     saveTab();
     if (url.search !== location.search) url.searchParams.delete('run');
-    await render(url, 'push');
+    await render(url, 'push', navigation);
   }
   async function tab(name, changes = {}, focus = false) {
     saveTab();
     const url = new URL(location.href);
     const saved = new URLSearchParams(tabs[name]?.search || '');
-    for (const key of ['context_run_id', 'directory', 'q', 'kind', 'state', 'scope', 'offset', 'examine', 'entry', 'run']) {
+    for (const key of ['context_run_id', 'directory', 'q', 'kind', 'state', 'scope', 'offset', 'examine', 'entry', 'run', 'inventory_run_id', 'process_q', 'process_offset', 'process_row', 'memory_question']) {
       url.searchParams.delete(key);
       if (saved.has(key) && key !== 'run') url.searchParams.set(key, saved.get(key));
     }
@@ -157,11 +179,13 @@
     await render(url, 'push', {scroll: tabs[name]?.scroll, focus: focus ? `#tab-${name}` : null});
   }
   function payload() {
-    const data = {...operation.payload};
+    const data = structuredClone(operation.payload);
     for (const field of fields.querySelectorAll('[data-field]')) {
-      if (field.type === 'checkbox') data[field.dataset.field] = field.checked;
-      else if (field.value !== '') data[field.dataset.field] = field.dataset.valueType === 'number' ? Number(field.value) : field.value;
-      else delete data[field.dataset.field];
+      const path = JSON.parse(field.dataset.path), name = path.pop();
+      const target = path.reduce((obj, key) => obj[key] ??= {}, data);
+      if (field.type === 'checkbox') target[name] = field.checked;
+      else if (field.value !== '') target[name] = field.dataset.valueType === 'number' ? Number(field.value) : field.value;
+      else delete target[name];
     }
     return data;
   }
@@ -171,7 +195,10 @@
       const label = document.createElement('label');
       label.append(document.createTextNode(spec.label));
       const field = document.createElement(spec.type === 'select' ? 'select' : 'input');
+      field.setAttribute('aria-label', spec.label);
       field.dataset.field = spec.name;
+      field.dataset.path = JSON.stringify(spec.path || [spec.name]);
+      field.required = Boolean(spec.required);
       field.dataset.valueType = spec.type === 'number' || (spec.type === 'select' && spec.choices.some(([value]) => typeof value === 'number')) ? 'number' : 'text';
       if (spec.type === 'select') {
         for (const [value, text] of spec.choices) field.add(new Option(text, value));
@@ -179,7 +206,7 @@
       if (spec.min !== undefined) field.min = spec.min;
       if (spec.max !== undefined) field.max = spec.max;
       if (spec.placeholder) field.placeholder = spec.placeholder;
-      const value = values[spec.name] ?? spec.default;
+      const value = (spec.path || [spec.name]).reduce((obj, key) => obj?.[key], values) ?? spec.default;
       if (spec.type === 'checkbox') field.checked = Boolean(value); else field.value = value ?? '';
       label.append(field);
       fields.append(label);
@@ -191,6 +218,12 @@
     const version = ++previewVersion, target = operation;
     runButton.disabled = true;
     copyButton.disabled = true;
+    if ([...fields.querySelectorAll('[required]')].some(field => !field.checkValidity())) {
+      command.textContent = '';
+      operationStatus.textContent = 'Complete the required options to prepare this examination.';
+      operationStatus.dataset.tone = '';
+      return false;
+    }
     try {
       const data = await post(`/api/${target.tool}/preview`, payload());
       if (operation !== target || version !== previewVersion) return false;
@@ -241,15 +274,13 @@
     const row = button.closest('[data-triage-entry]');
     if (row) selectEntry(row.dataset.triageEntry);
     const values = JSON.parse(button.dataset.payload);
-    const existing = [...active.values()].find(job => job.tool === button.dataset.workspaceTool && job.input === inputKey()
-      && job.payload?.source_path === values.source_path
-      && ['offset_sector', 'sector_size', 'entry_id', 'directory_inode', 'tool_id'].every(name => (job.payload[name] ?? (name === 'tool_id' ? job.payload.parser_id : '') ?? '') === (values[name] ?? '')));
+    const existing = [...active.values()].find(job => job.input === inputKey() && matchesAction(job, button.dataset.workspaceTool, values, JSON.parse(button.dataset.fields || '[]')));
     if (existing) { await openResult(existing.runId, button); return; }
     operation = {tool: button.dataset.workspaceTool, payload: values,
-      label: button.dataset.label, ...placement(button)};
+      label: button.dataset.label, advance: button.dataset.advance === 'true', ...placement(button)};
     resetPanel(operation.label);
     buildFields(JSON.parse(button.dataset.fields || '[]'), operation.payload);
-    options.open = operation.tool.startsWith('blk') || operation.slot === 'disk-options';
+    options.open = operation.tool.startsWith('blk') || operation.slot === 'disk-options' || fields.querySelector('[required]') !== null;
     runButton.hidden = false;
     runButton.disabled = true;
     cancelButton.hidden = true;
@@ -294,10 +325,12 @@
       }
     }
   }
-  async function showResult(id, report = '') {
+  async function showResult(id, report = '', offset = 0, query = result.querySelector('[name="report_q"]')?.value || '') {
     const target = operation, version = ++resultVersion;
     const url = new URL(location.href);
     if (report) url.searchParams.set('report', report); else url.searchParams.delete('report');
+    url.searchParams.set('report_offset', offset);
+    url.searchParams.set('report_q', query);
     try {
       const data = await json(endpoint(`/run/${encodeURIComponent(id)}`, url));
       if (target !== operation || version !== resultVersion) return;
@@ -309,7 +342,8 @@
   }
   async function openResult(id, button) {
     const job = active.get(id);
-    operation = {...(job || {}), runId: id, ...placement(button)};
+    operation = {...(job || {}), runId: id, advance: button?.dataset.advance === 'true' || job?.advance, ...placement(button)};
+    if (job) active.set(id, operation);
     resetPanel('Recorded examination');
     fields.replaceChildren();
     options.hidden = true;
@@ -357,7 +391,7 @@
             cancelButton.hidden = true;
             operationStatus.textContent = data.status === 'success' ? 'Completed.' : `${data.status}: ${data.error || 'The job did not complete.'}`;
             operationStatus.dataset.tone = data.status === 'success' ? 'success' : 'error';
-            if (data.status === 'success' && (['mmls', 'fsstat', 'icat'].includes(job.tool) || (job.tool === 'fls' && !job.payload?.entry_id))) {
+            if (data.status === 'success' && (job.advance || ['mmls', 'fsstat', 'icat'].includes(job.tool) || (job.tool === 'fls' && !job.payload?.entry_id))) {
               operation.dismissed = true;
               const url = new URL(location.href); url.searchParams.delete('run'); history.replaceState(null, '', url);
             } else await showResult(id);
@@ -375,6 +409,25 @@
       const url = new URL(button.href);
       if (url.pathname !== location.pathname || url.origin !== location.origin || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       event.preventDefault(); void navigate(url);
+    } else if (button.dataset.verifyEvidence) {
+      button.disabled = true;
+      void (async () => {
+        try {
+          const response = await fetch(`/api/case/${caseId}/evidence/${button.dataset.verifyEvidence}/verify`, {method: 'POST'});
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error);
+          await render();
+        } catch (error) { announce(error.message, true); button.disabled = false; }
+      })();
+    } else if (button.hasAttribute('data-report-offset')) { void showResult(button.dataset.run, button.dataset.report, Number(button.dataset.reportOffset)); }
+    else if (button.hasAttribute('data-process-row') || button.hasAttribute('data-close-process') || button.hasAttribute('data-process-page')) {
+      const url = new URL(location.href);
+      url.searchParams.set('inventory_run_id', state().inventory);
+      url.searchParams.set('memory_os', state().memory_os);
+      url.searchParams.delete('process_row');
+      if (button.dataset.processRow) url.searchParams.set('process_row', button.dataset.processRow);
+      if (button.hasAttribute('data-process-page')) url.searchParams.set('process_offset', button.dataset.processPage);
+      void navigate(url, button.hasAttribute('data-close-process') ? {focus: at('data-process-row', button.dataset.closeProcess)} : {});
     } else if (button.dataset.inspectEntry) { void inspectEntry(button); }
     else if (button.dataset.closeEntry) {
       document.getElementById(`entry-${button.dataset.closeEntry}`).hidden = true;
@@ -403,8 +456,8 @@
       for (const key of ['directory', 'q', 'kind', 'state', 'scope', 'offset', 'entry', 'run']) url.searchParams.delete(key);
       if (event.target.value) url.searchParams.set('context_run_id', event.target.value); else url.searchParams.delete('context_run_id');
       void navigate(url);
-    } else if (event.target.matches('#triageFilters select')) event.target.form.requestSubmit();
-    else if (event.target.id === 'operationReport') void showResult(event.target.dataset.run, event.target.value);
+    } else if (event.target.matches('#triageFilters select, #memoryFilters select, #memoryContextForm select, #memoryQuestionForm select')) event.target.form.requestSubmit();
+    else if (event.target.id === 'operationReport') void showResult(event.target.dataset.run, event.target.value, 0, '');
   });
   fields.addEventListener('input', () => {
     ++previewVersion;
@@ -414,11 +467,30 @@
     previewTimer = setTimeout(() => { void preview(); }, 250);
   });
   root.addEventListener('submit', event => {
-    if (event.target.id === 'triageFilters') {
+    if (event.target.id === 'workspaceReportSearch') {
+      event.preventDefault();
+      void showResult(event.target.dataset.run, event.target.dataset.report, 0, new FormData(event.target).get('report_q'));
+    } else if (event.target.id === 'memoryQuestionForm') {
+      event.preventDefault();
+      const url = new URL(location.href);
+      url.searchParams.set('memory_os', state().memory_os);
+      url.searchParams.set('memory_question', new FormData(event.target).get('memory_question'));
+      void navigate(url);
+    } else if (event.target.id === 'triageFilters') {
       event.preventDefault();
       const url = new URL(location.href);
       for (const key of ['directory', 'q', 'kind', 'state', 'scope', 'offset', 'entry', 'run']) url.searchParams.delete(key);
       for (const [key, value] of new FormData(event.target)) url.searchParams.set(key, value);
+      void navigate(url);
+    } else if (event.target.id === 'memoryContextForm' || event.target.id === 'memoryFilters') {
+      event.preventDefault();
+      const url = new URL(location.href);
+      for (const name of ['process_q', 'process_offset', 'process_row', 'inventory_run_id', 'run']) url.searchParams.delete(name);
+      if (event.target.id === 'memoryFilters') {
+        url.searchParams.set('memory_os', state().memory_os);
+        url.searchParams.set('inventory_run_id', state().inventory);
+      }
+      for (const [key, value] of new FormData(event.target)) if (value) url.searchParams.set(key, value);
       void navigate(url);
     } else if (event.target.id === 'operationForm') {
       event.preventDefault();
@@ -468,6 +540,7 @@
   if (recordedRun) {
     const job = active.get(recordedRun), params = job?.payload || {};
     const source = view.querySelector(at('data-workspace-result', recordedRun))
+      || [...view.querySelectorAll('[data-workspace-tool]')].find(button => job && matchesAction(job, button.dataset.workspaceTool, JSON.parse(button.dataset.payload), JSON.parse(button.dataset.fields || '[]')))
       || view.querySelector('.triage-detail-row:not([hidden]) [data-entry-metadata-action]')
       || (job?.tool === 'mmls' ? view.querySelector('[data-operation-slot="disk-map"] button, [data-operation-slot="disk-options"] button') : null)
       || view.querySelector(`${at('data-operation-slot', `filesystem-${params.offset_sector}-${params.sector_size || 'auto'}`)} [data-workspace-tool]`)

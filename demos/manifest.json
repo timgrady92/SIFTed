@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "description": "Unmodified public forensic samples. Independent acquisitions, not a single case.",
+  "files": [
+    {
+      "path": "camera/nps-2009-canon2-gen6.E01",
+      "kind": "ewf",
+      "title": "Camera card: deleted and fragmented photographs",
+      "source": "https://digitalcorpora.s3.amazonaws.com/corpora/drives/nps-2009-canon2/nps-2009-canon2-gen6.E01",
+      "license": "NPS-public-domain",
+      "size_bytes": 31144390,
+      "sha256": "10483722d84e0cefcb693b11dea2d32dbd3ad2f06f8c9656688c8c730fe41579",
+      "modified": false
+    },
+    {
+      "path": "windows/Amcache.hve",
+      "kind": "registry",
+      "title": "Windows application inventory",
+      "source": "https://raw.githubusercontent.com/log2timeline/plaso/0f122c3878bdac3ff716b56f23988885675fea28/test_data/winreg/win10-Amcache.hve",
+      "license": "Apache-2.0",
+      "size_bytes": 524288,
+      "sha256": "4e574ac939d423947701302bc35d9a0da0b669a5fb86dbf8157a46c6f38f2c6d",
+      "modified": false
+    },
+    {
+      "path": "windows/System.evtx",
+      "kind": "evtx",
+      "title": "Windows service activity",
+      "source": "https://raw.githubusercontent.com/log2timeline/plaso/0f122c3878bdac3ff716b56f23988885675fea28/test_data/evtx/System.evtx",
+      "license": "Apache-2.0",
+      "size_bytes": 2166784,
+      "sha256": "d67fe3d1c56e0dcdd4c0d8d3512f74dd500cc2bff52686a0be52b182547e6470",
+      "modified": false
+    },
+    {
+      "path": "windows/f01b4d95cf55d32a.automaticDestinations-ms",
+      "kind": "jump_list",
+      "title": "Windows Explorer recent destinations",
+      "source": "https://raw.githubusercontent.com/EricZimmerman/JumpList/e87bacd4869cbe0633c16ad11d3d26c9f39d0a2b/JumpList.Test/TestFiles/Win10/f01b4d95cf55d32a.automaticDestinations-ms",
+      "license": "MIT",
+      "size_bytes": 9728,
+      "sha256": "a724713d2ff51d32e3f028c57ab906339f882de0c93dc9903f0f8b241c53fd56",
+      "modified": false
+    },
+    {
+      "path": "windows/NeroInfoTool.lnk",
+      "kind": "shortcut",
+      "title": "Windows program shortcut",
+      "source": "https://raw.githubusercontent.com/log2timeline/plaso/0f122c3878bdac3ff716b56f23988885675fea28/test_data/NeroInfoTool.lnk",
+      "license": "Apache-2.0",
+      "size_bytes": 2716,
+      "sha256": "186fd33109985cccb41a5fcc4fdc9d53b71d8d286e1b65b74dd9ad065a863fbb",
+      "modified": false
+    },
+    {
+      "path": "windows/$I103S5F.jpg",
+      "kind": "recycle_bin",
+      "title": "Deleted photograph metadata",
+      "source": "https://raw.githubusercontent.com/log2timeline/plaso/0f122c3878bdac3ff716b56f23988885675fea28/test_data/recycler/$I103S5F.jpg",
+      "license": "Apache-2.0",
+      "size_bytes": 104,
+      "sha256": "23c233e261b9b496f547dfc7447050fbae452dffbdd135a43d1bad31bc7b0df9",
+      "modified": false
+    },
+    {
+      "path": "browser/History",
+      "kind": "sqlite",
+      "title": "Chrome browsing and executable downloads",
+      "source": "https://raw.githubusercontent.com/log2timeline/plaso/0f122c3878bdac3ff716b56f23988885675fea28/test_data/chrome/History",
+      "license": "Apache-2.0",
+      "size_bytes": 79872,
+      "sha256": "c184fd5fdf72b75c26f8bb816619f04892e776ae6e2f5512f796d9807a12fbb3",
+      "modified": false
+    }
+  ],
+  "optional_memory": {
+    "source": "https://downloads.volatilityfoundation.org/volatility3/images/win-xp-laptop-2005-06-25.img.gz",
+    "compressed_sha256": "4cbdd5725adbb9505c8b3f4a51f0f042bac8dd53bf1dcc4b3bb7c71a6c8a74cd",
+    "sha256": "c4aeeb1b461378eef796944884d1d60adaa99cbae4d035923c144b08deee1e6e",
+    "size_bytes": 536715264,
+    "declared_type": "memory_dump",
+    "findings": {
+      "process_count": 47,
+      "explorer_pid": 1812
+    }
+  }
+}

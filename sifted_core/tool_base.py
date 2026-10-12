@@ -58,6 +58,7 @@ class Settings:
     volatility_symbols: str = field(default_factory=lambda: str(Path.home() / ".cache/sifted/volatility3/symbols"))
     scalpel_config: str = str(Path(__file__).with_name("carving_profiles.conf"))
     ez_root: str = "/opt/zimmermantools"
+    clamav_database: str = "/var/lib/clamav"
     binaries: dict = field(default_factory=dict)
     timeout_seconds: int = 14400
     max_output_bytes: int = 10 * 1024 ** 3
@@ -67,6 +68,7 @@ class Settings:
         self.output_roots = [normalize(p) for p in self.output_roots]
         self.symbol_roots = [normalize(p) for p in self.symbol_roots]
         self.volatility_symbols = normalize(self.volatility_symbols)
+        self.clamav_database = normalize(self.clamav_database)
         if not self.input_roots or not self.output_roots:
             raise ValidationError("Input and output roots must be explicitly configured.")
         if self.timeout_seconds < 1 or self.max_output_bytes < 1:
@@ -82,6 +84,7 @@ class Step:
     continue_on_error: bool = False
     max_stdout_bytes: int | None = None
     stderr: str | None = None
+    success_codes: list[int] = field(default_factory=lambda: [0])
 
 
 @dataclass
@@ -191,6 +194,9 @@ class ToolAdapter:
 
     def validate_execution(self, plan, settings):
         """Recheck tool-specific assumptions after a durable request leaves the queue."""
+
+    def validate_completion(self, plan, settings):
+        """Verify tool resources remained stable before successful publication."""
 
     def build(self, payload, source, output, settings, preview=False):
         raise NotImplementedError

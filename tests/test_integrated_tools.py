@@ -125,8 +125,14 @@ def test_derived_inputs_keep_producer_and_hash_with_separate_input_roots(integra
     run = execute(integrated, "xxd", case_id="case", source_path=source)
     record = repo.input(run["id"])
     assert record["source_run_id"] == extracted["id"]
+    root = repo.case("case")["artifacts"][0]
+    assert record["custody_evidence_id"] == root["id"]
+    events = repo.custody("case", root["id"])["events"]
+    assert any(event["event"] == "derived_input_verified" and event["details"]["run_id"] == run["id"] for event in events)
+    assert events[-1]["details"]["run_id"] == run["id"]
     assert record["baseline_sha256"] == hashlib.sha256(Path(source).read_bytes()).hexdigest()
     inputs = app.test_client().get("/api/case/case/inputs").json["inputs"]
+    assert not any(item["path"].endswith("xxd.txt") for item in inputs)
     assert any(item["path"] == source and item["source_run_id"] == extracted["id"] for item in inputs)
     with pytest.raises(ValidationError, match="outside allowed input"):
         compile_plan("xxd", {"source_path": source, "output_path": str(outputs / "wrong-case")}, settings, repo)

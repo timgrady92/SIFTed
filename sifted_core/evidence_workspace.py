@@ -7,11 +7,10 @@ from pathlib import Path
 import csv
 import hashlib
 from itertools import islice
-import subprocess
 
 from .catalog import EZ_TOOL_CATALOG
 from .tool_base import ValidationError, allowed, executable, normalize
-from .zimmerman import resolve_ez_tool, validate_file
+from .zimmerman import resolve_ez_tool
 
 
 SPECIALIZED = {
@@ -19,22 +18,15 @@ SPECIALIZED = {
     "jump_list": ("jlecmd",), "recycle_bin": ("rbcmd",),
     "recent_cache": ("recentfilecacheparser",), "sqlite": ("sqlecmd",),
 }
-LABELS = {
-    "unknown": "Unidentified content", "directory": "Collected directory",
-    "disk": "Disk image", "filesystem": "Filesystem image", "ewf": "EWF disk container",
-    "container": "Disk container (format unconfirmed)",
-    "memory": "Memory image", "registry": "Registry hive", "evtx": "Windows Event Log",
-    "mft": "NTFS master file table", "shortcut": "Windows shortcut", "jump_list": "Jump List",
-    "recycle_bin": "Recycle Bin metadata", "recent_cache": "RecentFileCache",
-    "sqlite": "SQLite database", "pdf": "PDF document", "text": "Text content",
-    "block": "Filesystem block sample",
-}
+from .evidence_profile import LABELS, profile, interpretation
+from .tool_base import signature
+from .integrity import IntegrityFailure
 
 
 def workspace_inputs(case, repository):
     """Keep original evidence and material outputs distinct from supporting reports."""
     values = [{**item, "key": "e:" + item["id"], "origin": "registered"}
-              for item in case.get("artifacts", [])]
+              for item in case.get("artifacts", []) if item.get("status") != "retired"]
     runs = {run["id"]: run for run in repository.runs(case_id=case["id"])}
     for item in repository.derived_inputs(case["id"]):
         run = runs[item["run_id"]]
@@ -68,103 +60,23 @@ def select_input(case, repository, key):
 
 
 def identify(item, settings):
-    """Read a bounded header, using native libmagic only for generic MIME hints."""
-    path = Path(normalize(item["path"]))
-    roots = settings.input_roots if item["origin"] == "registered" else settings.output_roots
-    observed = {"kind": "unknown", "label": LABELS["unknown"], "basis": "No recognized signature",
+    observed = {"kind": "unknown", "label": LABELS["unknown"], "basis": "Intake required",
                 "mime": None, "available": False, "note": ""}
-    if not allowed(str(path), roots):
-        observed["note"] = "Evidence is outside the configured roots."
-        return observed
-    if not path.is_file() and not path.is_dir():
-        observed["note"] = "Evidence is missing or is no longer a regular file or directory."
-        return observed
-    observed["available"] = True
-    if path.is_dir():
-        observed.update(kind="directory", label=LABELS["directory"], basis="Directory on disk")
-        return observed
+    roots = settings.input_roots if item["origin"] == "registered" else settings.output_roots
+    path = item["path"]
+    if not allowed(path, roots):
+        return {**observed, "note": "Evidence is outside the configured roots."}
     try:
-        with path.open("rb") as handle:
-            header = handle.read(8192)
-        kind = "unknown"
-        if item.get("artifact_kind") == "filesystem_block_sample":
-            kind = "block"
-            observed["basis"] = "Producing run: raw filesystem data units"
-        elif header.startswith((b"EVF\x09\x0d\x0a\xff\x00", b"EVF2\x0d\x0a\x81\x00")):
-            kind = "ewf"
-        elif header.startswith(b"regf") and len(header) >= 512:
-            kind = "registry"
-            observed["registry_identity"] = header[48:112].decode("utf-16-le", errors="ignore").strip("\0")
-        elif header.startswith(b"SQLite format 3\0"):
-            kind = "sqlite"
-        elif b"%PDF-" in header[:1024]:
-            kind = "pdf"
-        elif header.startswith((b"PAGEDUMP", b"PAGEDU64", b"EMiL")):
-            kind = "memory"
-        else:
-            candidates = []
-            if header.startswith(b"ElfFile\0"):
-                candidates.append(("evtx", "evtxecmd"))
-            if header.startswith(b"FILE"):
-                candidates.append(("mft", "mftecmd"))
-            if header.startswith(bytes.fromhex("4c0000000114020000000000c000000000000046")):
-                candidates.append(("shortcut", "lecmd"))
-            if path.name.casefold().endswith((".automaticdestinations-ms", ".customdestinations-ms")):
-                candidates.append(("jump_list", "jlecmd"))
-            if header.startswith(b"\xfe\xff\xee\xff"):
-                candidates.append(("recent_cache", "recentfilecacheparser"))
-            if path.name.casefold().startswith("$i") or path.name.casefold() == "info2":
-                candidates.append(("recycle_bin", "rbcmd"))
-            for detected, parser in candidates:
-                try:
-                    validate_file(parser, path)
-                    kind = detected
-                    break
-                except ValidationError:
-                    pass
-            if kind == "unknown":
-                # A GPT header or plausible populated MBR partition table is a
-                # recommendation hint; Sleuth Kit still validates the image.
-                mbr = len(header) >= 512 and header[510:512] == b"\x55\xaa" and any(
-                    header[pos + 4] and int.from_bytes(header[pos + 12:pos + 16], "little")
-                    for pos in range(446, 510, 16)
-                )
-                if header[512:520] == b"EFI PART" or header[4096:4104] == b"EFI PART" or mbr:
-                    kind = "disk"
-                elif header[1080:1082] == b"\x53\xef" or header.startswith(b"XFSB") or header[3:11] == b"NTFS    ":
-                    kind = "filesystem"
-        if kind != "unknown" and kind != "block":
-            observed["basis"] = "Content signature (bounded header check)"
-        declared = item.get("type", "other")
-        if kind == "unknown" and declared == "disk_image" and path.suffix.casefold() in {".e01", ".ex01", ".aff", ".dmg"}:
-            kind = "container"
-            observed["basis"] = "Filename suggests a container; native tools must validate its format"
-        if kind == "unknown" and declared in {"disk_image", "memory_dump"}:
-            kind = "disk" if declared == "disk_image" else "memory"
-            observed["basis"] = "Analyst selection" if item.get("type_basis") == "analyst" else "Registered filename hint; confirm the evidence type"
-        if kind == "unknown":
-            try:
-                prefix = executable("filetype", ["file"], settings)
-                result = subprocess.run([*prefix, "-b", "--mime-type", "--", str(path)],
-                                        capture_output=True, timeout=3, check=True)
-                mime = result.stdout[:512].decode("utf-8", errors="replace").strip()
-                observed["mime"] = mime
-                if mime.startswith("text/") or mime in {"application/json", "application/xml"}:
-                    kind = "text"
-                    observed["basis"] = "Native file / libmagic MIME identification"
-            except (ValidationError, OSError, subprocess.SubprocessError):
-                pass
-        observed.update(kind=kind, label=LABELS[kind])
-        if kind == "unknown":
-            observed["note"] = "Raw bytes can represent disk or memory. Choose a type when you know the acquisition context."
-        elif declared in {"disk_image", "memory_dump", "registry", "event_log"}:
-            expected = {"disk_image": {"disk", "filesystem", "ewf", "container"}, "memory_dump": {"memory"},
-                        "registry": {"registry"}, "event_log": {"evtx"}}[declared]
-            if kind not in expected:
-                observed["note"] = "Observed content differs from the registered type. Actions follow the observed content."
-    except OSError:
-        observed.update(available=False, note="Unable to read evidence.")
-    return observed
+        if item["origin"] == "registered":
+            if item.get("status") != "ready":
+                return {**observed, "note": "Evidence intake: " + item.get("status", "needs_intake") + ". Verify evidence before analysis."}
+            observed = interpretation(item, item["profile"])
+            if signature(path) != item["profile"]["signature"]:
+                return {**observed, "available": False, "note": "Evidence has changed since verification. Reverify it before analysis."}
+            return observed
+        return interpretation(item, profile(path, settings))
+    except (OSError, ValueError, IntegrityFailure):
+        return {**observed, "available": False, "note": "Evidence is missing, unreadable, or changed."}
 
 
 def resolve_actions(item, observed, settings, runs, context=None):
@@ -180,14 +92,16 @@ def resolve_actions(item, observed, settings, runs, context=None):
     if kind != "directory":
         add("xxd", "Inspect bytes", "Read a bounded hexadecimal sample.", recommended=kind in {"unknown", "block"})
         add("strings", "Extract strings", "Find printable strings and their byte offsets.", recommended=kind in {"unknown", "block", "memory"})
-    if kind not in {"block", "ewf", "container"}:
+    if kind not in {"block", "ewf"}:
         add("exiftool", "Read embedded metadata", "Inspect fields reported by ExifTool.", recommended=kind == "pdf")
+    if kind != 'directory' and item.get('artifact_kind') in {'extracted_file', 'carved_file'}:
+        add('clamscan', 'Check local malware signatures', 'Compare captured bytes with the installed ClamAV signatures; no matches do not establish safety.')
     if kind == "text":
         add("head", "Read text", "Read up to 64 KiB.", recommended=True)
     if kind == "pdf":
         add("pdfinfo", "Read PDF properties", "Inspect document properties and security flags.", recommended=True)
         add("pdftotext", "Extract PDF text", "Extract the first five pages of available text.", recommended=True)
-    if kind in {"disk", "filesystem", "ewf", "container"}:
+    if kind in {"disk", "filesystem", "ewf"}:
         add("mmls", "Map partitions", "Locate partition starts in disk sectors.", "structure", recommended=kind != "filesystem" and not context)
         params = {k: context["plan"]["parameters"][k] for k in ("offset_sector", "sector_size")
                   if context and k in context["plan"]["parameters"]}
@@ -208,10 +122,10 @@ def resolve_actions(item, observed, settings, runs, context=None):
     parsers = list(SPECIALIZED.get(kind, ()))
     if kind == "registry":
         parsers = ["recmd"]
-        identity = Path(item["path"]).name.casefold() + " " + observed.get("registry_identity", "").casefold()
+        identity = observed.get("registry_identity", "").casefold()
         if "amcache" in identity:
             parsers.append("amcacheparser")
-        if Path(item["path"]).name.casefold() == "system" or observed.get("registry_identity", "").casefold().endswith("system"):
+        if identity.endswith("system"):
             parsers.append("appcompatcacheparser")
     if kind == "directory":
         parsers = [tool for tool, spec in EZ_TOOL_CATALOG.items() if spec["input_mode"] != "file"]
@@ -234,6 +148,9 @@ def resolve_actions(item, observed, settings, runs, context=None):
                               "filetype": ["file"], "artifact-triage": ["log2timeline.py", "log2timeline"]}
                 native_id = "volatility" if action["tool"] == "volatility" else "log2timeline" if action["tool"] == "artifact-triage" else action["tool"]
                 executable(native_id, candidates.get(action["tool"], [action["tool"]]), settings)
+                if action['tool'] == 'clamscan':
+                    from .clamav import databases
+                    databases(settings)
                 if action["tool"] == "volatility":
                     from . import volatility
                     if not volatility.discover(settings)["plugins"]:

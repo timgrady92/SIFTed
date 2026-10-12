@@ -12,8 +12,7 @@ from .carving import available_types
 from .tool_base import ValidationError
 from .catalog import EZ_TOOL_ORDER
 from .context import runtime_repository, runtime_settings
-from .presentation import ARTIFACT_TYPES, detect_artifact_type, EZ_CATEGORIES
-from .worker import ExecutionFailure, hash_file
+from .presentation import ARTIFACT_TYPES, EZ_CATEGORIES
 from .workflow_catalog import WORKFLOWS, CATEGORIES
 from .tool_base import executable
 from .viewers import read_text_preview, parse_csv_table, parse_strings_table, parse_carving_audit, parse_bulk_extractor_feature, detect_text_table_format, parse_json_table
@@ -36,10 +35,6 @@ def build_run_manifest(run, limit="configured"):
     files = [entry for entry in runtime_repository().artifacts(run["id"])
              if is_path_allowed(entry["path"], runtime_settings().output_roots) and os.path.isfile(entry["path"])]
     return (files if limit is None else files[:limit]), limit is not None and len(files) > limit
-
-
-def compute_sha256(path):
-    return hash_file(path)[0]
 
 
 def error_response(message, status=400):
@@ -298,26 +293,12 @@ def scalpel():
 def cases():
     if request.method == "POST":
         name = request.form.get("name", "").strip() or "Untitled case"
-        source = request.form.get("source_path", "").strip()
-        artifacts = []
+        if request.form.keys() - {"name", "summary"}:
+            return error_response("Create the case, then use Add evidence for every intake.")
         created_at = datetime.now(timezone.utc).isoformat()
-        if source:
-            source = normalize_path(source)
-            if not is_path_allowed(source, runtime_settings().input_roots):
-                return error_response("Evidence path is outside allowed input roots.", 403)
-            if not os.path.isfile(source):
-                return error_response("Initial evidence must be an existing regular file.")
-            try:
-                digest = compute_sha256(source)
-            except (OSError, ExecutionFailure):
-                return error_response("Unable to hash stable evidence.")
-            artifacts.append({"id": uuid.uuid4().hex, "type": detect_artifact_type(source),
-                              "type_basis": "filename_hint",
-                              "path": source, "label": os.path.basename(source), "hash": digest,
-                              "added_at": created_at})
         runtime_repository().add_case({"id": uuid.uuid4().hex, "name": name,
             "summary": request.form.get("summary", "").strip(), "slug": slugify(name),
-            "created_at": created_at, "artifacts": artifacts})
+            "created_at": created_at, "artifacts": []})
         return redirect(url_for("web.cases"))
 
     cases = load_cases()
@@ -436,104 +417,12 @@ def case_inputs(case_id):
     case = runtime_repository().case(case_id)
     if not case:
         return error_response("Case not found.", 404)
-    values = list(case.get("artifacts", []))
-    for entry in runtime_repository().derived_inputs(case_id):
-        if not is_path_allowed(entry["path"], runtime_settings().output_roots) or not os.path.isfile(entry["path"]):
-            continue
-        values.append({"id": entry["id"], "path": entry["path"], "hash": entry["sha256"], "type": "derived_file",
-                       "label": entry["name"], "source_run_id": entry["run_id"]})
+    from .evidence_workspace import workspace_inputs
+    values = [item for item in workspace_inputs(case, runtime_repository())
+              if (item["origin"] == "derived" or item.get("status") == "ready")
+              and is_path_allowed(item["path"], runtime_settings().output_roots if item["origin"] == "derived" else runtime_settings().input_roots)
+              and (os.path.isfile(item["path"]) or os.path.isdir(item["path"]))]
     return jsonify(inputs=values)
-
-
-@web.route("/api/case/<case_id>/artifacts", methods=["POST"])
-def add_artifact(case_id):
-    """Add an artifact to a case."""
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict) or any(not isinstance(payload.get(key, ""), str) for key in ("path", "type", "label")):
-        return error_response("Artifact request must contain text fields in a JSON object.")
-    artifact_path = payload.get("path", "").strip()
-    artifact_type = payload.get("type", "").strip()
-    label = payload.get("label", "").strip()
-
-    if not artifact_path:
-        return jsonify({"error": "Artifact path is required."}), 400
-
-    normalized_path = normalize_path(artifact_path)
-    if not is_path_allowed(normalized_path, runtime_settings().input_roots):
-        return jsonify({"error": "Artifact path is outside allowed input roots."}), 403
-    if not (os.path.isfile(normalized_path) or os.path.isdir(normalized_path)):
-        return jsonify({"error": "Artifact path not found."}), 400
-
-    cases = load_cases()
-    case = None
-    for c in cases:
-        if c.get("id") == case_id:
-            case = c
-            break
-
-    if not case:
-        return jsonify({"error": "Case not found."}), 404
-
-    type_basis = "analyst" if artifact_type else "filename_hint"
-    # Auto-detect type if not provided
-    if not artifact_type:
-        artifact_type = detect_artifact_type(normalized_path)
-
-    if artifact_type not in ARTIFACT_TYPES:
-        return error_response("Unsupported artifact type.")
-
-    # Use filename as label if not provided
-    if not label:
-        label = os.path.basename(normalized_path)
-
-    # Compute hash for the artifact
-    artifact_hash = ""
-    if os.path.isfile(normalized_path):
-        try:
-            artifact_hash = compute_sha256(normalized_path)
-        except (OSError, ExecutionFailure):
-            return jsonify({"error": "Unable to hash a stable artifact."}), 400
-
-    artifact = {
-        "id": uuid.uuid4().hex,
-        "type": artifact_type,
-        "type_basis": type_basis,
-        "path": normalized_path,
-        "label": label,
-        "hash": artifact_hash,
-        "added_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-    def append_artifact(current):
-        current.setdefault("artifacts", []).append(artifact)
-
-    runtime_repository().mutate_case(case_id, append_artifact)
-    return jsonify({"success": True, "artifact": artifact})
-
-
-@web.route("/api/case/<case_id>/artifacts/<artifact_id>", methods=["DELETE"])
-def remove_artifact(case_id, artifact_id):
-    """Remove an artifact from a case."""
-    cases = load_cases()
-    case = None
-    for c in cases:
-        if c.get("id") == case_id:
-            case = c
-            break
-
-    if not case:
-        return jsonify({"error": "Case not found."}), 404
-
-    artifacts = case.get("artifacts", [])
-    original_count = len(artifacts)
-    case["artifacts"] = [a for a in artifacts if a.get("id") != artifact_id]
-
-    if len(case["artifacts"]) == original_count:
-        return jsonify({"error": "Artifact not found."}), 404
-
-    runtime_repository().mutate_case(case_id, lambda current: current.update(
-        artifacts=[a for a in current.get("artifacts", []) if a.get("id") != artifact_id]))
-    return jsonify({"success": True})
 
 
 @web.route("/api/artifact-types")

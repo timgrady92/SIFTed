@@ -50,7 +50,7 @@ else: print("0 forensic strings")
 
 def enqueue(repo, plan, input_record, case_id=None):
     run = {"id": uuid.uuid4().hex, "tool": plan.tool, "status": "queued", "case_id": case_id,
-           "created_at": utc_now(), "output_path": plan.output_path, "log_path": plan.output_path + ".log", "plan": plan.to_dict()}
+           "created_at": utc_now(), "source_path": plan.source, "output_path": plan.output_path, "log_path": plan.output_path + ".log", "plan": plan.to_dict()}
     repo.enqueue(run, input_record)
     return run
 

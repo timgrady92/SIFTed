@@ -1,57 +1,31 @@
 """Evidence types and curated workflow bundles for the interface."""
-import os
 
 ARTIFACT_TYPES = {
     "disk_image": {
         "label": "Disk Image",
-        "extensions": [".dd", ".raw", ".e01", ".ex01", ".aff", ".img", ".dmg"],
         "icon": "disk",
     },
     "memory_dump": {
         "label": "Memory Dump",
-        "extensions": [".raw", ".mem", ".vmem", ".dmp", ".lime", ".core"],
         "icon": "memory",
     },
     "registry": {
         "label": "Registry Hive",
-        "extensions": [],
-        "names": ["SYSTEM", "SOFTWARE", "SAM", "SECURITY", "NTUSER.DAT", "UsrClass.dat"],
         "icon": "registry",
     },
     "event_log": {
         "label": "Event Log",
-        "extensions": [".evtx", ".evt"],
         "icon": "log",
     },
     "artifact_file": {
         "label": "Artifact File",
-        "extensions": [".pf", ".lnk", ".db", ".sqlite", ".dat"],
         "icon": "file",
     },
     "other": {
         "label": "Other",
-        "extensions": [],
         "icon": "generic",
     },
 }
-
-
-def detect_artifact_type(path):
-    """Auto-detect artifact type from file extension or name."""
-    if not path:
-        return "other"
-    basename = os.path.basename(path)
-    basename_upper = basename.upper()
-    ext = os.path.splitext(path)[1].lower()
-
-    # Check registry hives by name first (they often have no extension)
-    registry_info = ARTIFACT_TYPES.get("registry", {})
-    for name in registry_info.get("names", []):
-        if basename_upper == name.upper() or basename_upper.endswith(name.upper()):
-            return "registry"
-
-    matches = [key for key, info in ARTIFACT_TYPES.items() if ext in info.get("extensions", [])]
-    return matches[0] if len(matches) == 1 else "other"
 
 
 EZ_CATEGORIES = [

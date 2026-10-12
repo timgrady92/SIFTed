@@ -6,7 +6,6 @@ import pytest
 from app import create_app
 from sifted_core.context import runtime_repository
 from sifted_core.evidence_workspace import identify, select_input
-from sifted_core.presentation import detect_artifact_type
 from sifted_core.worker import Worker
 from test_integrated_tools import integrated as integrated
 from test_zimmerman import zimmerman_runtime as zimmerman_runtime, input_for
@@ -16,7 +15,10 @@ def register(client, repo, path, kind=None):
     client.post('/cases', data={'name': 'Workspace case'})
     case = repo.cases()[-1]
     response = client.post(f"/api/case/{case['id']}/artifacts", json={'path': str(path), **({'type': kind} if kind else {})})
-    assert response.status_code == 200, response.json
+    assert response.status_code == 202, response.json
+    while repo.run(response.json['run_id'])['status'] == 'queued':
+        Worker(repo, client.application.config['SETTINGS']).run_once()
+    assert repo.run(response.json['run_id'])['status'] == 'success', repo.run(response.json['run_id']).get('error')
     return case['id'], 'e:' + response.json['artifact']['id']
 
 
@@ -61,9 +63,10 @@ def test_raw_is_ambiguous_until_analyst_classifies_it(workspace_runtime):
     app, client, repo, settings, source, outputs, case, key = workspace_runtime
     raw = source.parent/'memory.raw'
     raw.write_bytes(b'\0' * 1024)
-    assert detect_artifact_type(str(raw)) == 'other'
     response = client.post(f'/api/case/{case}/artifacts', json={'path': str(raw)})
-    item = response.json['artifact']
+    assert response.status_code == 202
+    Worker(repo, settings).run_once()
+    item = repo.case(case)['artifacts'][-1]
     key = 'e:' + item['id']
     initial = view(client, case, key)
     assert initial['observed']['kind'] == 'unknown'
@@ -77,12 +80,16 @@ def test_raw_is_ambiguous_until_analyst_classifies_it(workspace_runtime):
 
 def test_content_overrides_misleading_extension_and_declared_type(workspace_runtime):
     app, client, repo, settings, source, outputs, case, key = workspace_runtime
-    source.write_bytes(b'%PDF-1.7\nknown document')
+    misleading = source.parent / 'photo.E01'
+    misleading.write_bytes(b'%PDF-1.7\nknown document')
+    case, key = register(client, repo, misleading, 'disk_image')
     result = view(client, case, key)
     assert result['observed']['kind'] == 'pdf'
     ids = {a['id'] for a in result['actions']}
     assert {'pdfinfo', 'pdftotext'} <= ids and 'mmls' not in ids
     assert 'differs' in result['observed']['note']
+    misleading.write_bytes(b'replaced evidence')
+    assert not view(client, case, key)['observed']['available']
 
 
 def test_disabled_missing_tools_and_missing_evidence(workspace_runtime):
@@ -105,7 +112,7 @@ def test_workspace_selection_and_submission_cannot_cross_cases(workspace_runtime
     data['case_id'] = case
     data['source_path'] = str(source.parent/'different.bin')
     assert client.post('/api/xxd/run', json=data).status_code == 400
-    assert repo.runs() == []
+    assert all(run['tool'] == 'evidence-intake' for run in repo.runs())
 
 
 def test_guided_partition_inventory_extraction_and_result_reuse(workspace_runtime):
@@ -155,7 +162,7 @@ def test_guided_partition_inventory_extraction_and_result_reuse(workspace_runtim
     assert response.status_code == 202, response.json
     worker.run_once()
     assert repo.input(response.json['run_id'])['source_run_id'] == derived[0]['source_run_id']
-    assert len(repo.runs()) == 4
+    assert len(repo.runs()) == 5
     assert all(r['status'] == 'success' for r in repo.runs())
     assert not any(x['label'].endswith('.csv') for x in derived)
 
@@ -200,7 +207,7 @@ def test_completed_basic_examinations_reopen_without_reexecuting(workspace_runti
     assert action['result_run_id'] == created.json['run_id']
     page = client.get(f'/api/case/{case}/workspace/run/{action["result_run_id"]}', query_string={'input': key})
     assert page.status_code == 200 and 'xxd.txt' in page.json['html'] and '00000000' in page.json['html']
-    assert len(repo.runs()) == 1
+    assert len(repo.runs()) == 2
 
 
 def test_outside_input_is_never_opened(workspace_runtime, monkeypatch):
@@ -317,4 +324,4 @@ def test_inline_fragments_and_invalid_captured_file_do_not_enqueue(workspace_run
         response = client.get(f'/api/case/{case}/workspace/view', query_string={'input': key, 'tab': tab})
         assert response.status_code == 200 and response.json['html'] and response.json['active'] == []
     assert client.get(f'/api/case/{case}/workspace/view', query_string={'input': key, 'tab': 'derived', 'examine': 'd:999'}).status_code == 400
-    assert repo.runs() == []
+    assert all(run['tool'] == 'evidence-intake' for run in repo.runs())

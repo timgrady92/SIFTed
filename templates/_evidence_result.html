@@ -4,6 +4,16 @@
 {% if captured %}<div class="tool-actions">{% for item in captured %}<button class="action" type="button" data-examine="{{ item.key }}">Examine {{ item.label }}</button>{% endfor %}</div>{% endif %}
 {% if reports %}
 {% if reports|length > 1 %}<label>Report<select id="operationReport" data-run="{{ run.id }}">{% for item in reports %}<option value="{{ item.name }}" {% if report == item.name %}selected{% endif %}>{{ item.name }}</option>{% endfor %}</select></label>{% else %}<p class="helper">{{ report }}</p>{% endif %}
-<pre class="workspace-report">{{ content }}</pre>{% if truncated %}<p class="helper">Showing the first 128 KiB. The complete report is available below.</p>{% endif %}
-<details><summary>Complete reports and provenance</summary>{% for item in reports %}<p><a target="_blank" rel="noopener" href="{{ url_for('web.view_file', path=item.path) }}">{{ item.name }}</a></p>{% endfor %}<p><a target="_blank" rel="noopener" href="{{ url_for('web.run_log',run_id=run.id) }}">Execution log</a></p><p>Run {{ run.id }}</p><p>{{ run.source_path }}</p><p>{{ run.output_path }}</p></details>
-{% elif run.status == 'success' %}<p>Captured content is available in Derived files.</p>{% endif %}
+{% if table %}
+<form id="workspaceReportSearch" class="triage-search" data-run="{{ run.id }}" data-report="{{ report }}"><label>Search this report<input type="search" name="report_q" maxlength="256" value="{{ table.query }}" /></label><button class="ghost" type="submit">Search report</button></form>
+<p class="helper">{{ table.total }} rows{% if table.rows %} · Showing {{ table.offset + 1 }}–{{ table.offset + table.rows|length }}{% endif %}</p>
+<div class="workspace-table-scroll"><table class="workspace-result-table"><thead><tr>
+{% for column in table.columns %}<th>{{ column }}</th>{% endfor %}
+</tr></thead><tbody>
+{% for row in table.rows %}<tr>{% for column in table.columns %}<td{% if row['values'].get(column) is number %} class="workspace-number"{% endif %}>{% if column == 'PID' and row.process_url %}<a data-workspace-link href="{{ row.process_url }}" aria-label="Review PID {{ row['values'].PID }}">{{ row['values'].PID }}</a>{% else %}{{ row['values'].get(column, '') }}{% endif %}</td>{% endfor %}</tr>
+{% else %}<tr><td colspan="{{ [1,table.columns|length]|max }}">No rows returned.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="tool-actions">{% if table.offset %}<button class="ghost" type="button" data-report-offset="{{ [0,table.offset - 50]|max }}" data-run="{{ run.id }}" data-report="{{ report }}">Previous rows</button>{% endif %}{% if table.more %}<button class="ghost" type="button" data-report-offset="{{ table.offset + 50 }}" data-run="{{ run.id }}" data-report="{{ report }}">Next rows</button>{% endif %}</div>
+{% else %}<pre class="workspace-report">{{ content }}</pre>{% if truncated %}<p class="helper">Showing the first 128 KiB. The complete report is available below.</p>{% endif %}{% endif %}
+<details><summary>Complete reports and provenance</summary>{% for item in complete_reports %}<p><a target="_blank" rel="noopener" href="{{ url_for('web.view_file', path=item.path) }}">{{ item.name }}</a></p>{% endfor %}<p><a target="_blank" rel="noopener" href="{{ url_for('web.run_log',run_id=run.id) }}">Execution log</a></p><p>Run {{ run.id }}</p><p>{{ run.source_path }}</p><p>{{ run.output_path }}</p></details>
+{% elif run.status == 'success' %}<p>Captured content is available in Derived files.</p>{% else %}<p><a target="_blank" rel="noopener" href="{{ url_for('web.run_log',run_id=run.id) }}">Execution log</a></p>{% endif %}

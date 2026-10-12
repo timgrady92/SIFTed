@@ -18,7 +18,7 @@ Validation used the connected SIFT workstation's existing `/opt/zimmermantools` 
 | EvtxECmd | 1.5.2.0 | 5,009 events; known event ID, timestamp, channel and installed map enrichment |
 | MFTECmd | 1.3.0.0 | Known $MFT record extracted by native `icat` from a generated NTFS image |
 | RECmd | 2.1.0.0 | 4,157 ASEP rows; genuine transaction-log replay and plugin tables; completed empty batch |
-| SQLECmd maps | SIFTed executor 1 | Installed Firefox map returns an independently known form-history record and UTC time |
+| SQLECmd maps | SIFTed executor 1 | Installed Chromium keyword map returns three known searches from the bundled public History database |
 
 Discovery probes actual assemblies with `-h`, checks the required command interface and parser resources, and records version and executable hashes. Queued runs reject changed installations. `SIFTED_BINARIES` can provide explicit native executable prefixes; ambiguous assemblies require an explicit prefix. SIFT's shell wrappers are not execution paths. `SIFTED_EZ_ROOT` defaults to `/opt/zimmermantools`.
 
@@ -40,7 +40,7 @@ SQLite connections use read-only URI mode, query-only mode and an authorizer tha
 
 ## Reproduce the checks
 
-The native tests never download evidence. Small shortcuts, custom lists, Recycle Bin records and RecentFileCache records are generated with independently specified expected values. Public hives, logs, events and automatic lists remain outside the repository. Download the pinned upstream corpus from the repository root:
+The native tests never download evidence. The [demo corpus](../demos/README.md) bundles selected public artifacts and exercises them through upload and intake. Small generated unit fixtures still test malformed input, Unicode fields and failure behavior. Additional hives and transaction logs for the broader native suite are downloaded separately. Download that pinned upstream corpus from the repository root:
 
 ```python
 import hashlib

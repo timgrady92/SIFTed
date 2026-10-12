@@ -22,12 +22,12 @@
 
     <main class="carving">
       <section class="start-here">
-        <p class="helper">Memory analysis answers questions disk forensics can't:</p>
+        <p class="helper">Use memory observations to guide and corroborate the investigation:</p>
         <ul class="scenario-list">
-          <li><strong>What processes were running?</strong> — Including hidden or injected code</li>
-          <li><strong>What network connections were active?</strong> — Even after they've closed</li>
-          <li><strong>What commands were typed?</strong> — Command history from running shells</li>
-          <li><strong>What was in memory but never saved to disk?</strong> — Malware, decrypted data, credentials</li>
+          <li><strong>Which processes need closer examination?</strong> Compare parents, timestamps, command lines and loaded objects.</li>
+          <li><strong>What network state was captured?</strong> Review endpoints and ownership, including possible stale records.</li>
+          <li><strong>Do memory regions and kernel structures agree?</strong> Investigate differences with process and acquisition context.</li>
+          <li><strong>What can be recovered for examination?</strong> Capture selected objects and corroborate them with disk artifacts and logs.</li>
         </ul>
       </section>
 
@@ -38,13 +38,13 @@
               <h2>Volatility 3</h2>
               <p>Extract evidence from memory images.</p>
             </div>
-            <span class="tool-status">Ready</span>
           </div>
           <p class="tool-detail">
-            Parses memory dumps to reveal running processes, open network connections, loaded drivers, and injected code. The workflow groups related analyses together—run a malware-focused bundle or a network-focused bundle depending on what you're investigating.
+            In Evidence, follow Prepare, Processes, Investigate and Examine files using the installed plugins. Choose a focused question, inspect results beside the action, and follow captured objects into the shared file examination tools. The plugin examiner offers additional selections and symbol settings.
           </p>
           <div class="tool-actions">
-            <a class="action" href="/volatility">Open workflow</a>
+            <a class="action" href="/evidence">Open evidence workflow</a>
+            <a class="ghost" href="/volatility">Open plugin examiner</a>
             <a class="ghost" href="/guides">Use cases</a>
           </div>
         </article>

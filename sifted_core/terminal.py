@@ -160,6 +160,13 @@ def volatility_commands(plan, body):
 
 def recipe(plan, settings=None):
     note = "Run from a working results directory in the SIFT terminal. Evidence paths are absolute; reports use the filenames shown in your current directory. Change output names to keep previous results. "
+    if plan.operation == "evidence-intake":
+        path = shlex.quote(plan.source)
+        command = f"sha256sum -- {path}\nfile --mime-type -- {path}"
+        if Path(plan.source).is_dir():
+            command = f"find {path} -type f -exec sha256sum -- {{}} +"
+        return {"terminal_command": command, "terminal_ready": True,
+                "terminal_note": "SHA-256 verifies file bytes. A directory manifest also records relative paths and empty directories; its aggregate hash uses SIFTed's documented canonical format."}
     if plan.source == "<source_path>":
         return {"terminal_command": "Select an existing evidence path to generate runnable CLI commands.",
                 "terminal_ready": False, "terminal_note": note}
@@ -179,6 +186,13 @@ def recipe(plan, settings=None):
     elif plan.operation == "filetype":
         file_commands(plan, body)
         note += "file identifies content; --mime-type reports MIME types and -b omits filenames. find -exec applies it to files in a directory. Compare the reported types with the filename extensions; mismatch filtering and CSV formatting are app features."
+    elif plan.tool == 'clamscan':
+        args = native_argv(plan.steps[1].argv)
+        args = without_options(args, {'--database': 1})
+        boundary = args.index('--')
+        args[boundary:boundary] = ['--database', plan.parameters['database_directory']]
+        body += [command_text(args, 'clamscan.txt')]
+        note += 'Exit code 1 means a signature match; 2 means an error. Inspect matches and scan limits. The installed signature set can change; SIFTed records the database hashes used for its run.'
     elif plan.tool == "volatility":
         volatility_commands(plan, body)
         note += TOOL_NOTES[plan.tool] + " Extracted files are written to the current directory."

@@ -54,7 +54,7 @@ def test_directory_search_filters_pagination_and_reopening_do_not_queue_work(wor
     assert deleted['total'] == 1 and deleted['rows'][0]['reallocated']
     assert deleted['rows'][0]['extract_payload']['recover_deleted'] is True
     assert view(client, case, key, tab='triage', q="' OR 1=1 --", scope='filesystem')['triage']['total'] == 0
-    assert len(repo.runs()) == 1
+    assert len(repo.runs()) == 2
 
 
 @pytest.mark.parametrize('changes', [{'metadata_address': '99'}, {'entry_name': 'different.txt'},
@@ -67,7 +67,7 @@ def test_selected_entry_cannot_be_retargeted(workspace_runtime, changes):
     row = next(row for row in triage['rows'] if row['deleted'])
     response = client.post('/api/icat/run', json={**row['extract_payload'], **changes})
     assert response.status_code == 400, response.json
-    assert len(repo.runs()) == 1
+    assert len(repo.runs()) == 2
 
 
 def test_tampered_inventory_is_rejected_in_view_enqueue_and_execution(workspace_runtime):
@@ -95,7 +95,7 @@ def test_inventory_symlink_and_foreign_context_are_rejected(workspace_runtime):
     saved = index.with_name('saved.sqlite3')
     index.rename(saved)
     index.symlink_to(saved)
-    assert 'Unable to read' in view(client, case, key, tab='triage')['triage']['error']
+    assert 'symbolic links' in view(client, case, key, tab='triage')['triage']['error']
     client.post('/cases', data={'name': 'Other'})
     other = repo.cases()[-1]['id']
     response = client.get(f'/api/case/{other}/workspace', query_string={'input': key, 'tab': 'triage', 'context_run_id': run['id']})
@@ -169,7 +169,7 @@ def test_invalid_filters_and_directory_ids_cannot_redirect_triage(workspace_runt
     inventory(workspace_runtime)
     app, client, repo, settings, source, outputs, case, key = workspace_runtime
     assert view(client, case, key, tab='triage', **filters)['triage']['error']
-    assert len(repo.runs()) == 1
+    assert len(repo.runs()) == 2
 
 
 def test_derived_files_stay_with_selected_evidence_and_link_back_to_source(workspace_runtime):
@@ -185,6 +185,7 @@ def test_derived_files_stay_with_selected_evidence_and_link_back_to_source(works
     other_path = source.with_name('other.img')
     other_path.write_bytes(source.read_bytes())
     response = client.post(f'/api/case/{case}/artifacts', json={'path': str(other_path), 'type': 'disk_image'})
+    Worker(repo, settings).run_once()
     other_key = 'e:' + response.json['artifact']['id']
     assert view(client, case, other_key, tab='derived')['derived'] == []
 
@@ -233,4 +234,4 @@ def test_entry_inspection_reuses_only_work_from_the_same_inventory(workspace_run
     second = inventory(workspace_runtime)
     new_view = view(client, case, key, tab='triage', context_run_id=second['id'])
     assert all(not row['metadata_run_id'] and not row['captured_key'] for row in new_view['triage']['rows'])
-    assert len(repo.runs()) == 4
+    assert len(repo.runs()) == 5

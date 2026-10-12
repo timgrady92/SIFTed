@@ -1047,7 +1047,7 @@
                 <span class="guide-icon" data-category="memory"></span>
                 <div>
                   <h2>I have a memory dump</h2>
-                  <p class="helper">Extract processes, network state, and injected code.</p>
+                  <p class="helper">Review processes, investigate leads and examine captured objects.</p>
                 </div>
               </div>
               <span class="toggle-icon chevron">&gt;</span>
@@ -1055,34 +1055,34 @@
             <div class="guide-body">
               <div class="guide-section">
                 <div class="guide-header">
-                  <h3>Volatility analysis</h3>
-                  <a class="ghost" href="/volatility">Open Volatility</a>
+                  <h3>Guided memory investigation</h3>
+                  <a class="ghost" href="/evidence">Open evidence workflow</a>
                 </div>
                 <ol class="guide-list">
-                  <li>Identify the OS first using <code>banners.Banners</code> or by examining the dump source.</li>
-                  <li>Run the appropriate info plugin (<code>windows.info</code> or <code>linux.bash</code>) to validate.</li>
-                  <li>List processes and check for unusual parent-child relationships or hidden processes.</li>
-                  <li>Examine network connections for suspicious remote IPs or unexpected listeners.</li>
+                  <li>Onboard and hash the capture, record acquisition context, then identify it. Windows uses <code>windows.info.Info</code>; Linux/macOS banners help find matching kernel symbols.</li>
+                  <li>Build the process inventory. Compare names, parent relationships and timestamps, then inspect a process's command line and objects.</li>
+                  <li>Investigate a focused question: network activity, injection, services/registry, kernel integrity or indicators. Search reports and follow PIDs back to the inventory.</li>
+                  <li>Extract selected objects and examine their bytes, strings, registry content or local signature matches. Corroborate with disk artifacts and logs.</li>
                 </ol>
               </div>
               <div class="guide-section">
                 <h3>Windows plugins</h3>
                 <ul class="guide-list">
-                  <li><code>windows.pslist</code> / <code>windows.pstree</code> - Process listing and hierarchy.</li>
-                  <li><code>windows.netscan</code> - Active and closed network connections.</li>
-                  <li><code>windows.malfind</code> - Detect injected or suspicious memory regions.</li>
-                  <li><code>windows.cmdline</code> - Process command line arguments.</li>
-                  <li><code>windows.dlllist</code> / <code>windows.handles</code> - Loaded modules and open handles.</li>
+                  <li><code>windows.pslist.PsList</code> / <code>windows.pstree.PsTree</code> - Process listing and hierarchy.</li>
+                  <li><code>windows.netscan.NetScan</code> - Recover network objects on supported Windows versions; records may be stale.</li>
+                  <li><code>windows.malware.malfind.Malfind</code> - Find potentially injected regions; hits require corroboration.</li>
+                  <li><code>windows.cmdline.CmdLine</code> - Process command-line arguments.</li>
+                  <li><code>windows.dlllist.DllList</code> / <code>windows.handles.Handles</code> - Loaded modules and open handles.</li>
                 </ul>
               </div>
               <div class="guide-section">
                 <h3>Linux plugins</h3>
                 <ul class="guide-list">
-                  <li><code>linux.pslist</code> / <code>linux.pstree</code> - Process listing and hierarchy.</li>
-                  <li><code>linux.sockstat</code> - Open network sockets.</li>
-                  <li><code>linux.bash</code> - Bash command history from memory.</li>
-                  <li><code>linux.elfs</code> - Enumerate ELF binaries in process memory.</li>
-                  <li><code>linux.lsof</code> - Open files per process.</li>
+                  <li><code>linux.pslist.PsList</code> / <code>linux.pstree.PsTree</code> - Process listing and hierarchy.</li>
+                  <li><code>linux.sockstat.Sockstat</code> - Socket observations.</li>
+                  <li><code>linux.bash.Bash</code> - Recover shell history; this is not an OS identification plugin.</li>
+                  <li><code>linux.elfs.Elfs</code> - Enumerate ELF binaries in process memory.</li>
+                  <li><code>linux.lsof.Lsof</code> - Open files per process.</li>
                 </ul>
               </div>
               <div class="guide-section">
@@ -1094,7 +1094,7 @@
                   <li>What command lines or arguments were used to launch processes?</li>
                 </ul>
               </div>
-              <p class="helper">Memory analysis captures running state. It complements but doesn't replace disk forensics.</p>
+              <p class="helper">Acquisition gaps, paging and terminated objects limit what can be recovered. Empty scans do not establish safety, and scanner hits do not establish malicious behavior. <a href="/volatility">Open the installed plugin examiner</a> for additional examinations. Methodology: <a href="https://www.sans.org/posters/memory-forensics" target="_blank" rel="noopener">SANS memory forensics framework</a>.</p>
             </div>
           </article>
 

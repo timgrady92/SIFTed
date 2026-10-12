@@ -23,7 +23,7 @@
           <select id="caseSelect" data-tool="{{ tool_slug }}">
             <option value="">No case selected</option>
             {% for case in cases|reverse %}
-              <option value="{{ case.id }}" data-slug="{{ case.slug }}" data-source="{{ case.artifacts[0].path if case.artifacts else "" }}">
+              <option value="{{ case.id }}" data-slug="{{ case.slug }}" data-source="{{ (case.artifacts|selectattr("status", "equalto", "ready")|first|default({})).path|default("") }}">
                 {{ case.name }}
               </option>
             {% endfor %}
@@ -640,40 +640,29 @@
 
 {% macro add_artifact_modal() %}
   <div class="artifact-modal" id="addArtifactModal" aria-hidden="true">
-    <div class="artifact-modal-surface">
-      <div class="artifact-modal-header">
-        <h3>Add Artifact</h3>
-        <button class="ghost" id="closeArtifactModal" type="button">Close</button>
-      </div>
+    <div class="artifact-modal-surface" role="dialog" aria-modal="true" aria-labelledby="intakeHeading">
+      <div class="artifact-modal-header"><h3 id="intakeHeading">Add evidence</h3><button class="ghost" id="closeArtifactModal" type="button">Close</button></div>
       <form id="addArtifactForm" class="artifact-modal-form">
-        <input type="hidden" id="artifactCaseId" value="" />
-        <label class="input-stack">
-          Artifact path
-          <div class="input-row">
-            <input id="artifactPath" type="text" placeholder="/cases/evidence/file.raw" required />
-            <button class="ghost" id="browseArtifact" type="button">Browse</button>
-          </div>
-        </label>
-        <label class="input-stack">
-          Artifact type
-          <select id="artifactType">
-            <option value="">Auto-detect</option>
-            <option value="disk_image">Disk Image</option>
-            <option value="memory_dump">Memory Dump</option>
-            <option value="registry">Registry Hive</option>
-            <option value="event_log">Event Log</option>
-            <option value="artifact_file">Artifact File</option>
-            <option value="other">Other</option>
-          </select>
-        </label>
-        <label class="input-stack">
-          Label (optional)
-          <input id="artifactLabel" type="text" placeholder="Auto-generated from filename" />
-        </label>
-        <div class="artifact-modal-actions">
-          <button class="ghost" id="cancelArtifact" type="button">Cancel</button>
-          <button class="action" type="submit">Add Artifact</button>
+        <input type="hidden" id="artifactCaseId" />
+        <label class="input-stack">Evidence location<select id="intakeMethod"><option value="path">On the SIFT workstation</option><option value="upload">Upload from this device</option></select></label>
+        <label class="input-stack" id="intakePathField">Workstation path<div class="input-row"><input id="artifactPath" type="text" placeholder="/cases/evidence" required /><button class="ghost" id="browseArtifact" type="button">Browse</button></div></label>
+        <div id="intakeUploadFields" hidden>
+          <label class="input-stack">Evidence files<input id="evidenceFiles" type="file" multiple /></label>
+          <label class="input-stack" id="intakePrimaryField" hidden>Collection layout<select id="intakePrimary"></select></label>
+          <p class="helper">Select every segment for a split image, then choose its first segment. Unrelated files form a collected directory.</p>
         </div>
+        <label class="input-stack">Recorded by<input id="intakeCustodian" type="text" required maxlength="256" placeholder="Analyst name or identifier" /></label>
+        <details><summary>Acquisition details (optional)</summary>
+          <label class="input-stack">Label<input id="artifactLabel" type="text" maxlength="256" /></label>
+          <label class="input-stack">Source / received from<input id="intakeSource" type="text" maxlength="4096" /></label>
+          <label class="input-stack">Expected SHA-256<input id="intakeHash" type="text" pattern="[a-fA-F0-9]{64}" placeholder="Acquisition hash, if available" /></label>
+          <p class="helper">Compared with the source file, or the canonical manifest for a collected directory.</p>
+          <label class="input-stack">Acquisition notes<textarea id="intakeNotes" maxlength="4096"></textarea></label>
+        </details>
+        <p class="helper">SIFTed hashes and profiles the content before analysis. The recorded name is analyst-supplied attribution.</p>
+        <p id="intakeStatus" role="status" aria-live="polite"></p>
+        <progress id="intakeProgress" max="100" value="0" hidden aria-label="Upload progress"></progress>
+        <div class="artifact-modal-actions"><button class="action" type="submit">Add evidence</button></div>
       </form>
     </div>
   </div>

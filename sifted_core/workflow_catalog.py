@@ -14,6 +14,7 @@ GEOMETRY = [number("offset_sector", "Filesystem offset (disk sectors)"),
 METADATA = {"name": "metadata_address", "label": "Inode / NTFS metadata address", "type": "text", "default": "", "placeholder": "42 or 42-128-1"}
 BLOCK = number("block_address", "Filesystem data-unit address")
 DETAILS = {
+    "clamscan": ("Check local malware signatures", "Scan captured files with the installed ClamAV signatures. A match needs corroboration; no matches do not prove safety. Files are never executed, removed or uploaded.", []),
     "mmls": ("Map partitions", "Find the disk sectors where each partition begins.", [GEOMETRY[1]]),
     "fsstat": ("Describe filesystem", "Read filesystem type, geometry, allocation ranges, and metadata.", GEOMETRY),
     "fls": ("Browse files", "List names and metadata addresses; deleted names are observations, not proof of recoverable content.", GEOMETRY +
@@ -42,4 +43,4 @@ DETAILS = {
 WORKFLOWS = {tool: {"id": tool, "label": title, "description": description, "fields": fields,
                     "category": "Disk Analysis" if tool in DISK_TOOL_IDS else "File Examination"}
              for tool, (title, description, fields) in DETAILS.items()}
-CATEGORIES = {"disk-analysis": DISK_TOOL_IDS, "file-examination": EXAMINATION_TOOL_IDS}
+CATEGORIES = {"disk-analysis": DISK_TOOL_IDS, "file-examination": (*EXAMINATION_TOOL_IDS, "clamscan")}

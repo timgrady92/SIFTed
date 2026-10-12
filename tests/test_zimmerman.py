@@ -118,6 +118,11 @@ def input_for(runtime, tool_id):
             connection.execute("DELETE FROM known")
             connection.execute("INSERT INTO known VALUES('known value')")
         return source
+    if data.startswith(b'regf'):
+        header = bytearray(data)
+        encoded = name.encode('utf-16-le')[:64]
+        header[48:48 + len(encoded)] = encoded
+        data = bytes(header)
     source.write_bytes(data)
     return evidence if tool_id == "sbecmd" else source
 

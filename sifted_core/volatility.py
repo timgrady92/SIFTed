@@ -83,7 +83,7 @@ BUNDLES = {
 
 class VolatilityAdapter(ToolAdapter):
     tool_id = "volatility"
-    parameter_names = {"plugins", "plugin_options", "renderer", "symbol_path", "offline"}
+    parameter_names = {"plugins", "plugin_options", "renderer", "symbol_path", "offline", "process_ref"}
 
     def validate_execution(self, plan, settings):
         installed = discover(settings, refresh=True)
@@ -126,6 +126,8 @@ class VolatilityAdapter(ToolAdapter):
             values = options.get(name, {})
             if not isinstance(values, dict) or set(values) - set(declarations):
                 raise ValidationError("Unknown options for " + name)
+            if 'yara_file' in declarations and not any(values.get(key) for key in ('yara_file', 'yara_string', 'yara_compiled_file')):
+                raise ValidationError('Select a YARA rules file or pattern before scanning.')
             arguments = []
             normalized_values = {}
             for key, spec in declarations.items():
@@ -176,7 +178,8 @@ class VolatilityAdapter(ToolAdapter):
                     auxiliary_paths=list(dict.fromkeys(auxiliary)), postprocess="volatility",
                     expected_files=["plugins/" + name + "/config.json" for name in selected],
                     postprocess_on_failure=True,
-                    parameters={"plugins": selected, "plugin_options": saved, "renderer": renderer,
+                    parameters={**({'process_ref': p['process_ref']} if 'process_ref' in p else {}),
+                                "plugins": selected, "plugin_options": saved, "renderer": renderer,
                                 "offline": offline, "symbol_path": symbols,
                                 "managed_symbols": s.volatility_symbols,
                                 "version": installed["version"], "installation_identity": installed["identity"]})

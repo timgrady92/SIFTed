@@ -20,29 +20,11 @@ from .filetype_report import write_report
 from .tool_results import process_results
 from .adapters import ADAPTERS
 from .storage import utc_now
+from .evidence_profile import profile
+from .evidence_intake import related_sources
+from .integrity import ExecutionFailure, IntegrityFailure, hash_file, manifest_hash
 
 logger = logging.getLogger(__name__)
-
-
-class ExecutionFailure(RuntimeError):
-    def __init__(self, message, code=1, status="error"):
-        super().__init__(message)
-        self.code = code
-        self.status = status
-
-
-def hash_file(path, check=None):
-    before = signature(path)
-    digest = hashlib.sha256()
-    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    with os.fdopen(descriptor, "rb") as handle:
-        while chunk := handle.read(1024 * 1024):
-            if check:
-                check()
-            digest.update(chunk)
-    if before != signature(path):
-        raise ExecutionFailure(f"File changed while hashing: {path}")
-    return digest.hexdigest(), before[2]
 
 
 def workspace_path(workspace, name, area=None):
@@ -212,7 +194,7 @@ class Worker:
                 time.sleep(0.1)
             code = process.returncode
             self._check(run["id"], output, deadline, run["plan"]["max_output_bytes"])
-            if code:
+            if code not in step.success_codes:
                 error = diagnostic.decode("utf-8", errors="replace").strip() or f"{step.label} exited with code {code}."
         except subprocess.TimeoutExpired:
             error, code = "Tool exceeded its execution timeout.", 124
@@ -335,6 +317,10 @@ class Worker:
             plan = Plan.from_dict(run["plan"])
             ADAPTERS[plan.tool].validate_execution(plan, self.settings)
             original_input = self.repo.input(run["id"])
+            if 'process_ref' in plan.parameters:
+                from .memory_analysis import validate_process
+                if validate_process(plan, self.repo, self.settings, run.get('case_id')) != original_input.get('process_selection'):
+                    raise IntegrityFailure('Selected process inventory changed while queued.')
             if "entry_id" in plan.parameters:
                 from .file_triage import validate_entry
                 context = self.repo.run(plan.parameters.get("context_run_id"))
@@ -351,15 +337,17 @@ class Worker:
                 raise ExecutionFailure("Run paths are no longer allowed.")
             if str(Path(plan.output_path).resolve()) != plan.output_path:
                 raise ExecutionFailure("Output path changed while queued.")
+            if "dependency_paths" in original_input and related_sources(plan.source)[1] != original_input["dependency_paths"]:
+                raise IntegrityFailure("Related evidence membership changed while queued.")
             if original_input.get("image_paths") and image_sources(plan.source) != original_input["image_paths"]:
-                raise ExecutionFailure("Image segment membership changed while queued.")
+                raise IntegrityFailure("Image segment membership changed while queued.")
             for member in original_input.get("related_files", []):
                 if not allowed(member["path"], self.settings.input_roots) or signature(member["path"]) != member["signature"]:
-                    raise ExecutionFailure("Related input changed or is no longer allowed: " + member["path"])
+                    raise IntegrityFailure("Related input changed or is no longer allowed: " + member["path"])
             if signature(plan.source) != original_input["signature"]:
-                raise ExecutionFailure("Input changed while queued; register or select the current evidence again.")
+                raise IntegrityFailure("Input changed while queued; register or select the current evidence again.")
             if original_input["kind"] == "directory" and directory_members(plan.source) != original_input["members"]:
-                raise ExecutionFailure("Directory evidence changed while queued; select the current evidence again.")
+                raise IntegrityFailure("Directory evidence changed while queued; select the current evidence again.")
             if not allowed(workspace, self.settings.output_roots) or workspace.resolve() != workspace:
                 raise ExecutionFailure("Managed workspace path is outside allowed roots or contains symbolic links.")
             workspace.mkdir(parents=True, exist_ok=False)
@@ -379,13 +367,13 @@ class Worker:
                 digest, size = hash_file(plan.source, integrity_check)
                 extra.update(input_sha256=digest, input_size_bytes=size)
                 if original_input.get("baseline_sha256") and digest != original_input["baseline_sha256"]:
-                    raise ExecutionFailure("Input SHA-256 differs from the registered evidence baseline.")
+                    raise IntegrityFailure("Input SHA-256 differs from the registered evidence baseline.")
                 if original_input.get("related_files"):
                     extra["input_files"] = [{"path": plan.source, "sha256": digest, "size_bytes": size}]
                     for member in original_input["related_files"]:
                         digest, size = hash_file(member["path"], integrity_check)
                         if member.get("baseline_sha256") and digest != member["baseline_sha256"]:
-                            raise ExecutionFailure("Related input SHA-256 differs from its registered baseline: " + member["path"])
+                            raise IntegrityFailure("Related input SHA-256 differs from its registered baseline: " + member["path"])
                         extra["input_files"].append({"path": member["path"], "sha256": digest, "size_bytes": size})
             else:
                 self.repo.emit(run["id"], "status", "Verifying directory evidence integrity...")
@@ -396,6 +384,33 @@ class Worker:
                         digest, size = hash_file(Path(plan.source) / member["path"], integrity_check)
                         hashes.append({"path": member["path"], "sha256": digest, "size_bytes": size})
                 extra["input_files"] = hashes
+                entries = [{"path": m["path"], "kind": "directory"} for m in original_input["members"] if m["kind"] == "directory"]
+                entries += [{**entry, "kind": "file"} for entry in hashes]
+                extra["input_sha256"] = manifest_hash(entries)
+                if original_input.get("baseline_sha256") and original_input["baseline_sha256"] != extra["input_sha256"]:
+                    raise IntegrityFailure("Directory SHA-256 manifest differs from the registered evidence baseline.")
+            if original_input["kind"] == "file":
+                entries = [{"path": Path(plan.source).name, "kind": "file", "sha256": extra["input_sha256"], "size_bytes": extra["input_size_bytes"]}]
+                entries += [{**entry, "path": Path(entry["path"]).name, "kind": "file"} for entry in extra.get("input_files", [])
+                            if entry["path"] != plan.source and entry["path"] in original_input.get("dependency_paths", [])]
+            entries.sort(key=lambda entry: entry["path"])
+            extra["input_manifest"] = entries
+            if original_input.get("baseline_manifest") is not None and entries != original_input["baseline_manifest"]:
+                raise IntegrityFailure("Evidence collection differs from the registered manifest baseline.")
+            extra["input_profile"] = profile(plan.source, self.settings)
+            # Tie the observation to exactly the bytes just hashed, including
+            # all companions and directory members. Never accept a new baseline
+            # from a changing source.
+            if signature(plan.source) != original_input["signature"]:
+                raise IntegrityFailure("Evidence changed during verification.")
+            for member in original_input.get("related_files", []):
+                if signature(member["path"]) != member["signature"]:
+                    raise IntegrityFailure("Related evidence changed during verification.")
+            if original_input["kind"] == "directory" and directory_members(plan.source) != original_input["members"]:
+                raise IntegrityFailure("Directory changed during verification.")
+            integrity_check()
+            self.repo.accept_evidence(run["id"], extra["input_profile"], extra["input_sha256"], entries)
+            extra["integrity_status"] = "verified"
             # Fingerprint the installed executable and assembly/script prefixes;
             # version flags vary across tools and are not safe to guess.
             identities = {}
@@ -428,7 +443,11 @@ class Worker:
             if plan.create_output_directory:
                 output.mkdir()
             with open(workspace / "run.log", "wb") as log:
-                if plan.operation == "filetype":
+                if plan.operation == "evidence-intake":
+                    failures = []
+                    (output / "intake.json").write_text(json.dumps({"sha256": extra["input_sha256"], "manifest": entries,
+                                                                   "profile": extra["input_profile"]}, indent=2))
+                elif plan.operation == "filetype":
                     counts, failures = self._filetype(run, plan, output, workspace, log, deadline)
                     extra.update(counts)
                 else:
@@ -437,7 +456,7 @@ class Worker:
                         self._check(run["id"], output, deadline, plan.max_output_bytes)
                         result = self._execute_step(run, step, output, workspace, log, deadline)
                         results.append(result)
-                        if result["return_code"]:
+                        if result["error"] or result["return_code"] not in step.success_codes:
                             failures.append(result["error"])
                             if not step.continue_on_error:
                                 break
@@ -449,21 +468,24 @@ class Worker:
                 if failures:
                     status, exit_code, error = "error", 1, "\n".join(failures)[:65536]
                 if status == "success":
+                    ADAPTERS[plan.tool].validate_completion(plan, self.settings)
                     for name in plan.expected_files:
                         if not (output / name).is_file():
                             raise ExecutionFailure("Tool completed without its expected output: " + name)
                     for pattern in plan.expected_globs:
                         if not any(path.is_file() for path in output.rglob(pattern)):
                             raise ExecutionFailure("Tool completed without its expected output: " + pattern)
+                if "dependency_paths" in original_input and related_sources(plan.source)[1] != original_input["dependency_paths"]:
+                    raise IntegrityFailure("Related evidence membership changed during execution.")
                 if signature(plan.source) != original_input["signature"]:
-                    raise ExecutionFailure("Input changed during execution; results are incomplete.")
+                    raise IntegrityFailure("Input changed during execution; results are incomplete.")
                 if original_input.get("image_paths") and image_sources(plan.source) != original_input["image_paths"]:
-                    raise ExecutionFailure("Image segment membership changed during execution.")
+                    raise IntegrityFailure("Image segment membership changed during execution.")
                 for member in original_input.get("related_files", []):
                     if signature(member["path"]) != member["signature"]:
-                        raise ExecutionFailure("Related input changed during execution; results are incomplete: " + member["path"])
+                        raise IntegrityFailure("Related input changed during execution; results are incomplete: " + member["path"])
                 if original_input["kind"] == "directory" and directory_members(plan.source) != original_input["members"]:
-                    raise ExecutionFailure("Directory evidence changed during execution; results are incomplete.")
+                    raise IntegrityFailure("Directory evidence changed during execution; results are incomplete.")
                 self._check(run["id"], output, deadline, plan.max_output_bytes)
                 if plan.postprocess and (status == "success" or plan.postprocess_on_failure):
                     processed = process_results(plan, output, integrity_check, results)
@@ -474,15 +496,17 @@ class Worker:
                         status, exit_code = "error", 1
                         error = "\n".join(filter(None, [error, *validation_errors]))[:65536]
                 if signature(plan.source) != original_input["signature"]:
-                    raise ExecutionFailure("Input changed during result validation; results are incomplete.")
+                    raise IntegrityFailure("Input changed during result validation; results are incomplete.")
                 for member in original_input.get("related_files", []):
                     if signature(member["path"]) != member["signature"]:
-                        raise ExecutionFailure("Related input changed during result validation; results are incomplete: " + member["path"])
+                        raise IntegrityFailure("Related input changed during result validation; results are incomplete: " + member["path"])
                 if original_input["kind"] == "directory" and directory_members(plan.source) != original_input["members"]:
-                    raise ExecutionFailure("Directory evidence changed during result validation; results are incomplete.")
+                    raise IntegrityFailure("Directory evidence changed during result validation; results are incomplete.")
                 log.flush()
                 os.fsync(log.fileno())
         except ExecutionFailure as exc:
+            if isinstance(exc, IntegrityFailure):
+                extra["integrity_status"] = "failed"
             if getattr(exc, "step_result", None):
                 results.append(exc.step_result)
             status, exit_code, error = exc.status, exc.code, str(exc)

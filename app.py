@@ -6,6 +6,7 @@ from sifted_core.config import load_config
 from sifted_core.context import runtime_repository, runtime_settings
 from sifted_core.web import web
 from sifted_core.evidence_web import evidence
+from sifted_core.evidence_api import intake
 
 
 def create_app(config=None):
@@ -14,6 +15,7 @@ def create_app(config=None):
     application.extensions["repository_lock"] = threading.Lock()
     application.register_blueprint(web)
     application.register_blueprint(evidence)
+    application.register_blueprint(intake)
     application.register_blueprint(create_blueprint(runtime_repository, runtime_settings))
     return application
 
