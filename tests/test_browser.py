@@ -15,8 +15,58 @@ from sifted_core.workflow_catalog import WORKFLOWS
 from test_volatility import memory_runtime as memory_runtime
 from test_carving import carving_runtime as carving_runtime
 from test_zimmerman import zimmerman_runtime as zimmerman_runtime
+from test_evidence_intake import intake_runtime as intake_runtime
+from test_evidence_assessment import assessed_intake as assessed_intake
 
 playwright = pytest.importorskip("playwright.sync_api")
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize('width', [390, 1440])
+def test_automatic_memory_workflow_uses_progressive_disclosure(assessed_intake, width):
+    runtime, _ = assessed_intake
+    client, repo, settings, case, root = runtime
+    source = root / 'misleading.jpg'
+    source.write_bytes(b'\0' * 1024 ** 2)
+    response = client.post(f'/api/case/{case}/artifacts', json={'path': str(source)})
+    key = 'e:' + response.json['artifact']['id']
+    server = make_server('127.0.0.1', 0, client.application, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():
+                pytest.skip('Chromium is not installed.')
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': width, 'height': 900})
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            base = f'http://127.0.0.1:{server.server_port}'
+            page.goto(base + f'/case/{case}/workspace?' + urlencode({'input': key}))
+            Worker(repo, settings).run_once()
+            page.get_by_role('heading', name='Prepare memory analysis', exact=True).wait_for()
+            assert page.get_by_role('tab', name='Processes', exact=True).count() == 1
+            assert page.locator('#evidenceTypeForm').count() == 0
+            assert page.locator('#memoryContextForm').is_hidden()
+            page.locator('[data-disclosure="memory-context"] summary').click()
+            assert page.locator('#memoryContextForm').is_visible()
+            page.get_by_role('link', name='All evidence', exact=True).click()
+            card = page.locator(f'[data-evidence-key="{key}"]')
+            assert 'Memory image' in card.inner_text() and 'Set type' not in card.inner_text()
+            card.click()
+            page.get_by_role('heading', name='Prepare memory analysis', exact=True).wait_for()
+            assert page.locator('#memoryContextForm').is_hidden()
+            page.get_by_role('tab', name='Overview', exact=True).click()
+            assert page.get_by_text('application/etl', exact=True).is_hidden()
+            page.locator('[data-disclosure="identification"] summary').click()
+            assert page.get_by_text('application/etl', exact=True).is_visible()
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert not errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 @pytest.mark.browser
@@ -568,7 +618,6 @@ def test_workspace_inspection_keeps_position_drafts_and_keyboard_context(workspa
         thread.join(timeout=5)
 
 
-from test_evidence_intake import intake_runtime as intake_runtime
 
 
 @pytest.mark.browser
@@ -896,6 +945,104 @@ def test_evidence_cards_unify_case_hubs_and_analysis(workspace_runtime, tmp_path
             page.get_by_role('heading', name='No evidence yet').wait_for()
             page.get_by_role('button', name='Add evidence', exact=True).click()
             assert page.locator('#artifactCaseId').input_value() == empty_case
+            assert not errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize('width', [390, 1440])
+def test_ambiguous_acquisition_reveals_the_selected_workflow(memory_workspace, width, tmp_path):
+    app, client, repo, _, source, case, _, _ = memory_workspace
+    settings = app.config['SETTINGS']
+    detector = tmp_path / 'filetype.py'
+    detector.write_text("print('application/octet-stream')")
+    settings.binaries['filetype'] = [sys.executable, str(detector)]
+    # Preserve an explicit fallback when neither signatures nor native probes
+    # can establish the acquisition; the filename cannot make that decision.
+    raw = tmp_path / 'unclassified-capture.data'
+    raw.write_bytes(b'\0' * 4096)
+    response = client.post(f'/api/case/{case}/artifacts', json={'path': str(raw)})
+    assert response.status_code == 202
+    artifact = response.json['artifact']
+    key = 'e:' + artifact['id']
+    worker = Worker(repo, settings)
+    server = make_server('127.0.0.1', 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():
+                pytest.skip('Chromium is not installed.')
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': width, 'height': 900})
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            base = f'http://127.0.0.1:{server.server_port}'
+            page.goto(base + f'/case/{case}/workspace?' + urlencode({'input': key}))
+            assert page.locator('#evidenceTypeForm').count() == 0  # Intake first.
+            worker.run_once()
+            page.get_by_role('heading', name='Set evidence type', exact=True).wait_for()
+            assert page.get_by_role('button', name='Continue to Analysis').count() == 0
+            original = repo.case(case)['artifacts'][-1]
+            page.get_by_role('link', name='All evidence', exact=True).click()
+            card = page.locator(f'[data-evidence-key="{key}"]')
+            assert 'Acquisition type needed' in card.inner_text() and 'Set type' in card.inner_text()
+            card.click()
+            page.get_by_role('heading', name='Set evidence type', exact=True).wait_for()
+            assert page.get_by_role('tab', name='Processes', exact=True).count() == 0
+            assert page.locator('[data-workspace-tool]').first.is_hidden()
+            assert page.get_by_label('Acquisition type', exact=True).input_value() == ''
+            page.evaluate("window.acquisitionDocument = 'retained'")
+            page.screenshot(path=str(tmp_path / f'acquisition-choice-{width}.png'), full_page=True)
+            count = len(repo.runs())
+            page.get_by_label('Acquisition type', exact=True).select_option('memory_dump')
+            # A failed save keeps the choice available and does not change custody.
+            page.route('**/evidence/*/type', lambda route: route.fulfill(status=503, json={'error': 'Storage temporarily unavailable'}), times=1)
+            page.get_by_role('button', name='Continue', exact=True).click()
+            page.wait_for_function("document.querySelector('#workspaceStatus').textContent.includes('Storage temporarily unavailable')")
+            assert page.get_by_label('Acquisition type', exact=True).input_value() == 'memory_dump'
+            assert repo.case(case)['artifacts'][-1]['type_basis'] == 'content'
+            page.get_by_role('button', name='Continue', exact=True).click()
+            page.get_by_role('button', name='Identify image', exact=True).wait_for()
+            assert page.get_by_role('tab', name='Processes', exact=True).count() == 1
+            assert page.get_by_role('tab', name='Investigate', exact=True).count() == 1
+            assert page.locator('#evidenceTypeForm').count() == 0
+            assert page.locator('#workspaceTabPanel').evaluate('(el) => el === document.activeElement')
+            current = repo.case(case)['artifacts'][-1]
+            assert current['hash'] == original['hash'] and current['profile'] == original['profile']
+            assert len(repo.runs()) == count  # Choosing context never launches analysis.
+            page.reload()
+            page.get_by_role('button', name='Identify image', exact=True).wait_for()
+            page.get_by_role('button', name='Identify image', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            worker.run_once()
+            page.get_by_role('button', name='Build process inventory', exact=True).wait_for()
+            page.get_by_role('tab', name='Overview', exact=True).click()
+            page.get_by_role('button', name='Verify integrity', exact=True).click()
+            page.wait_for_function("document.querySelector('#workspaceTabPanel').textContent.includes('Verifying')")
+            worker.run_once()
+            page.get_by_role('button', name='Verify integrity', exact=True).wait_for()
+            assert page.get_by_role('heading', name='Set evidence type', exact=True).count() == 0
+            assert repo.case(case)['artifacts'][-1]['type'] == 'memory_dump'
+            page.evaluate("window.acquisitionDocument = 'retained'")
+            for value, label in [('disk_image', 'File triage'), ('artifact_file', 'Analysis')]:
+                page.get_by_text('Manage evidence', exact=True).click()
+                page.get_by_label('Acquisition type', exact=True).select_option(value)
+                page.get_by_role('button', name='Save type', exact=True).click()
+                page.get_by_role('tab', name=label, exact=True).wait_for()
+                assert page.get_by_role('tab', name='Processes', exact=True).count() == 0
+                assert page.locator('#workspaceOperation').is_hidden()
+                assert not any(param in page.url for param in ('run=', 'memory_os=', 'context_run_id='))
+                page.get_by_role('tab', name='Overview', exact=True).click()
+            page.get_by_role('tab', name='Analysis', exact=True).click()
+            page.get_by_role('heading', name='Examine evidence', exact=True).wait_for()
+            assert page.locator('#evidenceTypeForm').is_hidden()
+            assert page.evaluate('window.acquisitionDocument') == 'retained'
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             assert not errors
             browser.close()
     finally:

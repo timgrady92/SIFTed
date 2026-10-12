@@ -20,7 +20,7 @@ from .filetype_report import write_report
 from .tool_results import process_results
 from .adapters import ADAPTERS
 from .storage import utc_now
-from .evidence_profile import profile
+from .evidence_profile import PROFILE_VERSION, profile
 from .evidence_intake import related_sources
 from .integrity import ExecutionFailure, IntegrityFailure, hash_file, manifest_hash
 
@@ -397,7 +397,31 @@ class Worker:
             extra["input_manifest"] = entries
             if original_input.get("baseline_manifest") is not None and entries != original_input["baseline_manifest"]:
                 raise IntegrityFailure("Evidence collection differs from the registered manifest baseline.")
-            extra["input_profile"] = profile(plan.source, self.settings)
+            def probe(name, argv, timeout):
+                # Reuse the durable worker's process supervision and cancellation.
+                # Keep intake reports separate from native tools' output folders.
+                folder = workspace / 'profiling'
+                step = Step(argv, 'Profile ' + name + ' structure', OUTPUT + '/' + name + '.json',
+                            timeout=timeout, max_stdout_bytes=64 * 1024)
+                with (workspace / 'run.log').open('ab') as log:
+                    record = self._execute_step(run, step, folder, workspace, log, deadline)
+                record['executables'] = {arg: hash_file(Path(arg).resolve(), integrity_check)[0] for arg in argv
+                                         if Path(arg).is_absolute() and arg != plan.source and Path(arg).is_file()}
+                captured = folder / (name + '.json')
+                return record, captured.read_text(errors='replace') if captured.exists() else ''
+
+            prior = None
+            if run.get('case_id') and not original_input.get('source_run_id'):
+                case = self.repo.case(run['case_id'])
+                prior = next((item for item in case['artifacts'] if item['id'] == original_input.get('artifact_id')), None)
+            saved = prior.get('profile', {}) if prior else {}
+            if (saved.get('version') == PROFILE_VERSION
+                    and (plan.tool != 'evidence-intake' or saved.get('assessment', {}).get('status') == 'supported')
+                    and saved.get('signature') == original_input['signature'] and prior['hash'] == extra['input_sha256']):
+                extra['input_profile'] = saved
+            else:
+                extra["input_profile"] = profile(plan.source, self.settings, probe=probe,
+                                                 image_paths=original_input.get('image_paths'))
             # Tie the observation to exactly the bytes just hashed, including
             # all companions and directory members. Never accept a new baseline
             # from a changing source.
@@ -442,7 +466,7 @@ class Worker:
                 path.write_text(content, encoding="utf-8")
             if plan.create_output_directory:
                 output.mkdir()
-            with open(workspace / "run.log", "wb") as log:
+            with open(workspace / "run.log", "ab") as log:
                 if plan.operation == "evidence-intake":
                     failures = []
                     (output / "intake.json").write_text(json.dumps({"sha256": extra["input_sha256"], "manifest": entries,
@@ -525,6 +549,8 @@ class Worker:
                 if metadata.is_symlink() or metadata.resolve() != metadata:
                     raise ExecutionFailure("Tool created a symbolic link in managed metadata; attempt retained.")
                 metadata.mkdir(exist_ok=True)
+                if (workspace / 'profiling').exists():
+                    shutil.copytree(workspace / 'profiling', metadata / 'profiling')
                 provenance = workspace / "provenance.json"
                 if (metadata / "provenance.json").exists() or (metadata / "provenance.json").is_symlink():
                     raise ExecutionFailure("Tool occupied the managed provenance destination; attempt retained.")

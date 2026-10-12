@@ -27,13 +27,9 @@ def integer_value(value, name):
     raise ValidationError(name + " must be an integer or a decimal/hexadecimal integer string.")
 
 
-def discover(settings, refresh=False):
+def runtime(settings):
+    """Resolve the native interpreter for both capability and evidence probes."""
     prefix = executable("volatility", ["vol"], settings)
-    key = tuple(prefix)
-    identity = signature(prefix[0])
-    cached = _CACHE.get(key)
-    if not refresh and cached and cached[0] == identity and time.monotonic() - cached[1] < 30:
-        return cached[2]
     if re.fullmatch(r"python(?:\d+(?:\.\d+)*)?", Path(prefix[0]).name):
         interpreter = [prefix[0]]
         location = str(Path(prefix[1]).parent) if len(prefix) > 1 else ""
@@ -49,6 +45,16 @@ def discover(settings, refresh=False):
             raise ValidationError("Configure Volatility's Python console script, or a Python executable plus vol.py.")
     if not shutil.which(interpreter[0]):
         raise ValidationError("Volatility's Python interpreter is unavailable.")
+    return prefix, interpreter, location
+
+
+def discover(settings, refresh=False):
+    prefix, interpreter, location = runtime(settings)
+    key = tuple(prefix)
+    identity = signature(prefix[0])
+    cached = _CACHE.get(key)
+    if not refresh and cached and cached[0] == identity and time.monotonic() - cached[1] < 30:
+        return cached[2]
     try:
         result = subprocess.run([*interpreter, str(PROBE), location], capture_output=True,
                                 text=True, timeout=30, check=True)

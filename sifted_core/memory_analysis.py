@@ -77,7 +77,7 @@ def journey(item, observed, runs, case_id, repository, settings, *, operating_sy
                 and r.get('input_sha256') == item.get('hash') and item.get('hash')]
     if not operating_system:
         operating_system = next((os for r in matching for os, p in PROFILES.items()
-                                 if report_for(r, p['inventory'])), 'windows')
+                                 if report_for(r, p['inventory'])), observed.get('memory', {}).get('os', 'windows'))
     if operating_system not in PROFILES or question not in QUESTIONS:
         raise ValidationError('Choose an available acquisition context and investigation question.')
     profile = PROFILES[operating_system]

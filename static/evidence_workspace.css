@@ -26,6 +26,8 @@
 .workspace-tab-step { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 8px; border-radius: 50%; border: 1px solid currentColor; font-size: .75rem; }
 .workspace-tab-count { margin-left: 8px; font-size: .8rem; }
 .workspace-tab-content { min-height: 420px; overflow-anchor: none; padding: var(--space-xl); }
+.workspace-acquisition { margin-bottom: var(--space-xl); }
+.workspace-acquisition .workspace-fields { max-width: 560px; }
 .workspace-stage-heading { margin-bottom: 24px; }
 .evidence-workspace .workspace-step { font-size: .75rem; color: var(--neon-teal); text-transform: uppercase; letter-spacing: .1em; margin: 0 0 8px; font-weight: 600; }
 .workspace-start { padding: var(--space-xl); grid-column: 1 / -1; }

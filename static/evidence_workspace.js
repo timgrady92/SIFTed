@@ -19,12 +19,12 @@
   let polling = false, needsRefresh = false, previewTimer, tabs = {};
   const state = () => JSON.parse(document.getElementById('workspaceState').textContent);
   const inputKey = () => state().input;
-  const savedKey = () => `sifted-workspace:${caseId}:${inputKey()}:${state().memory_os || ''}`;
+  const savedKey = () => `sifted-workspace:${caseId}:${inputKey()}:${state().kind}:${state().memory_os || ''}`;
   const at = (attribute, value) => `[${attribute}="${CSS.escape(String(value))}"]`;
   const scopeKey = () => state().tab === 'derived' ? state().examine
     : state().tab === 'triage' ? state().context
     : state().tab === 'investigate' ? `${state().memory_os}:${state().memory_question}`
-    : state().tab === 'processes' ? `${state().memory_os}:${state().inventory}` : state().memory_os || '';
+    : state().tab === 'processes' ? `${state().memory_os}:${state().inventory}` : `${state().kind}:${state().memory_os || ''}`;
   const canonical = value => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
   function matchesAction(job, tool, values, specs = []) {
@@ -97,8 +97,8 @@
     try {
       const data = await json(endpoint('/view', url));
       if (version !== rendering) return false;
-      const previous = viewport(), previousTab = state().tab, previousInput = inputKey(), previousScope = scopeKey(), previousOS = state().memory_os;
-      const draft = navigation.background && view.querySelector('#triageFilters, #memoryFilters');
+      const previous = viewport(), previousTab = state().tab, previousInput = inputKey(), previousScope = scopeKey(), previousOS = state().memory_os, previousKind = state().kind;
+      const draft = navigation.background && view.querySelector('#triageFilters, #memoryFilters, #evidenceTypeForm');
       const draftValues = draft ? new FormData(draft) : null;
       const selection = draft?.contains(document.activeElement) && document.activeElement.tagName === 'INPUT'
         ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
@@ -114,7 +114,7 @@
         ++resultVersion;
         active.clear();
         loadTabs();
-      } else if (state().memory_os !== previousOS) {
+      } else if (state().memory_os !== previousOS || state().kind !== previousKind) {
         operation = null;
         ++previewVersion;
         ++resultVersion;
@@ -505,12 +505,22 @@
     } else if (event.target.id === 'evidenceTypeForm') {
       event.preventDefault();
       const form = event.target;
+      if (form.dataset.saving) return;
+      form.dataset.saving = 'true';
+      const data = new FormData(form), submit = form.querySelector('[type=submit]');
+      submit.disabled = true;
       void (async () => {
         try {
-          const response = await fetch(form.action, {method: 'POST', body: new FormData(form)});
-          if (!response.ok) throw new Error('The evidence type could not be saved.');
-          await render();
+          const response = await fetch(form.action, {method: 'POST', body: data});
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'The evidence type could not be saved.');
+          }
+          // The server's clean destination drops filters and run selections from
+          // the previous workflow. Keep this transition in the current document.
+          await render(new URL(response.url), 'push', {focus: '#workspaceTabPanel', scroll: window.scrollY});
         } catch (error) { announce(error.message, true); }
+        finally { delete form.dataset.saving; submit.disabled = false; }
       })();
     }
   });

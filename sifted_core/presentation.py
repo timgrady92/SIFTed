@@ -1,6 +1,8 @@
 """Evidence types and shared, read-only interface projections."""
 
-from .evidence_profile import interpretation
+from .evidence_profile import acquisition_context, interpretation
+
+ACQUISITION_TYPES = {"memory_dump": "Memory image", "disk_image": "Disk image", "artifact_file": "Individual file"}
 
 ARTIFACT_TYPES = {
     "disk_image": {
@@ -44,6 +46,9 @@ def evidence_presentation(item, observed=None):
     icon = {"disk": "disk", "ewf": "disk", "filesystem": "disk", "memory": "memory",
             "registry": "registry", "evtx": "log", "sqlite": "database", "directory": "folder"}.get(kind, "file")
     label = content.get("label") or "Awaiting profile"
+    needs_context = acquisition_context(item)["needed"]
+    if needs_context:
+        label = "Acquisition type needed"
     if derived and not observed:
         label = {"filesystem_block_sample": "Block sample", "carved_file": "Carved file"}.get(item.get("artifact_kind"), "Captured file")
     tone, state = {"ready": ("success", "Verified"), "pending": ("pending", "Verifying"),
@@ -53,7 +58,7 @@ def evidence_presentation(item, observed=None):
     elif status == "ready" and observed and not observed.get("available"):
         tone, state = "error", "Reverify"
     return {"label": label, "icon": icon, "kind": kind, "state": state, "tone": tone,
-            "action": "Examine file" if derived else "Analyze" if status == "ready" else "Review intake"}
+            "action": "Examine file" if derived else "Set type" if needs_context else "Analyze" if status == "ready" else "Review intake"}
 
 
 EZ_CATEGORIES = [

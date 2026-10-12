@@ -5,10 +5,13 @@
 {% endmacro %}
 {% if workspace.tab == 'analysis' %}
 <header class="workspace-stage-heading"><p class="workspace-step">Step 1 of 4</p><h2>Prepare memory analysis</h2><p class="helper">Identify the image, then index its processes.</p></header>
+{% set detected_os = workspace.observed.get('memory', {}).get('os') == memory.os %}
+{% if detected_os %}<details data-disclosure="memory-context"><summary>{{ memory.systems[memory.os] }} · Analysis settings</summary>{% endif %}
 <form id="memoryContextForm" class="workspace-fields">
   <label>Acquisition OS<select name="memory_os" id="memoryOS">{% for os, label in memory.systems.items() %}<option value="{{ os }}" {% if os == memory.os %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
 </form>
 <p class="helper">Use the operating system recorded at acquisition.{% if memory.os != 'windows' %} Linux and macOS require symbols that match the captured kernel. Use the plugin examiner to configure a symbol directory when needed.{% endif %}</p>
+{% if detected_os %}</details>{% endif %}
 <section class="card card-static workspace-start" data-operation-slot="memory-prepare">
   <ol class="workspace-preparation" aria-label="Memory preparation"><li class="{{ 'complete' if workspace.observed.available else '' }}">Evidence verified</li><li class="{{ 'complete' if memory.identify.run_id else '' }}">Image context</li><li class="{{ 'complete' if memory.inventory else '' }}">Processes</li></ol>
   {% if memory.inventory and not memory.error %}<h3>Ready to review processes</h3><div class="workspace-next"><p>{{ memory.processes.total }} processes recorded. Select one to investigate.</p><a class="action" data-workspace-link href="{{ memory.processes_url }}">Review processes</a></div>

@@ -4,7 +4,8 @@ from flask import Blueprint, jsonify, redirect, render_template, request, url_fo
 
 from .context import runtime_repository, runtime_settings
 from .evidence_workspace import identify, partition_choices, resolve_actions, select_input, validate_context, workspace_inputs
-from .presentation import ARTIFACT_TYPES
+from .presentation import ARTIFACT_TYPES, ACQUISITION_TYPES
+from .evidence_profile import acquisition_context
 from .storage import StoreError
 from .tool_base import Plan, ValidationError, executable, normalize
 from .terminal import recipe
@@ -215,7 +216,7 @@ def workspace(case_id):
     result = {"case": case, "inputs": inputs[input_offset:input_offset + 100], "input_offset": input_offset,
             "input_count": len(inputs), "selected": selected, "observed": observed, "actions": actions,
             "runs": selected_runs[:50], "run_count": len(selected_runs), "parent_input": parent_input,
-            "context": context, "types": ARTIFACT_TYPES, "partitions": partitions,
+            "context": context, "acquisition": {**acquisition_context(selected), "choices": ACQUISITION_TYPES}, "partitions": partitions,
             "is_disk": is_disk, "is_memory": is_memory, "memory": memory, "tab": tab,
             "journey": journey, "triage": triage, "derived": derived,
             "completed_count": sum(r["status"] == "success" for r in selected_runs),

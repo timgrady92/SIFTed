@@ -1,4 +1,16 @@
 {% from '_components.html' import evidence_card, evidence_grid, evidence_identity %}
+{% macro acquisition_form() %}
+<form class="workspace-fields" id="evidenceTypeForm" method="post" action="{{ url_for('evidence.set_evidence_type', case_id=workspace.case.id, artifact_id=workspace.selected.id) }}">
+  <label><span id="acquisitionTypeLabel">Acquisition type</span><select name="type" required aria-labelledby="acquisitionTypeLabel" aria-describedby="acquisitionHint"><option value="" disabled {% if workspace.acquisition.needed %}selected{% endif %}>Choose a type</option>{% for key,label in workspace.acquisition.choices.items() %}<option value="{{ key }}" {% if not workspace.acquisition.needed and key == workspace.selected.type %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <button class="{{ 'action' if workspace.acquisition.needed else 'ghost' }}" type="submit">{{ 'Continue' if workspace.acquisition.needed else 'Save type' }}</button>
+</form>
+{% endmacro %}
+{% macro acquisition_prompt() %}
+<section class="workspace-acquisition" aria-labelledby="acquisitionHeading">
+  <h2 id="acquisitionHeading">Set evidence type</h2><p class="helper" id="acquisitionHint">Choose what was acquired to open its analysis workflow.</p>
+  {{ acquisition_form() }}
+</section>
+{% endmacro %}
 {% macro execute(tool, payload, label, reason='', configure=false, fields=[], title='', advance=false, button_label='') %}
 <button type="button" class="{{ 'ghost' if configure else 'action' }}" data-workspace-tool="{{ tool }}" data-payload='{{ payload|tojson }}' data-label="{{ title or label }}" data-configure="{{ 'true' if configure else 'false' }}" data-advance="{{ 'true' if advance else 'false' }}" data-fields='{{ fields|tojson }}' {% if reason %}disabled title="{{ reason }}"{% endif %}{% if button_label %} aria-label="{{ label }}"{% endif %}>{{ button_label or label }}</button>
 {% if reason %}<p class="helper">{{ reason }}</p>{% endif %}
@@ -36,9 +48,10 @@
 <section id="workspaceTabPanel" class="card card-static workspace-tab-content" role="tabpanel" aria-labelledby="tab-{{ workspace.tab }}" tabindex="0" data-active-tab="{{ workspace.tab }}">
 {% if workspace.tab == 'overview' %}
   <header class="workspace-stage-heading"><h2>Evidence overview</h2></header>
-  <dl><dt>Source</dt><dd>{{ workspace.selected.path }}</dd><dt>SHA-256</dt><dd class="workspace-hash">{{ workspace.selected.hash or 'Awaiting verification' }}</dd><dt>Content</dt><dd>{{ workspace.observed.label }}{% if workspace.observed.mime %} · {{ workspace.observed.mime }}{% endif %}</dd><dt>Classification basis</dt><dd>{{ workspace.observed.basis }}</dd></dl>
-  {% if workspace.observed.note %}<p>{{ workspace.observed.note }}</p>{% endif %}
-  {% if workspace.observed.available %}<button class="action" type="button" data-workspace-tab="analysis">{{ 'Prepare memory analysis' if workspace.is_memory else 'Continue to Analysis' }}</button>{% endif %}
+  {% if workspace.acquisition.needed and workspace.observed.available %}{{ acquisition_prompt() }}{% endif %}
+  <dl><dt>Source</dt><dd>{{ workspace.selected.path }}</dd><dt>SHA-256</dt><dd class="workspace-hash">{{ workspace.selected.hash or 'Awaiting verification' }}</dd><dt>Content</dt><dd>{{ workspace.observed.label }}</dd></dl>
+  <details data-disclosure="identification"><summary>Identification details</summary><dl><dt>Basis</dt><dd>{{ workspace.observed.basis }}</dd>{% if workspace.observed.mime %}<dt>File / libmagic</dt><dd>{{ workspace.observed.mime }}</dd>{% endif %}</dl>{% if workspace.observed.note %}<p>{{ workspace.observed.note }}</p>{% endif %}</details>
+  {% if workspace.observed.available and not workspace.acquisition.needed %}<button class="action" type="button" data-workspace-tab="analysis">{{ 'Prepare memory analysis' if workspace.is_memory else 'Continue to Analysis' }}</button>{% endif %}
   {% if workspace.selected.origin == 'registered' %}
     <p role="status">{{ identity.state }}{% if workspace.selected.verified_at %} · Last verified {{ workspace.selected.verified_at[:19]|replace("T", " ") }} UTC{% endif %}</p>
     {% if workspace.selected.error %}<p>{{ workspace.selected.error }}</p>{% endif %}
@@ -53,12 +66,17 @@
       <p class="helper">The record covers actions recorded by SIFTed. Analyst names are declared, not authenticated. Keep an exported copy outside the workstation to compare the event-chain digest later.</p>
     </details>
   {% endif %}
-  {% if workspace.selected.origin == 'registered' %}<details data-disclosure="classification"><summary>Manage evidence</summary><p class="helper">Set acquisition context when the content needs analyst classification.</p>
-    <form class="workspace-fields" id="evidenceTypeForm" method="post" action="{{ url_for('evidence.set_evidence_type', case_id=workspace.case.id, artifact_id=workspace.selected.id) }}"><label>Registered type<select name="type">{% for key,spec in workspace.types.items() %}<option value="{{ key }}" {% if key == workspace.selected.type %}selected{% endif %}>{{ spec.label }}</option>{% endfor %}</select></label><button class="ghost" type="submit">Save type</button></form>
+  {% if workspace.selected.origin == 'registered' %}<details data-disclosure="classification"><summary>Manage evidence</summary>
+    {% if workspace.acquisition.editable and not workspace.acquisition.needed and workspace.observed.available %}<p class="helper" id="acquisitionHint">Change the acquisition type to switch workflows.</p>{{ acquisition_form() }}{% endif %}
     <button class="workspace-text-button" data-retire-evidence="{{ workspace.selected.id }}" type="button">Retire evidence</button>
   </details>{% endif %}
 {% elif workspace.tab == 'analysis' %}
-  {% if workspace.is_disk %}{% include '_disk_journey.html' %}{% elif workspace.is_memory %}{% include '_memory_workspace.html' %}{% else %}<header class="workspace-stage-heading"><h2>Examine evidence</h2><p class="helper">Examinations for this content.</p></header>{{ examine_actions(workspace.actions) }}{% endif %}
+  {% if workspace.acquisition.needed and workspace.observed.available %}
+    {{ acquisition_prompt() }}
+    <details class="workspace-advanced" data-disclosure="inspect-unclassified"><summary>Inspect content first</summary><p class="helper">Profile: {{ workspace.observed.label }}. Raw captures can contain bytes that resemble other formats.</p>{{ examine_actions(workspace.actions) }}</details>
+  {% elif workspace.is_disk %}{% include '_disk_journey.html' %}{% elif workspace.is_memory %}{% include '_memory_workspace.html' %}{% else %}<header class="workspace-stage-heading"><h2>Examine evidence</h2><p class="helper">Examinations for this content.</p></header>
+    {% if workspace.acquisition.editable and workspace.observed.available %}<details data-disclosure="acquisition-choice"><summary>Choose another workflow</summary><p class="helper" id="acquisitionHint">Use the acquisition type if you know this is a disk or memory image.</p>{{ acquisition_form() }}</details>{% endif %}
+    {{ examine_actions(workspace.actions) }}{% endif %}
 {% elif workspace.tab == 'triage' %}{% include '_file_triage.html' %}
 {% elif workspace.tab in ['processes', 'investigate'] %}{% include '_memory_workspace.html' %}
 {% elif workspace.tab == 'derived' %}
@@ -79,4 +97,4 @@
 <header class="workspace-header"><div><p class="eyebrow">Case evidence</p><h1>{{ workspace.case.name }}</h1><p class="helper">{{ workspace.case.artifacts|rejectattr('status', 'equalto', 'retired')|list|length }} evidence items{% if workspace.case.summary %} · {{ workspace.case.summary }}{% endif %}</p></div><button class="action add-artifact-btn" data-case-id="{{ workspace.case.id }}" type="button">Add evidence</button></header>
 {{ evidence_grid(workspace.case) }}
 {% endif %}
-<script type="application/json" id="workspaceState">{{ {'active': workspace.active, 'tab':workspace.tab, 'context':workspace.context.id if workspace.context else '', 'memory_os': workspace.memory.os if workspace.memory else '', 'memory_question': workspace.memory.question if workspace.memory else '', 'inventory':workspace.memory.inventory.id if workspace.memory and workspace.memory.inventory else '', 'examine':workspace.examination.input.key if workspace.examination else '', 'input':workspace.selected.key if workspace.selected else ''}|tojson }}</script>
+<script type="application/json" id="workspaceState">{{ {'active': workspace.active, 'tab':workspace.tab, 'kind':workspace.observed.kind if workspace.observed else '', 'context':workspace.context.id if workspace.context else '', 'memory_os': workspace.memory.os if workspace.memory else '', 'memory_question': workspace.memory.question if workspace.memory else '', 'inventory':workspace.memory.inventory.id if workspace.memory and workspace.memory.inventory else '', 'examine':workspace.examination.input.key if workspace.examination else '', 'input':workspace.selected.key if workspace.selected else ''}|tojson }}</script>

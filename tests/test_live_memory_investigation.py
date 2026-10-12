@@ -31,7 +31,13 @@ def test_native_windows_investigation_and_captured_file_tools(tmp_path):
                       'SIFTED_VOLATILITY_SYMBOLS': str(tmp_path/'symbols')})
     repo, client, settings = Repository(app.config['DATABASE_PATH']), app.test_client(), app.config['SETTINGS']
     installed = discover(settings)
-    case, key = register(client, repo, source, 'memory_dump')
+    case, key = register(client, repo, source)
+    original = repo.case(case)['artifacts'][0]
+    assert original['profile']['kind'] == 'memory' and original['type_basis'] == 'content'
+    assert original['profile']['memory']['os'] == 'windows'
+    assert original['hash'] == baseline
+    assert not view(client, case, key)['acquisition']['needed']
+    assert not any(event['event'] == 'classification_changed' for event in repo.custody(case, original['id'])['events'])
     worker = Worker(repo, settings)
     print('Case', case, 'source', key, flush=True)
 

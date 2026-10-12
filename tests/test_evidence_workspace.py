@@ -1,5 +1,6 @@
 """Artifact suitability, isolated selection, result reuse and guided execution."""
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -59,8 +60,12 @@ def test_workspace_is_optional_and_empty_cases_are_usable(tmp_path):
     assert client.get('/case/missing/workspace').status_code == 404
 
 
-def test_raw_is_ambiguous_until_analyst_classifies_it(workspace_runtime):
+@pytest.mark.parametrize('mime,kind', [('application/octet-stream', 'unknown'), ('application/etl', 'content'), ('text/plain', 'text')])
+def test_raw_is_ambiguous_until_analyst_classifies_it(workspace_runtime, mime, kind):
     app, client, repo, settings, source, outputs, case, key = workspace_runtime
+    detector = source.parent / 'filetype.py'
+    detector.write_text(f'print({mime!r})')
+    settings.binaries['filetype'] = [sys.executable, str(detector)]
     raw = source.parent/'memory.raw'
     raw.write_bytes(b'\0' * 1024)
     response = client.post(f'/api/case/{case}/artifacts', json={'path': str(raw)})
@@ -69,13 +74,22 @@ def test_raw_is_ambiguous_until_analyst_classifies_it(workspace_runtime):
     item = repo.case(case)['artifacts'][-1]
     key = 'e:' + item['id']
     initial = view(client, case, key)
-    assert initial['observed']['kind'] == 'unknown'
+    assert initial['observed']['kind'] == kind
+    assert initial['acquisition']['needed'] == (kind == 'unknown')
+    assert initial['acquisition']['editable']
+    rendered = client.get(f'/case/{case}/workspace', query_string={'input': key}).data
+    assert (b'Set evidence type' if kind == 'unknown' else b'Choose another workflow') in rendered
     assert 'volatility' not in {a['id'] for a in initial['actions']}
+    count = len(repo.runs())
     assert client.post(f"/case/{case}/evidence/{item['id']}/type", data={'type': 'memory_dump'}).status_code == 302
     memory = view(client, case, key)
     assert memory['observed']['kind'] == 'memory' and memory['observed']['basis'] == 'Analyst selection'
+    assert not memory['acquisition']['needed'] and memory['acquisition']['editable']
     assert any(a['id'] == 'volatility' and a['recommended'] for a in memory['actions'])
-    assert repo.case(case)['artifacts'][-1]['hash'] == item['hash']
+    current = repo.case(case)['artifacts'][-1]
+    assert current['hash'] == item['hash'] and current['profile'] == item['profile']
+    assert len(repo.runs()) == count
+    assert repo.custody(case, item['id'])['events'][-1]['event'] == 'classification_changed'
 
 
 def test_content_overrides_misleading_extension_and_declared_type(workspace_runtime):
@@ -85,6 +99,7 @@ def test_content_overrides_misleading_extension_and_declared_type(workspace_runt
     case, key = register(client, repo, misleading, 'disk_image')
     result = view(client, case, key)
     assert result['observed']['kind'] == 'pdf'
+    assert not result['acquisition']['needed'] and not result['acquisition']['editable']
     ids = {a['id'] for a in result['actions']}
     assert {'pdfinfo', 'pdftotext'} <= ids and 'mmls' not in ids
     assert 'differs' in result['observed']['note']

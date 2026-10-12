@@ -15,7 +15,8 @@ from .storage import utc_now
 from .tool_base import ValidationError, executable, signature
 from .zimmerman import validate_file
 
-PROFILE_VERSION = 1
+PROFILE_VERSION = 2
+ACQUISITION_CONTEXT_KINDS = {"unknown", "content", "text"}
 LABELS = {
     "unknown": "Unidentified content", "directory": "Collected directory",
     "disk": "Disk image", "filesystem": "Filesystem image", "ewf": "EWF disk container",
@@ -27,7 +28,7 @@ LABELS = {
 }
 
 
-def profile(path, settings):
+def profile(path, settings, *, probe=None, image_paths=None):
     path = Path(evidence_path(path))
     before = signature(path)
     result = {"version": PROFILE_VERSION, "profiled_at": utc_now(), "signature": before,
@@ -130,10 +131,15 @@ def profile(path, settings):
             result["basis"] = "Native file / libmagic content identification"
     except (ValidationError, OSError, subprocess.SubprocessError) as exc:
         result["observations"].append("Native file identification unavailable: " + str(exc))
+    result.update(kind=kind, label=result["mime"] if kind == "content" else LABELS[kind])
+    if probe:
+        from .evidence_assessment import assess
+        assess(path, result, settings, probe, image_paths)
+        kind = result['kind']
+        result['label'] = result['mime'] if kind == 'content' else LABELS[kind]
     if signature(path) != before:
         raise IntegrityFailure("Evidence changed while profiling.")
-    result.update(kind=kind, label=result["mime"] if kind == "content" else LABELS[kind])
-    if kind == "unknown":
+    if kind == "unknown" and not result['note']:
         result["note"] = "No confident format identification. Raw disk and memory captures may need acquisition context."
     return result
 
@@ -146,6 +152,19 @@ def evidence_type(observed):
             "directory": "other"}.get(kind, "artifact_file")
 
 
+def acquisition_context(item):
+    """Generic byte observations cannot establish what the analyst acquired.
+
+    This is a recorded-intake projection, shared by cards and the workspace.
+    No filename guesses, file reads, or reclassification happen during display.
+    """
+    editable = bool(item and item.get("origin", "registered") == "registered"
+                    and item.get("status") == "ready"
+                    and item.get("profile", {}).get("kind") in ACQUISITION_CONTEXT_KINDS)
+    return {"editable": editable, "needed": editable and item.get("type_basis") != "analyst"
+            and item['profile']['kind'] == 'unknown'}
+
+
 def interpretation(item, observed):
     """Analyst context affects recommendations without rewriting the observation."""
     value = dict(observed)
@@ -155,7 +174,7 @@ def interpretation(item, observed):
     if item.get("artifact_kind") == "filesystem_block_sample":
         value.update(kind="block", label=LABELS["block"], basis="Producing run: raw filesystem data units")
     elif (item.get("type_basis") == "analyst" and chosen in {"disk_image", "memory_dump"}
-          and value["kind"] in {"unknown", "content", "text"}):
+          and value["kind"] in ACQUISITION_CONTEXT_KINDS):
         # Raw acquisitions have no universal signature. libmagic can identify
         # incidental bytes inside them as another format; its generic MIME
         # observation must not override the recorded acquisition context.
