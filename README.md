@@ -201,6 +201,8 @@ Zimmerman adapters invoke `dotnet` plus the installed assembly directly because 
 
 See [Volatility validation](docs/volatility-validation.md) for the tested SIFT installation, real memory fixture, coverage, and reproduction commands.
 
+Memory YARA examinations include a [reviewed starter library](docs/yara-rules.md): 72 rules from Google GCTI, Mandiant and ESET, with pinned sources and original licenses. Guided analysis and the plugin examiner prefill its absolute path. Each run retains the exact rules and provenance; custom rules remain available. The library works offline with SIFT's installed Volatility YARA engine.
+
 For a persistent deployment, configure your service manager to run the absolute path to `sifted` as the analyst account, with the configuration above in its environment. The launcher supervises both services, so only one service unit is needed. Allow at least 20 seconds for shutdown. Gunicorn runs two HTTP processes with eight threads each; forensic jobs stay serial in the separate worker. `/api/health` reports the worker heartbeat.
 
 ## Verification

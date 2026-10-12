@@ -12,6 +12,7 @@ from app import create_app
 from sifted_core.storage import Repository
 from sifted_core.worker import Worker
 from sifted_core.workflow_catalog import WORKFLOWS
+from sifted_core.yara_rules import DEFAULT_RULES
 from test_volatility import memory_runtime as memory_runtime
 from test_carving import carving_runtime as carving_runtime
 from test_zimmerman import zimmerman_runtime as zimmerman_runtime
@@ -684,6 +685,62 @@ from test_memory_workspace import memory_workspace as memory_workspace, family_i
 
 @pytest.mark.browser
 @pytest.mark.parametrize('width', [390, 1440])
+def test_bundled_yara_defaults_in_guided_and_standalone_ui(memory_workspace, monkeypatch, width):
+    from sifted_core import web
+    from test_volatility import option
+    app, _, repo, settings, _, case, key, installed = memory_workspace
+    plugin = 'windows.vadyarascan.VadYaraScan'
+    installed['plugins'][plugin]['options'] += [option('yara_string', 'string'), option('yara_compiled_file', 'file')]
+    monkeypatch.setattr(web, 'discover_volatility', lambda _settings: installed)
+    server = make_server('127.0.0.1', 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():
+                pytest.skip('Chromium is not installed.')
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': width, 'height': 844})
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            base = f'http://127.0.0.1:{server.server_port}'
+            page.goto(base + f'/case/{case}/workspace?' + urlencode({
+                'input': key, 'tab': 'investigate', 'memory_question': 'indicators'}))
+            page.get_by_role('button', name='Scan mapped memory with YARA rules', exact=True).click()
+            field = page.get_by_label('YARA rules file', exact=True)
+            assert field.input_value() == str(DEFAULT_RULES)
+            page.wait_for_function("!document.querySelector('#runOperation').disabled")
+            assert '--yara-file ' + str(DEFAULT_RULES) in page.locator('#operationCommand').text_content()
+            page.get_by_role('button', name='Run volatility', exact=True).click()
+            page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")
+            run_id = parse_qs(urlparse(page.url).query)['run'][0]
+            Worker(repo, settings).run_once()
+            page.get_by_text('YARA rules · 72 indicators', exact=True).wait_for()
+            assert not page.locator(f'[data-disclosure="yara-library-{run_id}"]').evaluate('(el) => el.open')
+            page.get_by_text('YARA rules · 72 indicators', exact=True).click()
+            assert page.get_by_role('link', name='Rules used', exact=True).is_visible()
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert repo.run(run_id)['plan']['parameters']['plugin_options'][plugin]['yara_file'] == str(DEFAULT_RULES)
+            page.goto(base + '/volatility')
+            page.locator(f'[data-plugin="{plugin}"]').check()
+            block = page.locator(f'[data-plugin-options="{plugin}"]')
+            assert block.locator('[data-option="yara_file"]').input_value() == str(DEFAULT_RULES)
+            block.locator('summary').click()
+            block.locator('[data-option="yara_string"]').fill('known marker')
+            values = page.evaluate('buildPayload()')['plugin_options'][plugin]
+            assert values['yara_string'] == 'known marker' and 'yara_file' not in values
+            block.locator('[data-option="yara_string"]').fill('')
+            assert page.evaluate('buildPayload()')['plugin_options'][plugin]['yara_file'] == str(DEFAULT_RULES)
+            assert not errors, errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize('width', [390, 1440])
 def test_process_family_navigation_and_history(memory_workspace, width, tmp_path):
     app, _, repo, _, _, case, key, _ = memory_workspace
     run = family_inventory(memory_workspace)
@@ -851,8 +908,9 @@ def test_guided_memory_journey_resume_process_scope_and_mobile(memory_workspace,
             page.get_by_role('button', name='Scan process with YARA rules', exact=True).click()
             rules = source.parent / 'reviewed rules.yar'
             rules.write_text('rule dos_message { strings: $a="DOS mode" condition: $a }')
-            rule_field = page.get_by_label('YARA rules file on SIFT (absolute path)', exact=True)
+            rule_field = page.get_by_label('YARA rules file', exact=True)
             assert rule_field.is_visible()
+            assert rule_field.input_value() == str(DEFAULT_RULES)
             rule_field.fill(str(rules))
             page.get_by_role('button', name='Run volatility', exact=True).click()
             page.wait_for_function("document.querySelector('#operationStatus').textContent.includes('Queued')")

@@ -8,8 +8,9 @@ import subprocess
 import time
 from pathlib import Path
 
-from .tool_base import (OUTPUT, Plan, Step, ToolAdapter, ValidationError, allowed,
+from .tool_base import (OUTPUT, WORKSPACE, Plan, Step, ToolAdapter, ValidationError, allowed,
                         choices, executable, flag, normalize, signature, text)
+from .yara_rules import snapshot as rule_snapshot
 
 _CACHE = {}
 PROBE = Path(__file__).with_name("volatility_probe.py")
@@ -126,14 +127,16 @@ class VolatilityAdapter(ToolAdapter):
         if any(";" in path for path in symbol_dirs):
             raise ValidationError("Symbol directory paths must not contain semicolons.")
         prefix += ["-s", ";".join(symbol_dirs)]
-        steps, auxiliary, saved = [], [], {}
+        steps, auxiliary, saved, configs, libraries = [], [], {}, {}, {}
         for name in selected:
             declarations = {opt["name"]: opt for opt in installed["plugins"][name]["options"]}
             values = options.get(name, {})
             if not isinstance(values, dict) or set(values) - set(declarations):
                 raise ValidationError("Unknown options for " + name)
-            if 'yara_file' in declarations and not any(values.get(key) for key in ('yara_file', 'yara_string', 'yara_compiled_file')):
-                raise ValidationError('Select a YARA rules file or pattern before scanning.')
+            if 'yara_file' in declarations:
+                sources = sum(bool(values.get(key)) for key in ('yara_file', 'yara_string', 'yara_compiled_file'))
+                if sources != 1:
+                    raise ValidationError('Select exactly one YARA rules file, compiled file or pattern before scanning.')
             arguments = []
             normalized_values = {}
             for key, spec in declarations.items():
@@ -160,7 +163,15 @@ class VolatilityAdapter(ToolAdapter):
                     if value:
                         arguments.append(spec["flag"])
                 elif kind == "file":
+                    resource = rule_snapshot(value) if key == 'yara_file' else None
                     path = normalize(value)
+                    if resource:
+                        contents, metadata = resource
+                        configs.update(contents)
+                        libraries[name] = metadata
+                        normalized_values[key] = path
+                        arguments += [spec['flag'], WORKSPACE + '/yara/memory.yar']
+                        continue
                     if not Path(path).is_file() or not allowed(path, s.input_roots):
                         raise ValidationError(f"{name}.{key} must be an existing file within input roots.")
                     if path == output or Path(output) in Path(path).parents:
@@ -180,11 +191,12 @@ class VolatilityAdapter(ToolAdapter):
             saved[name] = normalized_values
         snapshot = {**installed, "plugins": {name: installed["plugins"][name] for name in selected}}
         return Plan(self.tool_id, source, output, steps,
-                    configs={"volatility-installation.json": json.dumps(snapshot, indent=2)},
+                    configs={"volatility-installation.json": json.dumps(snapshot, indent=2), **configs},
                     auxiliary_paths=list(dict.fromkeys(auxiliary)), postprocess="volatility",
                     expected_files=["plugins/" + name + "/config.json" for name in selected],
                     postprocess_on_failure=True,
                     parameters={**({'process_ref': p['process_ref']} if 'process_ref' in p else {}),
+                                **({'yara_libraries': libraries} if libraries else {}),
                                 "plugins": selected, "plugin_options": saved, "renderer": renderer,
                                 "offline": offline, "symbol_path": symbols,
                                 "managed_symbols": s.volatility_symbols,

@@ -3,14 +3,18 @@
 See docs/memory-investigation-research.md for methodology and source references.
 Canonical plugin names and typed options are checked against the installation.
 """
+from .yara_rules import DEFAULT_RULES
+
 
 def action(id, label, plugin, *, pid=None, options=None, group='essential', note='', fields=(), tool='volatility', min_windows=None):
     return dict(id=id, label=label, plugin=plugin, pid=pid, options=options or {}, group=group,
                 note=note, fields=list(fields), tool=tool, min_windows=min_windows)
 
 
-RULES = {'name': 'yara_file', 'label': 'YARA rules file on SIFT (absolute path)', 'type': 'text',
-         'native_type': 'file', 'default': '', 'required': True, 'placeholder': '/cases/rules/investigation.yar'}
+RULES = {'name': 'yara_file', 'label': 'YARA rules file', 'type': 'text',
+         'native_type': 'file', 'default': str(DEFAULT_RULES), 'required': True,
+         'description': 'Bundled memory indicators · Google, Mandiant, ESET. Replace the path to use your own rules.',
+         'placeholder': '/cases/rules/investigation.yar'}
 HIVE = {'name': 'filter', 'label': 'Registry hive', 'type': 'select', 'native_type': 'string',
         'default': '', 'required': True,
         'choices_from': {'plugin': 'windows.registry.hivelist.HiveList', 'column': 'FileFullPath'}}

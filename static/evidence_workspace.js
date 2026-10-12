@@ -226,6 +226,10 @@
       const value = (spec.path || [spec.name]).reduce((obj, key) => obj?.[key], values) ?? spec.default;
       if (spec.type === 'checkbox') field.checked = Boolean(value); else field.value = value ?? '';
       label.append(field);
+      if (spec.description) {
+        const helper = document.createElement('span'); helper.className = 'helper'; helper.textContent = spec.description;
+        label.append(helper);
+      }
       fields.append(label);
     }
     options.hidden = !specs.length;

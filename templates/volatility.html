@@ -82,9 +82,10 @@
                   {% elif option.choices %}
                     <select data-option="{{ option.name }}" data-option-type="{{ option.type }}"><option value="">Default{% if option.default is not none %}: {{ option.default }}{% endif %}</option>{% for choice in option.choices %}<option value="{{ choice }}">{{ choice }}</option>{% endfor %}</select>
                   {% else %}
-                    <input type="text" data-option="{{ option.name }}" data-option-type="{{ option.type }}" placeholder="{% if option.type == 'integer_list' %}JSON array: [4, &quot;0xffff800000123000&quot;]{% elif option.type == 'string_list' %}JSON array of strings{% elif option.default is not none %}Default: {{ option.default }}{% elif option.type == 'file' %}File path within input roots{% else %}{{ option.name }}{% endif %}" />
+                    <input type="text" data-option="{{ option.name }}" data-option-type="{{ option.type }}" {% if option.name == 'yara_file' %}value="{{ yara_rules_path }}" data-bundled-rules="{{ yara_rules_path }}"{% endif %} placeholder="{% if option.type == 'integer_list' %}JSON array: [4, &quot;0xffff800000123000&quot;]{% elif option.type == 'string_list' %}JSON array of strings{% elif option.default is not none %}Default: {{ option.default }}{% elif option.type == 'file' %}File path within input roots{% else %}{{ option.name }}{% endif %}" />
                   {% endif %}
                   <span class="helper">{{ option.description }}</span>
+                  {% if option.name == 'yara_file' %}<span class="helper">Bundled memory indicators · Google, Mandiant, ESET. Replace the path to use your own rules.</span>{% endif %}
                 </label>
                 {% endfor %}
               </details>

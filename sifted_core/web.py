@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, jsonify, redirect, render_template, re
 from .tool_base import normalize as normalize_path, allowed as is_path_allowed
 from .zimmerman import resolve_ez_tool
 from .volatility import discover as discover_volatility, BUNDLES
+from .yara_rules import DEFAULT_RULES
 from .carving import available_types
 from .tool_base import ValidationError
 from .catalog import EZ_TOOL_ORDER
@@ -275,6 +276,7 @@ def volatility():
                    for label, names in BUNDLES[os]] for os in groups}
     return render_template("volatility.html", cases=load_cases(), installed=installed,
                            discovery_error=error, groups=groups, bundles=bundles,
+                           yara_rules_path=str(DEFAULT_RULES),
                            symbol_roots=runtime_settings().symbol_roots)
 
 

@@ -139,6 +139,8 @@ const buildPayload = () => {
         values[input.dataset.option] = parsed;
       } else { values[input.dataset.option] = raw; }
     });
+    const bundled = entry?.querySelector('[data-bundled-rules]')?.dataset.bundledRules;
+    if (bundled && values.yara_file === bundled && (values.yara_string || values.yara_compiled_file)) delete values.yara_file;
     pluginOptions[name] = values;
   });
   return {

@@ -1,0 +1,270 @@
+{
+  "format": 1,
+  "id": "memory-starter",
+  "version": "2026.10.12",
+  "label": "Memory indicators",
+  "reviewed_at": "2026-10-12",
+  "sources": [
+    {
+      "id": "google-gcti",
+      "name": "Google GCTI",
+      "repository": "https://github.com/chronicle/GCTI",
+      "commit": "1c5fd42b1895098527fde00c2d9757edf6b303bb",
+      "license": "Apache-2.0",
+      "license_path": "licenses/google-gcti.txt",
+      "license_upstream_path": "LICENSE",
+      "license_sha256": "9b8e1305e46d1dd4011b6ed933c9f6223e08c9c4625001c5fd75a34fa930f616"
+    },
+    {
+      "id": "mandiant",
+      "name": "Mandiant",
+      "repository": "https://github.com/mandiant/red_team_tool_countermeasures",
+      "commit": "3561b71724dbfa3e2bb78106aaa2d7f8b892c43b",
+      "license": "BSD-2-Clause",
+      "license_path": "licenses/mandiant.txt",
+      "license_upstream_path": "LICENSE.txt",
+      "license_sha256": "a5b8bd9ae96c630bbf229d61c5c5def20274e00be39abfd2fab4d7879ceab462"
+    },
+    {
+      "id": "eset",
+      "name": "ESET",
+      "repository": "https://github.com/eset/malware-ioc",
+      "commit": "705ead5a0a86fefae3c2390f91a339852384f438",
+      "license": "BSD-2-Clause",
+      "license_path": "licenses/eset.txt",
+      "license_upstream_path": "LICENSE",
+      "license_sha256": "995182e185856186fbbe49f150409ae026aa4cda7e94f83c6ed737cbb77fa9c7"
+    }
+  ],
+  "files": [
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Resources_Beacon_Dll_All_Versions_MemEnabled.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Resources_Beacon_Dll_All_Versions_MemEnabled.yara",
+      "sha256": "53efcf4459c0c308ebd9dfd07655a742dd9e34477a2832ac2e6c2d3014a83855",
+      "rules": [
+        "CobaltStrike_Resources_Beacon_Dll_v1_44",
+        "CobaltStrike_Resources_Beacon_Dll_v1_45",
+        "CobaltStrike_Resources_Beacon_Dll_v1_46",
+        "CobaltStrike_Resources_Beacon_Dll_v1_47",
+        "CobaltStrike_Resources_Beacon_Dll_v1_48",
+        "CobaltStrike_Resources_Beacon_Dll_v1_49",
+        "CobaltStrike_Resources_Beacon_Dll_v2_0_49",
+        "CobaltStrike_Resources_Beacon_Dll_v2_1_and_v2_2",
+        "CobaltStrike_Resources_Beacon_Dll_v2_3",
+        "CobaltStrike_Resources_Beacon_Dll_v2_4",
+        "CobaltStrike_Resources_Beacon_Dll_v2_5",
+        "CobaltStrike_Resources_Beacon_Dll_v3_0",
+        "CobaltStrike_Resources_Beacon_Dll_v3_1",
+        "CobaltStrike_Resources_Beacon_Dll_v3_2",
+        "CobaltStrike_Resources_Beacon_Dll_v3_3",
+        "CobaltStrike_Resources_Beacon_Dll_v3_4",
+        "CobaltStrike_Resources_Beacon_Dll_v3_5_hf1_and_3_5_1",
+        "CobaltStrike_Resources_Beacon_Dll_v3_6",
+        "CobaltStrike_Resources_Beacon_Dll_v3_7",
+        "CobaltStrike_Resources_Beacon_Dll_v3_8",
+        "CobaltStrike_Resources_Beacon_Dll_v3_11",
+        "CobaltStrike_Resources_Beacon_Dll_v3_11_bugfix_and_v3_12",
+        "CobaltStrike_Resources_Beacon_Dll_v3_13",
+        "CobaltStrike_Resources_Beacon_Dll_v3_14",
+        "CobaltStrike_Sleeve_Beacon_Dll_v4_0_suspected",
+        "CobaltStrike_Sleeve_Beacon_Dll_v4_1_and_v4_2",
+        "CobaltStrike_Sleeve_Beacon_Dll_v4_3_v4_4_v4_5_and_v4_6",
+        "CobaltStrike_Sleeve_Beacon_Dll_v4_7_suspected",
+        "CobaltStrike_Resources_Beacon_x64_v3_2",
+        "CobaltStrike_Resources_Beacon_x64_v3_3",
+        "CobaltStrike_Resources_Beacon_x64_v3_4",
+        "CobaltStrike_Resources_Beacon_x64_v3_5_hf1_and_v3_5_1",
+        "CobaltStrike_Resources_Beacon_x64_v3_6",
+        "CobaltStrike_Resources_Beacon_x64_v3_7",
+        "CobaltStrike_Resources_Beacon_x64_v3_8",
+        "CobaltStrike_Resources_Beacon_x64_v3_11",
+        "CobaltStrike_Resources_Beacon_x64_v3_12",
+        "CobaltStrike_Resources_Beacon_x64_v3_13",
+        "CobaltStrike_Resources_Beacon_x64_v3_14",
+        "CobaltStrike_Sleeve_Beacon_Dll_x86_v4_0_suspected",
+        "CobaltStrike_Sleeve_Beacon_x64_v4_1_and_v_4_2",
+        "CobaltStrike_Sleeve_Beacon_x64_v4_3",
+        "CobaltStrike_Sleeve_Beacon_x64_v4_4_v_4_5_and_v4_6",
+        "CobaltStrike_Sleeve_Beacon_x64_v4_5_variant"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Resources_Bind64_Bin_v2_5_through_v4_x.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Resources_Bind64_Bin_v2_5_through_v4_x.yara",
+      "sha256": "3197221bc93a0de40b571480400a5dd5bffc97781f9ef63a20b30fdc45379a18",
+      "rules": [
+        "CobaltStrike_Resources_Bind64_Bin_v2_5_through_v4_x"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Resources_Bind_Bin_v2_5_through_v4_x.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Resources_Bind_Bin_v2_5_through_v4_x.yara",
+      "sha256": "e125b9bdcc27344f517f572770d1095b0e90d60ae864549011d0854f3c04910f",
+      "rules": [
+        "CobaltStrike_Resources_Bind_Bin_v2_5_through_v4_x"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Resources_Dnsstager_Bin_v1_47_through_v4_x.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Resources_Dnsstager_Bin_v1_47_through_v4_x.yara",
+      "sha256": "55c9918bd8b2c7b4c0efcf96df7c91053448d0d0516529b22021166c3d498e22",
+      "rules": [
+        "CobaltStrike_Resources_Dnsstager_Bin_v1_47_through_v4_x"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Resources_Httpsstager64_Bin_v3_2_through_v4_x.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Resources_Httpsstager64_Bin_v3_2_through_v4_x.yara",
+      "sha256": "5fb4f68ebad7970b1ae4ffc59104538fc0c499041a63b3c1dd09f74f43fac246",
+      "rules": [
+        "CobaltStrike_Resources_Httpsstager64_Bin_v3_2_through_v4_x"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Resources_Httpsstager_Bin_v2_5_through_v4_x.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Resources_Httpsstager_Bin_v2_5_through_v4_x.yara",
+      "sha256": "8a2417340f8dc62fcf407f1ef7b5ccbf8815964f6a6515ce597c5fc6cdbf5aad",
+      "rules": [
+        "CobaltStrike_Resources_Httpsstager_Bin_v2_5_through_v4_x"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Resources_Httpstager64_Bin_v3_2_through_v4_x.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Resources_Httpstager64_Bin_v3_2_through_v4_x.yara",
+      "sha256": "de03bb333036cae58268b5aa90ca28cbc2c37f6e777c090dd7640500e27beb3e",
+      "rules": [
+        "CobaltStrike_Resources_Httpstager64_Bin_v3_2_through_v4_x"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Resources_Httpstager_Bin_v2_5_through_v4_x.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Resources_Httpstager_Bin_v2_5_through_v4_x.yara",
+      "sha256": "9e2c50ccff8e80ce0a5d34eba04ab69bc8879aa5ee34263fe98bc30b5fcd49ff",
+      "rules": [
+        "CobaltStrike_Resources_Httpstager_Bin_v2_5_through_v4_x"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Resources_Reverse64_Bin_v2_5_through_v4_x.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Resources_Reverse64_Bin_v2_5_through_v4_x.yara",
+      "sha256": "980be42ec89f74c97c51935b9525e202c2ac7b45e85eef2b0cdde85e3a7539f1",
+      "rules": [
+        "CobaltStrike_Resources_Reverse64_Bin_v2_5_through_v4_x"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Resources_Reverse_Bin_v2_5_through_v4_x.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Resources_Reverse_Bin_v2_5_through_v4_x.yara",
+      "sha256": "74578e1695f92125fc38dff1e0fde99ab85584f19e4d8ec8f2d88618a8fac33c",
+      "rules": [
+        "CobaltStrike_Resources_Reverse_Bin_v2_5_through_v4_x"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Resources_Smbstager_Bin_v2_5_through_v4_x.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Resources_Smbstager_Bin_v2_5_through_v4_x.yara",
+      "sha256": "4555ac9ae1ebe959f365818d345018a7ebb5c312f6137e35a2a136d544dc12b1",
+      "rules": [
+        "CobaltStrike_Resources_Smbstager_Bin_v2_5_through_v4_x"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/CobaltStrike__Sleeve_BeaconLoader_all.yara",
+      "upstream_path": "YARA/CobaltStrike/CobaltStrike__Sleeve_BeaconLoader_all.yara",
+      "sha256": "02e99e9319cb5e9ab61cf29b94b16efd210c3daa39c54e78de34e17a7b0a31d1",
+      "rules": [
+        "CobaltStrike_Sleeve_BeaconLoader_HA_x86_o_v4_3_v4_4_v4_5_and_v4_6",
+        "CobaltStrike_Sleeve_BeaconLoader_MVF_x86_o_v4_3_v4_4_v4_5_and_v4_6",
+        "CobaltStrike_Sleeve_BeaconLoader_VA_x86_o_v4_3_v4_4_v4_5_and_v4_6",
+        "CobaltStrike_Sleeve_BeaconLoader_x86_o_v4_3_v4_4_v4_5_and_v4_6",
+        "CobaltStrike_Sleeve_BeaconLoader_HA_x64_o_v4_3_v4_4_v4_5_and_v4_6",
+        "CobaltStrike_Sleeve_BeaconLoader_MVF_x64_o_v4_3_v4_4_v4_5_and_v4_6",
+        "CobaltStrike_Sleeve_BeaconLoader_VA_x64_o_v4_3_v4_4_v4_5_and_v4_6",
+        "CobaltStrike_Sleeve_BeaconLoader_x64_o_v4_3_v4_4_v4_5_and_v4_6"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/Sliver__Implant_32bit.yara",
+      "upstream_path": "YARA/Sliver/Sliver__Implant_32bit.yara",
+      "sha256": "632aafd2452e4f46bee967afab6298d940a1c8fbc89e20784e451f3fdea53883",
+      "rules": [
+        "Sliver_Implant_32bit"
+      ]
+    },
+    {
+      "source": "google-gcti",
+      "path": "upstream/google-gcti/Sliver__Implant_64bit.yara",
+      "upstream_path": "YARA/Sliver/Sliver__Implant_64bit.yara",
+      "sha256": "be976213429223380abc03cc7d60cb051ed5820dfba6b7fedfc9fcf3635173db",
+      "rules": [
+        "Sliver_Implant_64bit"
+      ]
+    },
+    {
+      "source": "mandiant",
+      "path": "upstream/mandiant/APT_Backdoor_Win_GoRat_Memory.yar",
+      "upstream_path": "rules/REDFLARE (Gorat)/production/yara/APT_Backdoor_Win_GoRat_Memory.yar",
+      "sha256": "c4111234dcf6e87c4dd20f3fbc1b8f78ac605f5a3e9a7531361e9c4a0ad4b7f9",
+      "rules": [
+        "APT_Backdoor_Win_GoRat_Memory"
+      ]
+    },
+    {
+      "source": "eset",
+      "path": "upstream/eset/kobalos.yar",
+      "upstream_path": "kobalos/kobalos.yar",
+      "sha256": "ac9910fd2628359ba0ded3582e431c24cf6d22e39e0352b07143e860bc31f9f0",
+      "rules": [
+        "kobalos",
+        "kobalos_ssh_credential_stealer"
+      ]
+    },
+    {
+      "source": "eset",
+      "path": "upstream/eset/rakos.yar",
+      "upstream_path": "rakos/rakos.yar",
+      "sha256": "6bb6ecb537d7fe397084894f8217492d85c82387712dc6d788ab5fa6c55a229e",
+      "rules": [
+        "linux_rakos"
+      ]
+    },
+    {
+      "source": "eset",
+      "path": "upstream/eset/windigo-onimiki.yar",
+      "upstream_path": "windigo/windigo-onimiki.yar",
+      "sha256": "25965e3b5a6fde53dd7eb473293be7baf90cdebb73c2f6f16e8a6aa0905420cc",
+      "rules": [
+        "onimiki"
+      ]
+    },
+    {
+      "source": "eset",
+      "path": "upstream/eset/keydnap.yar",
+      "upstream_path": "keydnap/keydnap.yar",
+      "sha256": "0b2cec6c8abcce01c09d44cafe1468ee91091f29fae84aa8c9383b062d1619cc",
+      "rules": [
+        "keydnap_downloader",
+        "keydnap_backdoor_packer",
+        "keydnap_backdoor"
+      ]
+    }
+  ],
+  "rule_count": 72,
+  "bundle": {
+    "path": "memory.yar",
+    "sha256": "a755c2659b8911bc205cfaa9111e53680510664ff753f5ad2bdda4f732336e72"
+  }
+}

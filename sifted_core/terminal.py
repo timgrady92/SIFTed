@@ -153,6 +153,9 @@ def volatility_commands(plan, body):
     for step in plan.steps:
         name = step.label
         args = without_options(native_argv(step.argv), {"--save-config": 1, "-s": 1, "-o": 1})
+        library = plan.parameters.get('yara_libraries', {}).get(name)
+        if library:
+            args = [library['path'] if arg == WORKSPACE + '/yara/memory.yar' else arg for arg in args]
         args[args.index(name):args.index(name)] = ["-s", symbol_dirs]
         suffix = "txt" if plan.parameters["renderer"] == "pretty" else plan.parameters["renderer"]
         body += [command_text(args, name + "." + suffix)]

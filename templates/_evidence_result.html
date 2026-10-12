@@ -1,5 +1,11 @@
 <div class="workspace-result-meta"><strong>{{ run.plan.parameters.parser_id|default(run.tool) }}</strong><span class="workspace-badge">{{ run.status }}</span><time datetime="{{ run.created_at }}">{{ run.created_at[:19]|replace("T", " ") }} UTC</time></div>
 {% if run.error %}<p>{{ run.error }}</p>{% endif %}
+{% for library in run.plan.parameters.get('yara_libraries', {}).values()|unique(attribute='sha256') %}
+<details data-disclosure="yara-library-{{ run.id }}"><summary>YARA rules · {{ library.rule_count }} indicators</summary>
+<p>{{ library.label }} · {{ library.version }}</p><p class="helper">{{ library.sources|join(' · ') }}. Matches are investigative leads; verify their context.</p>
+{% if run.status == 'success' %}<p><a target="_blank" rel="noopener" href="{{ url_for('web.view_file', path=run.output_path + '/_sifted/yara/memory.yar') }}">Rules used</a> · <a target="_blank" rel="noopener" href="{{ url_for('web.view_file', path=run.output_path + '/_sifted/yara/manifest.json') }}">Sources and hashes</a></p>{% endif %}
+</details>
+{% endfor %}
 {% if run.status == 'success' and run.tool == 'fls' %}<a class="action" data-workspace-link href="{{ url_for('evidence.case_workspace', case_id=workspace.case.id, input=workspace.selected.key, tab='triage', context_run_id=run.id) }}">Explore this listing</a>{% endif %}
 {% if captured %}{% from '_components.html' import evidence_card %}<div class="evidence-grid workspace-captures">{% for item in captured %}{{ evidence_card(item, workspace.case.id, captured=true, source_key=workspace.selected.key) }}{% endfor %}</div>{% endif %}
 {% if reports %}

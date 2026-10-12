@@ -1,0 +1,4 @@
+# Preserve reviewed resource bytes and upstream formatting for pinned hashes.
+upstream/** -text -whitespace
+licenses/** -text -whitespace
+memory.yar -text -whitespace
