@@ -7,17 +7,16 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='evidence_workspace.css') }}">
 </head>
 <body>
-{% from '_components.html' import site_nav, evidence_grid, browse_drawer, add_artifact_modal %}
+{% from '_components.html' import site_nav, evidence_case_card, browse_drawer, add_artifact_modal %}
 {{ site_nav('evidence') }}
 <main class="evidence-workspace" {% if workspace and workspace.selected %}data-workspace-case="{{ workspace.case.id }}"{% endif %}>
 {% if not workspace %}
-  <header class="workspace-stage-heading workspace-heading"><div><p class="eyebrow">Casework</p><h1>Evidence</h1><p class="helper">Choose an item to begin analysis.</p></div><a class="ghost" href="/cases">Manage cases</a></header>
+  <header class="workspace-stage-heading workspace-heading"><div><p class="eyebrow">Casework</p><h1>Evidence</h1><p class="helper">Choose a case to explore its evidence.</p></div><a class="ghost" href="/cases">Manage cases</a></header>
+  <div class="evidence-grid case-entry-grid" aria-label="Cases">
   {% for case in cases|reverse %}
-  <section class="evidence-case-group" aria-label="{{ case.name }}">
-    <div class="workspace-heading workspace-stage-heading"><div><h2><a href="{{ url_for('evidence.case_workspace', case_id=case.id) }}">{{ case.name }}</a></h2><span class="helper">{{ case.artifacts|rejectattr('status', 'equalto', 'retired')|list|length }} evidence items</span></div><button class="ghost add-artifact-btn" data-case-id="{{ case.id }}" type="button">Add evidence</button></div>
-    {{ evidence_grid(case) }}
-  </section>
+    {{ evidence_case_card(case) }}
   {% else %}<section class="card card-static evidence-empty"><h2>No cases yet</h2><p class="helper">Create a case to register evidence.</p><a class="action" href="/cases">Create a case</a></section>{% endfor %}
+  </div>
 {% else %}
   <noscript><p>This workspace needs JavaScript for inline analysis. <a href="/tools">Standalone tools</a> remain available.</p></noscript>
   <div id="workspaceView">{% include '_evidence_workspace.html' %}</div>
@@ -33,10 +32,10 @@
   <p id="workspaceStatus" role="status" aria-live="polite"></p>
 {% endif %}
 </main>
-{% if not workspace or not workspace.selected %}
+{% if workspace and not workspace.selected %}
 {{ browse_drawer() }}{{ add_artifact_modal() }}
 <script defer src="{{ url_for('static', filename='cases.js') }}"></script>
 {% endif %}
-<script defer src="{{ url_for('static', filename='evidence_workspace.js') }}"></script>
+{% if workspace and workspace.selected %}<script defer src="{{ url_for('static', filename='evidence_workspace.js') }}"></script>{% endif %}
 </body>
 </html>

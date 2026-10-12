@@ -20,11 +20,20 @@
 {% macro evidence_card(item, case_id, captured=false, source_key=None) %}
 {% set info = item|evidence_presentation %}
 {% set key = item.key if captured else 'e:' + item.id %}
-<a class="card evidence-card" data-evidence-key="{{ key }}" {% if captured %}data-examine="{{ key }}"{% endif %}
+<a class="card card-link evidence-card" data-evidence-key="{{ key }}" {% if captured %}data-examine="{{ key }}"{% endif %}
    href="{{ url_for('evidence.case_workspace', case_id=case_id, input=source_key, tab='derived', examine=key) if source_key else url_for('evidence.case_workspace', case_id=case_id, input=key) }}" aria-label="{{ info.action }}: {{ item.label }}">
   <div class="evidence-card-top"><span class="evidence-icon-wrap" data-kind="{{ info.icon }}">{{ evidence_icon(info.icon) }}</span><span class="evidence-status" data-tone="{{ info.tone }}" {% if item.verified_at %}title="Last verified {{ item.verified_at }}"{% endif %}>{{ info.state }}</span></div>
   <div class="evidence-name"><span class="evidence-kind">{{ info.label }}</span><h3 title="{{ item.label }}">{{ item.label }}</h3><span class="evidence-path" title="{{ item.path }}">{{ item.path }}</span></div>
   <div class="evidence-card-footer"><span class="evidence-fingerprint" {% if item.hash %}title="SHA-256 {{ item.hash }}"{% endif %}>{{ 'SHA-256 · ' + item.hash[:12] if item.hash else 'Awaiting hash' }}</span><span class="evidence-card-cta">{{ info.action }} <span aria-hidden="true">↗</span></span></div>
+</a>
+{% endmacro %}
+
+{% macro evidence_case_card(case) %}
+{% set items = case.artifacts|rejectattr('status', 'equalto', 'retired')|list %}
+<a class="card card-link case-entry-card" data-evidence-case="{{ case.id }}" href="{{ url_for('evidence.case_workspace', case_id=case.id) }}" aria-label="Open case: {{ case.name }}">
+  <div class="evidence-card-top"><span class="evidence-icon-wrap">{{ evidence_icon('folder') }}</span><span class="case-entry-count">{{ items|length }} evidence {{ 'item' if items|length == 1 else 'items' }}</span></div>
+  <div class="evidence-name"><h2 title="{{ case.name }}">{{ case.name }}</h2>{% if case.summary %}<p class="case-entry-summary" title="{{ case.summary }}">{{ case.summary }}</p>{% endif %}</div>
+  <div class="evidence-card-footer"><time class="case-entry-date" datetime="{{ case.created_at }}">Created {{ case.created_at[:10] }}</time><span class="evidence-card-cta">Open case <span aria-hidden="true">→</span></span></div>
 </a>
 {% endmacro %}
 

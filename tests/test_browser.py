@@ -813,7 +813,8 @@ def test_evidence_cards_unify_case_hubs_and_analysis(workspace_runtime, tmp_path
     worker.run_once()
     assert client.delete(f"/api/case/{case}/artifacts/{retired['id']}").status_code == 200
     pending = add('pending.txt', b'pending evidence', label='Pending ' + 'long-evidence-name-' * 10)
-    client.post('/cases', data={'name': 'Empty case'})
+    empty_name = 'Empty <case> & notes ' * 6
+    client.post('/cases', data={'name': empty_name, 'summary': 'Acquisition notes for review. ' * 20})
     empty_case = repo.cases()[-1]['id']
     run_count = len(repo.runs())
     server = make_server('127.0.0.1', 0, app, threaded=True)
@@ -829,7 +830,26 @@ def test_evidence_cards_unify_case_hubs_and_analysis(workspace_runtime, tmp_path
             page.on('pageerror', lambda error: errors.append(str(error)))
             base = f'http://127.0.0.1:{server.server_port}'
             hub = base + f'/case/{case}/workspace'
-            for route in ['/cases', '/evidence', f'/case/{case}/workspace']:
+            page.goto(base + '/evidence')
+            assert page.locator('.case-entry-card').count() == 2
+            assert page.locator('.evidence-card, .add-artifact-btn, #addArtifactModal').count() == 0
+            case_card = page.locator(f'[data-evidence-case="{case}"]')
+            assert '5 evidence items' in case_card.inner_text()  # Retired evidence is excluded.
+            assert case_card.get_attribute('href') == f'/case/{case}/workspace'
+            empty_card = page.locator(f'[data-evidence-case="{empty_case}"]')
+            assert '0 evidence items' in empty_card.inner_text()
+            assert empty_name.strip() in empty_card.inner_text()
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            page.screenshot(path=str(tmp_path / f'evidence-case-selection-{width}.png'), full_page=True)
+            case_card.focus()
+            page.keyboard.press('Enter')
+            page.wait_for_url(hub)
+            assert page.locator('.evidence-card').count() == 5
+            page.go_back()
+            page.wait_for_url(base + '/evidence')
+            assert page.locator('.case-entry-card').count() == 2
+            assert page.locator('.evidence-card').count() == 0
+            for route in ['/cases', f'/case/{case}/workspace']:
                 page.goto(base + route)
                 if route == '/cases':
                     page.locator(f'#case-{case} .case-toggle').click()

@@ -617,14 +617,14 @@ main {
   margin: 0 0 var(--space-sm);
 }
 
-/* Shared evidence surfaces: hubs, captured files and analysis context. */
+/* Shared evidence surfaces: cases, evidence, captured files and analysis context. */
 .card-static:hover { transform: none; }
 .evidence-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
   gap: var(--space-lg);
 }
-.evidence-card {
+.card-link {
   --card-border: rgba(var(--neon-teal-rgb), .2);
   --card-glow: transparent;
   display: flex;
@@ -635,11 +635,11 @@ main {
   text-decoration: none;
   min-width: 0;
 }
-.evidence-card:hover, .evidence-card:focus-visible {
+.card-link:hover, .card-link:focus-visible {
   --card-border: rgba(var(--neon-teal-rgb), .6);
   --card-glow: 0 0 24px rgba(var(--neon-teal-rgb), .1);
 }
-.evidence-card:focus-visible { outline: 2px solid var(--neon-teal); outline-offset: 4px; }
+.card-link:focus-visible { outline: 2px solid var(--neon-teal); outline-offset: 4px; }
 .evidence-card-top, .evidence-card-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap; }
 .evidence-icon-wrap { display: inline-grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; color: var(--neon-teal); border-radius: var(--radius-md); background: rgba(var(--neon-teal-rgb), .07); }
 .evidence-icon-wrap[data-kind=memory] { color: var(--neon-pink); background: rgba(var(--neon-pink-rgb), .08); }
@@ -651,6 +651,12 @@ main {
 .evidence-name :is(h1,h2,h3) { color: var(--text-main); overflow-wrap: anywhere; margin: 6px 0 !important; font-size: 1rem; line-height: 1.45; }
 .evidence-name h1 { font-size: clamp(1.2rem, 3vw, 1.65rem); }
 .evidence-card .evidence-name h3 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.case-entry-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+.case-entry-card { gap: var(--space-xl); min-height: 220px; }
+.case-entry-card .evidence-name h2 { font-size: 1.2rem; }
+.case-entry-card :is(h2, .case-entry-summary) { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.case-entry-card .case-entry-summary { margin: var(--space-sm) 0 0; font-size: .85rem; color: var(--text-muted); line-height: 1.5; }
+.case-entry-count, .case-entry-date { color: var(--text-muted); font-size: .78rem; }
 .evidence-kind { color: var(--text-muted); font-size: .75rem; font-weight: 500; }
 .evidence-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: .78rem; }
 .evidence-card-footer { border-top: 1px solid rgba(var(--neon-teal-rgb), .12); padding-top: var(--space-md); margin-top: auto; font-size: .75rem; }

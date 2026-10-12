@@ -15,9 +15,6 @@
 .workspace-header.card { padding: var(--space-xl); }
 .workspace-header-actions { display: flex; align-items: center; gap: var(--space-lg); flex-shrink: 0; }
 .workspace-captured-header { margin-bottom: var(--space-lg); }
-.evidence-case-group { margin: var(--space-2xl) 0; }
-.evidence-case-group h2 a { text-decoration: none; color: var(--text-main); }
-.evidence-case-group h2 a:hover { color: var(--neon-teal); }
 .workspace-captures { margin: var(--space-lg) 0; }
 .workspace-header p { margin-bottom: 0; }
 .evidence-workspace label { display: grid; gap: 6px; min-width: 0; font-size: .9rem; color: var(--text-muted); }
