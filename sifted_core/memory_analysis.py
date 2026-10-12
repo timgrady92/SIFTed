@@ -5,6 +5,7 @@ plugin catalog, adapter, worker, published results and custody remain canonical.
 """
 from . import published, volatility
 from .memory_catalog import PROFILES, QUESTIONS, SUPPORTING, action as definition
+from .memory_processes import ProcessIndex
 from .tool_base import ValidationError, executable, normalize
 
 
@@ -180,6 +181,7 @@ def journey(item, observed, runs, case_id, repository, settings, *, operating_sy
         try:
             table = published.page(context, inventory_report(context, profile['inventory']), repository, settings,
                                    query=query, offset=offset, selected=row_id)
+            process_index(context, repository, settings).annotate(table)
             model['processes'] = table
             if table['selected']:
                 pid = table['selected']['values'].get('PID')
@@ -191,16 +193,9 @@ def journey(item, observed, runs, case_id, repository, settings, *, operating_sy
     return model
 
 
-def process_rows(context, repository, settings):
-    """Unique PID-to-row observations, never a claim of object identity."""
-    if not context:
-        return {}
+def process_index(context, repository, settings):
+    """Share verified inventory lookups between process relationships and reports."""
     plugin = next((p['inventory'] for p in PROFILES.values() if report_for(context, p['inventory'])), None)
     report = inventory_report(context, plugin)
-    found = {}
     with published.artifact(context, report, repository, settings) as handle:
-        for ordinal, row in enumerate(published.records(handle, report), 1):
-            pid = row.get('PID')
-            if type(pid) is int and 0 <= pid <= 2 ** 32 - 1:
-                found[pid] = None if pid in found else ordinal
-    return found
+        return ProcessIndex(published.records(handle, report))

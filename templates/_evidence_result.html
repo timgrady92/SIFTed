@@ -10,7 +10,7 @@
 <div class="workspace-table-scroll"><table class="workspace-result-table"><thead><tr>
 {% for column in table.columns %}<th>{{ column }}</th>{% endfor %}
 </tr></thead><tbody>
-{% for row in table.rows %}<tr>{% for column in table.columns %}<td{% if row['values'].get(column) is number %} class="workspace-number"{% endif %}>{% if column == 'PID' and row.process_url %}<a data-workspace-link href="{{ row.process_url }}" aria-label="Review PID {{ row['values'].PID }}">{{ row['values'].PID }}</a>{% else %}{{ row['values'].get(column, '') }}{% endif %}</td>{% endfor %}</tr>
+{% for row in table.rows %}<tr>{% for column in table.columns %}<td{% if row['values'].get(column) is number %} class="workspace-number"{% endif %}>{% if column == 'PID' and row.process_url %}<a data-workspace-link data-process-target="{{ row.process_target }}" href="{{ row.process_url }}" aria-label="Review PID {{ row['values'].PID }}">{{ row['values'].PID }}</a>{% else %}{{ row['values'].get(column, '') }}{% endif %}</td>{% endfor %}</tr>
 {% else %}<tr><td colspan="{{ [1,table.columns|length]|max }}">No rows returned.</td></tr>{% endfor %}
 </tbody></table></div>
 <div class="tool-actions">{% if table.offset %}<button class="ghost" type="button" data-report-offset="{{ [0,table.offset - 50]|max }}" data-run="{{ run.id }}" data-report="{{ report }}">Previous rows</button>{% endif %}{% if table.more %}<button class="ghost" type="button" data-report-offset="{{ table.offset + 50 }}" data-run="{{ run.id }}" data-report="{{ report }}">Next rows</button>{% endif %}</div>

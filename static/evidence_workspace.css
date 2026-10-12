@@ -85,8 +85,14 @@
 .workspace-result-table th { white-space: nowrap; }
 .workspace-result-table { border-collapse: collapse; font-size: .85rem; text-align: left; width: 100%; }
 .workspace-result-table th, .workspace-result-table td { padding: 10px; border-bottom: 1px solid var(--border-glow); vertical-align: top; min-width: 100px; max-width: 600px; overflow-wrap: anywhere; }
-.memory-process-table > thead > tr > th:first-child, .memory-process-table > thead > tr > th:nth-child(2) { width: 9%; }
+.memory-process-table > thead > tr > th:first-child { width: 9%; }
+.memory-process-table > thead > tr > th:nth-child(2) { width: 22%; }
 .memory-process-table > thead > tr > th:last-child { width: 75px; }
+.workspace-process-link { display: inline-block; padding: 6px 0; text-decoration: none; }
+.workspace-process-link:hover { text-decoration: underline; }
+.workspace-process-heading { scroll-margin-top: 80px; }
+.workspace-process-relations { list-style: none; padding: 0; margin: 0; max-height: 280px; overflow: auto; }
+.workspace-process-relations a { min-height: 44px; padding: 12px 0; }
 #memoryContextForm { max-width: 350px; }
 .workspace-state { color: var(--text-muted); }
 .workspace-state.deleted { color: var(--neon-amber); }

@@ -51,6 +51,7 @@
   function saveTab() {
     tabs[state().tab] = {search: location.search, scroll: window.scrollY};
     try { sessionStorage.setItem(savedKey(), JSON.stringify(tabs)); } catch (_) { /* Storage may be disabled. */ }
+    rememberView();
   }
   function announce(message, error = false) {
     status.textContent = message;
@@ -72,6 +73,11 @@
   function focusSelector(element) {
     if (!element || element === document.body) return null;
     if (element.id) return '#' + CSS.escape(element.id);
+    if (element.dataset.processTarget) {
+      const container = element.closest('[data-process-entry], [data-disclosure]');
+      const name = container?.hasAttribute('data-process-entry') ? 'data-process-entry' : 'data-disclosure';
+      return (container ? at(name, container.getAttribute(name)) + ' ' : '') + at('data-process-target', element.dataset.processTarget);
+    }
     for (const name of ['data-inspect-entry', 'data-process-row', 'data-workspace-tab', 'data-examine', 'data-workspace-result']) {
       if (element.hasAttribute(name)) return at(name, element.getAttribute(name));
     }
@@ -91,6 +97,10 @@
       top: anchor?.getBoundingClientRect().top,
       disclosures: new Map([...view.querySelectorAll('[data-disclosure]')].map(element => [element.dataset.disclosure, element.open]))};
   }
+  function rememberView(position = viewport()) {
+    history.replaceState({...history.state, workspace: {...position, disclosures: [...position.disclosures],
+      input: inputKey(), tab: state().tab, scope: scopeKey()}}, '');
+  }
   async function render(url = new URL(location.href), historyMode = '', navigation = {}) {
     const version = ++rendering;
     view.setAttribute('aria-busy', 'true');
@@ -102,7 +112,7 @@
       const draftValues = draft ? new FormData(draft) : null;
       const selection = draft?.contains(document.activeElement) && document.activeElement.tagName === 'INPUT'
         ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
-      if (historyMode === 'push') history.pushState(null, '', url);
+      if (historyMode === 'push') { rememberView(previous); history.pushState(null, '', url); }
       if (historyMode === 'replace') history.replaceState(null, '', url);
       // Detach the live form before replacing the fragment, then put it back beside
       // its originating filesystem, file entry or examination. Polling never scrolls.
@@ -121,8 +131,11 @@
         loadTabs();
       }
       const sameView = previousInput === inputKey() && previousTab === state().tab && previousScope === scopeKey();
-      if (sameView) for (const element of view.querySelectorAll('[data-disclosure]')) {
-        if (previous.disclosures.has(element.dataset.disclosure)) element.open = previous.disclosures.get(element.dataset.disclosure);
+      const restore = navigation.restore?.input === inputKey() && navigation.restore.tab === state().tab
+        && navigation.restore.scope === scopeKey() ? navigation.restore : null;
+      const disclosures = restore ? new Map(restore.disclosures) : sameView ? previous.disclosures : new Map();
+      for (const element of view.querySelectorAll('[data-disclosure]')) {
+        if (disclosures.has(element.dataset.disclosure)) element.open = disclosures.get(element.dataset.disclosure);
       }
       mountOperation();
       seedActive(data.active);
@@ -130,7 +143,7 @@
         const field = view.querySelector(`#${draft.id} ${at('name', name)}`);
         if (field) field.value = value;
       }
-      const focus = navigation.focus || (sameView ? previous.focus : null);
+      const focus = navigation.focus || restore?.focus || (sameView ? previous.focus : null);
       if (focus) view.querySelector(focus)?.focus({preventScroll: true});
       if (sameView && previous.operationFocus && panel.hidden) {
         const host = view.querySelector(at('data-operation-slot', operation?.slot || ''));
@@ -140,9 +153,13 @@
       }
       if (sameView && selection && document.activeElement.type === 'search') document.activeElement.setSelectionRange(...selection);
       revealActiveTab();
-      const anchor = sameView && previous.anchor && view.querySelector(previous.anchor);
-      let scroll = anchor ? window.scrollY + anchor.getBoundingClientRect().top - previous.top : previous.scroll;
-      if (!sameView) scroll = navigation.scroll ?? Math.min(previous.scroll, view.querySelector('.workspace-tabs')?.offsetTop || 0);
+      const position = restore || previous;
+      const anchor = (restore || sameView) && position.anchor && view.querySelector(position.anchor);
+      let scroll = anchor ? window.scrollY + anchor.getBoundingClientRect().top - position.top : position.scroll;
+      if (!sameView && !restore) scroll = Math.min(previous.scroll, view.querySelector('.workspace-tabs')?.offsetTop || 0);
+      scroll = navigation.scroll ?? scroll;
+      const target = navigation.reveal && view.querySelector(navigation.reveal);
+      if (target) scroll = window.scrollY + target.getBoundingClientRect().top - (view.querySelector('.workspace-tabs')?.offsetHeight || 0) - 16;
       window.scrollTo({top: scroll, behavior: 'instant'});
       saveTab();
       announce('');
@@ -408,7 +425,8 @@
     else if (button.matches('[data-workspace-link]')) {
       const url = new URL(button.href);
       if (url.pathname !== location.pathname || url.origin !== location.origin || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-      event.preventDefault(); void navigate(url);
+      const target = button.dataset.processTarget ? '#process-' + CSS.escape(button.dataset.processTarget) : null;
+      event.preventDefault(); void navigate(url, target ? {focus: target, reveal: target} : {});
     } else if (button.dataset.retireEvidence) {
       if (!confirm('Retire this evidence? Files and custody records will be retained.')) return;
       button.disabled = true;
@@ -550,7 +568,8 @@
       operationStatus.textContent = 'Command copied.';
     } catch (error) { operationStatus.textContent = error.message; }
   });
-  window.addEventListener('popstate', () => { void render(); });
+  history.scrollRestoration = 'manual';
+  window.addEventListener('popstate', event => { void render(new URL(location.href), '', {restore: event.state?.workspace}); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void poll(); });
   loadTabs(); saveTab(); seedActive(state().active); revealActiveTab();
   const recordedRun = new URL(location.href).searchParams.get('run');

@@ -1,6 +1,7 @@
 """Memory selections stay tied to verified runs, rows, process options and bytes."""
 import copy
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -35,6 +36,10 @@ pids=[int(a[a.index('--pid')+1])] if '--pid' in a else [int(a[a.index('--pids')+
 rows=[{'PID':pid,'PPID':0,'ImageFileName':f'process-{pid}.exe','Offset(V)':18446735277616529408+pid,'__children':[]} for pid in pids]
 if plugin.endswith('.Info') or plugin=='banners.Banners': rows=[{'Variable':'Kernel','Value':'test context'},{'Variable':'NtMajorVersion','Value':'10'}]
 if plugin.endswith('.HiveList'): rows=[{'Offset':18446735277616529408,'FileFullPath':'SYSTEM'}]
+if plugin.startswith(('linux.', 'mac.')):
+ for row in rows:
+  if 'ImageFileName' in row: row['COMM' if plugin.startswith('linux.') else 'NAME']=row.pop('ImageFileName')
+  if 'CreateTime' in row: row['CREATION TIME' if plugin.startswith('linux.') else 'Start Time']=row.pop('CreateTime')
 if '--dump' in a: (out/'process.dmp').write_bytes(b'MZ'+b'\\0'*128)
 if a[a.index('-r')+1]=='json': print(json.dumps(rows))
 else:
@@ -67,6 +72,57 @@ def inventory(runtime, os='windows', **options):
 def selected(runtime, run, row=43, **options):
     _, client, _, _, _, case, key, _ = runtime
     return view(client, case, key, tab='processes', inventory_run_id=run['id'], process_row=row, **options)
+
+
+def family_inventory(runtime, os='windows', renderer='jsonl'):
+    """Native-output contract with parent/child records on different pages."""
+    script = Path(runtime[-1]['argv_prefix'][1])
+    script.write_text(script.read_text().replace("if plugin.endswith('.Info')", """if len(rows) == 120:
+ rows[4].update(ImageFileName='System')
+ rows[90].update(PID=900,PPID=4,ImageFileName='services.exe',CreateTime='2024-01-01T00:00:00Z')
+ rows[42].update(PPID=900,CreateTime='2024-01-01T01:00:00Z')
+ rows[109].update(PPID=900,CreateTime='2024-01-01T02:00:00Z')
+ rows[13].update(PPID=9999)
+if plugin.endswith('.Info')"""))
+    return inventory(runtime, os, renderer=renderer)
+
+
+@pytest.mark.parametrize('os,renderer', [('windows', 'jsonl'), ('linux', 'json'), ('mac', 'jsonl')])
+def test_parent_and_children_use_entire_verified_inventory(memory_workspace, os, renderer):
+    runtime = memory_workspace
+    _, client, repo, _, _, case, key, _ = runtime
+    run = family_inventory(runtime, os, renderer)
+    before = len(repo.runs())
+    model = selected(runtime, run, memory_os=os, process_q='process-42.exe')
+    table = model['memory']['processes']
+    assert table['total'] == 1
+    parent = table['rows'][0]['parent']
+    assert parent['pid'] == 900 and parent['name'] == 'services.exe'
+    query = parse_qs(urlparse(parent['url']).query)
+    assert query['inventory_run_id'] == [run['id']] and query['input'] == [key]
+    assert query['memory_os'] == [os] and query['process_offset'] == ['50']
+    assert 'process_q' not in query and urlparse(parent['url']).fragment == 'process-91'
+    query = {k: v[0] for k, v in query.items()}
+    parent_model = client.get(f'/api/case/{case}/workspace', query_string=query).json
+    family = parent_model['memory']['processes']
+    assert family['selected']['id'] == 91
+    assert [r['pid'] for r in family['children']] == [42, 109]
+    child = family['children'][1]
+    child_query = parse_qs(urlparse(child['url']).query)
+    assert child_query['process_offset'] == ['100'] and child_query['process_row'] == ['110']
+    page = client.get(parent['url'])
+    assert page.status_code == 200 and b'Children (2)' in page.data
+    assert b'data-process-target="110"' in page.data
+    assert f'<th scope="col">{dict(windows="ImageFileName", linux="COMM", mac="NAME")[os]}</th>'.encode() in page.data
+    assert f'<th scope="col">{dict(windows="CreateTime", linux="CREATION TIME", mac="Start Time")[os]}</th>'.encode() in page.data
+    assert len(repo.runs()) == before  # Navigation never schedules another forensic run.
+    # A later inventory must not silently change an existing relationship link.
+    inventory(runtime, os)
+    assert client.get(f'/api/case/{case}/workspace', query_string=query).json['memory']['inventory']['id'] == run['id']
+    # Altered output cannot supply names or family links.
+    (Path(run['output_path']) / run['plugin_results'][0]['file']).write_text('{}\n')
+    invalid = client.get(f'/api/case/{case}/workspace', query_string=query).json['memory']
+    assert invalid['processes'] is None and 'changed' in invalid['error']
 
 
 @pytest.mark.parametrize('os', PROFILES)

@@ -11,7 +11,7 @@ from .tool_base import Plan, ValidationError, executable, normalize
 from .terminal import recipe
 from .file_triage import browse
 from .workflow_catalog import WORKFLOWS
-from .memory_analysis import journey as memory_journey, process_rows
+from .memory_analysis import journey as memory_journey, process_index
 from . import published
 
 
@@ -148,6 +148,13 @@ def workspace_actions(selected, observed, runs, case_id, context=None):
     return values
 
 
+def process_url(case_id, key, memory, row):
+    return url_for('evidence.case_workspace', case_id=case_id, input=key, tab='processes',
+                   memory_os=memory['os'], inventory_run_id=memory['inventory']['id'],
+                   process_row=row['id'], process_offset=((row['id'] - 1) // 50) * 50,
+                   _anchor=f"process-{row['id']}")
+
+
 def workspace(case_id):
     repo, settings = runtime_repository(), runtime_settings()
     case = case_or_error(case_id)
@@ -194,6 +201,12 @@ def workspace(case_id):
         memory['advanced_url'] = url_for('web.volatility', **input_payload(selected, case_id))
         memory['processes_url'] = url_for('evidence.case_workspace', case_id=case_id, input=key,
                                          tab='processes', memory_os=memory['os'])
+        if memory['processes']:
+            table = memory['processes']
+            targets = [row['parent'] for row in table['rows']] + table['children']
+            for target in targets:
+                if target['id']:
+                    target['url'] = process_url(case_id, key, memory, target)
     journey = disk_journey(selected, observed, selected_runs, partitions, case_id, key) if is_disk else []
     if tab == "triage" and not context:
         inventories = [card for card in journey if card["inventory_run_id"]]
@@ -296,19 +309,18 @@ def workspace_run(case_id, run_id):
             if run['tool'] == 'volatility':
                 # JSON object order is not an analytical priority. Keep names,
                 # paths and command lines visible before ancillary plugin fields.
-                preferred = ['Name', 'Path', 'Args', 'Variable', 'Value', 'ImageFileName', 'COMM', 'PID', 'PPID', 'Process']
+                preferred = ['Name', 'Path', 'Args', 'Variable', 'Value', 'ImageFileName', 'COMM', 'NAME', 'PID', 'PPID', 'Process']
                 table['columns'] = [c for c in preferred if c in table['columns']] + [c for c in table['columns'] if c not in preferred]
                 memory = model.get('memory')
                 plugin = next((p['plugin'] for p in run.get('plugin_results', []) if p['file'] == report['name']), '')
                 if (memory and memory['inventory'] and plugin.startswith(memory['os'] + '.')
                         and run.get('input_sha256') == model['selected']['hash']):
-                    ids = process_rows(memory['inventory'], runtime_repository(), runtime_settings())
+                    index = process_index(memory['inventory'], runtime_repository(), runtime_settings())
                     for row in table['rows']:
-                        pid = row['values'].get('PID')
-                        if type(pid) is int and ids.get(pid):
-                            row['process_url'] = url_for('evidence.case_workspace', case_id=case_id, input=model['selected']['key'],
-                                                         tab='processes', memory_os=memory['os'], inventory_run_id=memory['inventory']['id'],
-                                                         process_row=ids[pid], process_offset=((ids[pid] - 1) // 50) * 50)
+                        target = index.unique(row['values'].get('PID'))
+                        if target:
+                            row['process_url'] = process_url(case_id, model['selected']['key'], memory, target)
+                            row['process_target'] = target['id']
         else:
             with published.artifact(run, report['name'], runtime_repository(), runtime_settings()) as handle:
                 data = handle.read(128 * 1024 + 1)

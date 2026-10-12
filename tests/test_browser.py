@@ -679,7 +679,85 @@ def test_evidence_intake_from_browser_to_verified_overview(intake_runtime, metho
         thread.join(timeout=5)
 
 
-from test_memory_workspace import memory_workspace as memory_workspace
+from test_memory_workspace import memory_workspace as memory_workspace, family_inventory
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize('width', [390, 1440])
+def test_process_family_navigation_and_history(memory_workspace, width, tmp_path):
+    app, _, repo, _, _, case, key, _ = memory_workspace
+    run = family_inventory(memory_workspace)
+    run_count = len(repo.runs())
+    server = make_server('127.0.0.1', 0, app, threaded=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    errors = []
+    try:
+        with playwright.sync_playwright() as engine:
+            if not Path(engine.chromium.executable_path).is_file():
+                pytest.skip('Chromium is not installed.')
+            browser = engine.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': width, 'height': 844})
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            base = f'http://127.0.0.1:{server.server_port}'
+            page.goto(base + f'/case/{case}/workspace?' + urlencode({
+                'input': key, 'tab': 'processes', 'inventory_run_id': run['id'],
+                'process_q': 'process-42.exe', 'process_row': 43}))
+            page.evaluate("window.familyDocument = 'same document'")
+            page.locator('[data-disclosure="process-record-43"] summary').click()
+            parent = page.locator('[data-process-entry="43"] [data-process-target="91"]')
+            parent.scroll_into_view_if_needed()
+            parent.focus()
+            original_scroll = page.evaluate('scrollY')
+            original_url = page.url
+            parent.press('Enter')
+            page.wait_for_function("document.activeElement.id === 'process-91'")
+            assert page.locator('[data-process-entry]').first.get_attribute('data-process-entry') == '51'
+            assert page.locator('[name=process_q]').input_value() == ''
+            assert page.locator('#process-91').inner_text() == 'Process 900'
+            assert page.locator('#process-91').bounding_box()['y'] >= page.locator('.workspace-tabs').bounding_box()['height']
+            assert page.locator('#process-91').bounding_box()['y'] < 200
+            children = page.locator('[data-disclosure="process-children-91"]')
+            assert children.locator('summary').inner_text() == 'Children (2)'
+            assert not children.evaluate('(el) => el.open')
+            children.locator('summary').click()
+            page.screenshot(path=str(tmp_path / f'process-family-{width}.png'))
+            assert children.get_by_role('link', name='Inspect process 42 · process-42.exe', exact=True).is_visible()
+            child = children.get_by_role('link', name='Inspect process 109 · process-109.exe', exact=True)
+            child.focus()
+            parent_scroll = page.evaluate('scrollY')
+            child.press('Enter')
+            page.wait_for_function("document.activeElement.id === 'process-110'")
+            assert page.locator('[data-process-entry]').first.get_attribute('data-process-entry') == '101'
+            assert page.locator('#process-110').bounding_box()['y'] < 200
+            page.go_back()
+            page.wait_for_function("document.querySelector('#process-91') && !document.querySelector('#workspaceView').hasAttribute('aria-busy')")
+            assert children.evaluate('(el) => el.open')
+            assert abs(page.evaluate('scrollY') - parent_scroll) < 3
+            assert page.evaluate('document.activeElement.dataset.processTarget') == '110'
+            page.go_back()
+            page.wait_for_function("document.querySelector('#process-43') && !document.querySelector('#workspaceView').hasAttribute('aria-busy')")
+            assert page.url == original_url
+            assert page.locator('[name=process_q]').input_value() == 'process-42.exe'
+            assert page.locator('[data-disclosure="process-record-43"]').evaluate('(el) => el.open')
+            assert abs(page.evaluate('scrollY') - original_scroll) < 3
+            assert page.evaluate('document.activeElement.dataset.processTarget') == '91'
+            page.go_forward()
+            page.wait_for_function("document.querySelector('#process-91') && !document.querySelector('#workspaceView').hasAttribute('aria-busy')")
+            page.go_forward()
+            page.wait_for_function("document.activeElement.id === 'process-110'")
+            assert page.evaluate('window.familyDocument') == 'same document'
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            page.reload()
+            assert page.locator('#process-110').is_visible()
+            assert parse_qs(urlparse(page.url).query)['inventory_run_id'] == [run['id']]
+            assert len(repo.runs()) == run_count
+            assert not errors, errors
+            browser.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 @pytest.mark.browser

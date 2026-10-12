@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+from urllib.parse import urlparse
 
 import pytest
 
@@ -15,6 +16,48 @@ from sifted_core.tool_base import resolve_argv
 from sifted_core.volatility import discover
 from sifted_core.worker import Worker
 from test_evidence_workspace import register, view
+
+
+@pytest.mark.live
+@pytest.mark.parametrize('variable,digest', [
+    ('SIFTED_TEST_INVESTIGATION_IMAGE', '8079a7459b1739caf7d4fbf6dde5eb0ae7a9d24dbde657debf4d5202c8dc6b62'),
+    ('SIFTED_TEST_MEMORY_IMAGE', 'c4aeeb1b461378eef796944884d1d60adaa99cbae4d035923c144b08deee1e6e'),
+])
+def test_native_process_relationships(tmp_path, variable, digest):
+    path = os.environ.get(variable)
+    if not path:
+        pytest.skip(f'Set {variable} to the documented public memory capture.')
+    source = Path(path).resolve()
+    app = create_app({'TESTING': True, 'SIFTED_DATABASE_PATH': str(tmp_path / 'case.db'),
+                      'SIFTED_INPUT_ROOTS': [str(source.parent), str(tmp_path)], 'SIFTED_OUTPUT_ROOTS': [str(tmp_path)],
+                      'SIFTED_VOLATILITY_SYMBOLS': str(tmp_path / 'symbols')})
+    client, settings = app.test_client(), app.config['SETTINGS']
+    repo = Repository(app.config['DATABASE_PATH'])
+    case, key = register(client, repo, source)
+    assert repo.case(case)['artifacts'][0]['hash'] == digest
+    action = view(client, case, key)['memory']['inventory_action']
+    response = client.post('/api/volatility/run', json=action['payload'])
+    assert response.status_code == 202, response.json
+    Worker(repo, settings).run_once()
+    inventory = repo.run(response.json['run_id'])
+    assert inventory['status'] == 'success', inventory.get('error')
+    records = published.page(inventory, inventory['plugin_results'][0]['file'], repo, settings)['rows']
+    parent = next(r for r in records if r['values']['ImageFileName'] == 'services.exe')
+    child = next(r for r in records if r['values']['PPID'] == parent['values']['PID'] and r['values']['ImageFileName'] == 'svchost.exe')
+    runs_before = len(repo.runs())
+    model = view(client, case, key, tab='processes', process_row=child['id'], process_q='svchost.exe')['memory']
+    link = next(r for r in model['processes']['rows'] if r['id'] == child['id'])['parent']
+    assert link['id'] == parent['id'] and link['name'] == 'services.exe'
+    assert client.get(link['url']).status_code == 200
+    family = client.get(f'/api/case/{case}/workspace?' + urlparse(link['url']).query).json['memory']
+    assert family['inventory']['id'] == inventory['id']
+    assert family['processes']['selected']['values'] == parent['values']
+    child_link = next(r for r in family['processes']['children'] if r['id'] == child['id'])
+    assert child_link['pid'] == child['values']['PID']
+    assert client.get(child_link['url']).status_code == 200
+    assert len(repo.runs()) == runs_before
+    assert repo.case(case)['artifacts'][0]['hash'] == digest
+    print(f"{source.name}: {len(records)} processes; {parent['values']['PID']} services.exe ↔ {child['values']['PID']} svchost.exe", flush=True)
 
 
 @pytest.mark.live
