@@ -20,7 +20,7 @@
       >
         <div class="glossary-page-toolbar">
           <div class="glossary-page-intro">
-            <h2>Forensic Reference</h2>
+            <h2>Forensic Reference</h2><a class="action reference-create" href="/reference/new?kind=glossary">New glossary entry</a>
             <p class="helper">Artifacts, registry keys, persistence locations, and event codes.</p>
           </div>
           <div class="section-tabs" data-section-tabs>
@@ -93,7 +93,5 @@
     {{ active_jobs_drawer() }}
     <footer></footer>
     <script defer src="{{ url_for('static', filename='app.js') }}"></script>
-    <script defer src="{{ url_for('static', filename='glossary.js') }}"></script>
-    <script defer src="{{ url_for('static', filename='guides-sidebar.js') }}"></script>
   </body>
 </html>

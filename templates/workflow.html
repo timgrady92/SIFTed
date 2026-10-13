@@ -23,8 +23,7 @@
         <button class="ghost wide" id="openLog">View recent log</button><button class="action wide" id="runWorkflow">Run {{ workflow.id }}</button></div></aside></main>
     <div class="log-drawer" id="logDrawer" aria-hidden="true"><div class="drawer-surface"><div class="drawer-header"><h3>Recent log</h3><button class="ghost" id="closeLog">Close</button></div><p class="drawer-status" id="logDrawerStatus"></p><pre class="run-log" id="logDrawerContent"></pre></div></div>
     {{ browse_drawer() }}{{ glossary_sidebar() }}{{ guides_sidebar() }}{{ active_jobs_drawer() }}
-    <script src="{{ url_for('static', filename='app.js') }}"></script><script src="{{ url_for('static', filename='glossary.js') }}"></script>
-    <script src="{{ url_for('static', filename='guides-sidebar.js') }}"></script><script src="{{ url_for('static', filename='tool_shared.js') }}"></script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script><script src="{{ url_for('static', filename='tool_shared.js') }}"></script>
     <script src="{{ url_for('static', filename='workflow.js') }}"></script>
   </body>
 </html>

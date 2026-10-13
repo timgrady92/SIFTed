@@ -1,0 +1,47 @@
+.reference-create { display: inline-flex; margin: 12px 0; }
+.guide-card .guide-toggle { display: flex; flex-direction: column; gap: 12px; height: 100%; }
+.guide-card .guide-toggle-cta { width: 100%; margin-top: auto; font-size: .75rem; letter-spacing: .08em; }
+.guide-modal { z-index: 60; }
+.glossary-sidebar[aria-hidden="true"], .guides-sidebar[aria-hidden="true"] { pointer-events: none; visibility: hidden; }
+.reference-management, .reference-editor-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.reference-management a { font-size: .85rem; }
+.reference-editor { max-width: 1200px; margin: 32px auto 100px; padding: 0 24px; }
+.reference-editor > header { margin-bottom: 24px; }
+.reference-editor .card { padding: 28px; margin: 24px 0; }
+.reference-editor-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; margin-bottom: 24px; }
+.reference-editor label, .reference-dialog label { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.reference-editor :is(input:not([type=checkbox]), select, textarea), .reference-dialog :is(input, select) { width: 100%; box-sizing: border-box; font: inherit; color: var(--text-main); background: #070a12; border: 1px solid rgba(var(--neon-teal-rgb),.3); border-radius: 10px; padding: 12px; }
+.reference-editor :is(input, select, textarea):focus-visible, .reference-dialog :is(input, select):focus-visible { outline: 2px solid var(--neon-teal); outline-offset: 2px; }
+.reference-editor .reference-check { display: inline-flex; flex-direction: row; align-items: center; margin-right: 20px; }
+.reference-editor input[type=checkbox] { width: auto; }
+.reference-editor textarea { resize: vertical; min-height: 80px; }
+.reference-editor fieldset { border: 1px solid rgba(var(--neon-teal-rgb),.2); border-radius: 12px; margin: 20px 0; padding: 20px; min-width: 0; }
+.reference-wide { grid-column: 1 / -1; }
+.reference-detail-row { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)) auto; gap: 10px; align-items: end; margin: 16px 0; }
+.reference-toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px; background: #111425; border-radius: 12px 12px 0 0; }
+.reference-toolbar button { padding: 8px 12px; }
+.reference-rich-editor { min-height: 480px; border: 1px solid rgba(var(--neon-teal-rgb),.35); border-radius: 0 0 12px 12px; padding: 24px; overflow-wrap: anywhere; }
+.reference-rich-editor:focus { outline: 2px solid var(--neon-teal); outline-offset: 2px; }
+.reference-rich-editor p:empty::before { content: '\00a0'; }
+.reference-dialog { width: min(640px,calc(100% - 32px)); max-height: 90vh; overflow: auto; background: #101321; color: var(--text-main); border: 1px solid var(--neon-teal); border-radius: 16px; padding: 24px; }
+.reference-dialog::backdrop { background: rgba(0,0,0,.7); }
+.reference-dialog label { margin: 16px 0; }
+.reference-dialog select[size] { min-height: 240px; }
+.reference-table { max-width: 100%; overflow: auto; }
+.reference-table table, .reference-rich-editor table, #editorPreview table, .guide-modal table, .guides-sidebar-detail table { width: 100%; border-collapse: collapse; }
+.reference-table th, .reference-table td, .reference-rich-editor td, .reference-rich-editor th, #editorPreview td, #editorPreview th, .guide-modal td, .guide-modal th, .guides-sidebar-detail td, .guides-sidebar-detail th { border: 1px solid rgba(var(--neon-teal-rgb),.25); padding: 10px; text-align: left; overflow-wrap: anywhere; }
+.reference-editor [hidden], .glossary-surface [hidden], .guides-sidebar [hidden], .tab-panel[hidden], #artifactTooltip[hidden] { display: none !important; }
+.glossary-surface .artifact-row-name, .glossary-surface .artifact-row-hint, .glossary-detail-content { overflow-wrap: anywhere; min-width: 0; }
+.artifact-tooltip { z-index: 10050; max-width: min(360px,calc(100vw - 16px)); max-height: min(400px,70vh); overflow: auto; }
+#editorPreviewBody { overflow-wrap: anywhere; }
+#editorPreviewBody pre, .reference-rich-editor pre, .guide-modal pre, .guides-sidebar-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.reference-editor .workspace-heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+.reference-editor #editorStatus { white-space: pre-wrap; }
+@media (max-width: 700px) {
+  .reference-editor { padding: 0 12px; }
+  .reference-editor .card { padding: 16px; }
+  .reference-editor-grid, .reference-detail-row { grid-template-columns: 1fr; }
+  .reference-wide { grid-column: auto; }
+  .reference-rich-editor { padding: 14px; }
+  .reference-editor .workspace-heading { flex-direction: column; }
+}

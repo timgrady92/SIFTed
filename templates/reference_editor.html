@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SIFTed | Reference editor</title><link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"></head>
+<body>
+{% from '_components.html' import site_nav, glossary_sidebar, guides_sidebar %}{{ site_nav() }}
+<main class="reference-editor">
+  <header class="workspace-heading"><div><p class="eyebrow">Knowledge library</p><h1 id="editorHeading">{{ 'Edit content' if entry else 'Create content' }}</h1><p class="helper">Saved content is shared across this workstation's pages, sidebars and glossary tooltips.</p></div><a class="ghost" id="editorBack" href="/glossary">Back to library</a></header>
+  <form id="referenceEditor" class="card card-static">
+    <div class="reference-editor-grid">
+      <label>Content type<select id="contentKind"><option value="glossary">Glossary entry</option><option value="guide">Guide</option></select></label>
+      <label>Section<select id="contentSection"></select></label>
+      <label>Category<select id="contentCategory"></select></label>
+    </div>
+    <div id="contentFields" class="reference-editor-grid"></div>
+    <fieldset id="contentOS"><legend>Operating systems</legend>{% for value, label in os_names.items() %}<label class="reference-check"><input type="checkbox" name="os" value="{{ value }}">{{ label }}</label>{% endfor %}</fieldset>
+    <div id="contentAdvanced">
+      <details><summary>Database and event details</summary><p class="helper">Add structured details like the browser and RDP references. Rows with the same group name appear together.</p>
+        <fieldset><legend>Databases and tables</legend><div id="databaseRows"></div><button type="button" class="ghost" data-add-row="databases">Add database</button></fieldset>
+        <fieldset><legend>Related event IDs</legend><div id="eventRows"></div><button type="button" class="ghost" data-add-row="eventLogs">Add event</button></fieldset>
+      </details>
+    </div>
+    <section id="guideAuthoring" hidden>
+      <h2>Guide content</h2><p class="helper">Fill in the sections below, or start from an existing guide using “Use as template” in the library. Select text to format it. Insert glossary links with the picker; newly saved entries are included.</p>
+      <div class="reference-toolbar" role="toolbar" aria-label="Guide formatting">
+        <button type="button" class="ghost" data-format="bold">Bold</button><button type="button" class="ghost" data-format="italic">Italic</button>
+        <button type="button" class="ghost" data-format="insertUnorderedList">Bullet list</button><button type="button" class="ghost" data-format="insertOrderedList">Numbered list</button>
+        <button type="button" class="ghost" data-block="h3">Heading</button><button type="button" class="ghost" data-block="p">Paragraph</button><button type="button" class="ghost" data-block="pre">Code block</button>
+        <button type="button" class="ghost" id="insertGuideSection">Add section</button><button type="button" class="ghost" id="insertGuideTable">Add table</button>
+        <button type="button" class="ghost" id="insertGlossaryLink">Insert glossary link</button><button type="button" class="ghost" id="insertWebLink">Insert web link</button>
+      </div>
+      <div id="guideBody" class="reference-rich-editor" contenteditable="true" role="textbox" aria-label="Guide content" aria-multiline="true" spellcheck="true"></div>
+    </section>
+    <div class="reference-editor-actions"><button class="ghost" type="button" id="previewContent">Preview</button><button class="action" type="submit" id="saveContent">Save content</button><a id="viewSavedContent" hidden>View saved content</a></div>
+    <p id="editorStatus" role="status" aria-live="polite"></p>
+  </form>
+  <section id="editorPreview" class="card card-static" hidden aria-label="Content preview"><h2>Preview</h2><div id="editorPreviewBody"></div></section>
+</main>
+<dialog id="referenceLinkPicker" class="reference-dialog">
+  <form method="dialog"><div class="workspace-heading"><h2>Insert glossary link</h2><button class="ghost" value="cancel">Close</button></div></form>
+  <label>Find a saved glossary entry<input type="search" id="referenceLinkSearch" autocomplete="off"></label>
+  <label>Glossary entry<select id="referenceLinkChoices" size="8"></select></label>
+  <label>Link text<input id="referenceLinkText" maxlength="200"></label>
+  <p class="helper">Hovering shows the entry's definition; clicking opens its reference. Save a new entry first to link it here.</p>
+  <p id="referenceLinkStatus" role="status"></p><button class="action" type="button" id="confirmReferenceLink">Insert link</button>
+</dialog>
+<dialog id="referenceWebLink" class="reference-dialog"><form id="webLinkForm"><h2>Insert web link</h2><label>Link text<input id="webLinkText" required maxlength="200"></label><label>URL<input id="webLinkURL" type="url" required placeholder="https://example.org/reference"></label><div class="tool-actions"><button class="action">Insert link</button><button class="ghost" type="button" id="cancelWebLink">Cancel</button></div><p id="webLinkStatus" role="status"></p></form></dialog>
+{{ glossary_sidebar() }}{{ guides_sidebar() }}
+<script id="referenceEditorConfig" type="application/json">{{ {'entry':entry,'fields':fields,'sections':sections}|tojson }}</script>
+<script defer src="{{ url_for('static', filename='content-editor.js') }}"></script>
+</body></html>

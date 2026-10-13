@@ -45,6 +45,15 @@ Open <http://127.0.0.1:5000> in the SIFT Workstation's browser, create a case, a
 
 **Guides** provide searchable playbooks for starting with a hypothesis, such as suspected phishing or data theft, or with an artifact you need to understand. Each playbook connects investigative questions to evidence sources, corroboration, pitfalls, limitations and stopping points. **Glossary** is a searchable forensic reference covering artifacts, registry keys, persistence locations and Windows event codes, with operating-system filters, evidence locations and interpretation guidance. Open either from the navigation bar; contextual artifact links in the guides connect the playbooks to the reference material.
 
+Create your own content with **New guide** or **New glossary entry**, or open existing content and choose **Use as template**. The shared editor supports structured reference fields, database and event tables, formatted guide sections, lists, code blocks and links. **Insert glossary link** includes entries you create after installation: hovering shows their current definition and clicking opens their reference. Saved content appears in the libraries and sidebars and persists on your workstation. See the [authoring instructions](docs/GUIDECREATION.md) for editing, previews and storage.
+
+<details>
+<summary>Guide editor: formatting controls and a tooltip for a newly created glossary entry</summary>
+
+![Guide editor showing the formatting toolbar, an example browser collection guide, and the hover definition of a newly saved Browser collection notes glossary entry](docs/screenshots/guide-authoring.png)
+
+</details>
+
 *Guides library: the Hypothesis driven tab is selected; the Artifact driven tab is available beside it.*
 
 ![Guides library showing the Hypothesis driven tab, search field, and playbooks for phishing, data theft and other investigations](docs/screenshots/investigation-guides.png)

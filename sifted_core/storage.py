@@ -22,7 +22,7 @@ class StoreError(ValueError):
 
 
 class Repository:
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
 
     def __init__(self, path):
         self.path = Path(path)
@@ -41,6 +41,26 @@ class Repository:
                 for statement in INTAKE_SCHEMA:
                     db.execute(statement)
                 db.execute("PRAGMA user_version=2")
+            if version < 3:
+                db.execute("CREATE TABLE reference_content(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, data TEXT NOT NULL)")
+                db.execute("PRAGMA user_version=3")
+
+    def reference_content(self):
+        with self.connection() as db:
+            return [json.loads(row[0]) for row in db.execute("SELECT data FROM reference_content ORDER BY rowid")]
+
+    def save_reference_content(self, entry, expected_revision):
+        """A revision check prevents one editor from silently replacing another's work."""
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT revision FROM reference_content WHERE id=?", (entry['id'],)).fetchone()
+            revision = row[0] if row else 0
+            if revision != expected_revision:
+                raise StoreError('This content changed in another editor. Reload it before saving again.')
+            saved = {**entry, 'revision': revision + 1, 'updated_at': utc_now()}
+            db.execute("INSERT INTO reference_content VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,data=excluded.data",
+                       (entry['id'], saved['revision'], json.dumps(saved)))
+            return saved
 
     @contextmanager
     def connection(self):

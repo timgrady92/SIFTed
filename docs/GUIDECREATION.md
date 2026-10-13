@@ -1,4 +1,19 @@
-DFIR GUIDE CREATION GUIDELINES
+# Create glossary entries and guides
+
+Open **Glossary → New glossary entry** or **Guides → New guide**. Both use the same editor and saved catalog. To reuse existing content, open its detail view and choose **Use as template**; this creates a separate entry. **Edit local copy** saves an installation-specific revision of shipped content, keeping its existing links intact. After the first save, the action is labeled **Edit**.
+
+1. Choose the content type, section and category. Glossary sections cover artifacts, registry keys, persistence locations and Windows events; guides can be hypothesis driven or artifact driven. The section becomes fixed after saving, so use a template to create a different type.
+2. For a glossary entry, fill in the labeled fields. Artifact entries support operating systems, interpretation, corroboration, evidence locations and key fields. Enter lists one item per line. Expand **Database and event details** to add grouped database/table/timestamp rows or related event IDs, providers and meanings.
+3. For a guide, enter its title, summary and search keywords, then fill in the provided sections. Select text to apply headings, bold, italic, lists or code blocks. **Add section**, **Add table** and **Insert web link** extend the body. Pasted text keeps the editor's formatting consistent; starting from an existing guide preserves its full section structure.
+4. Choose **Insert glossary link**, search for any saved entry, and optionally change the visible link text. Save a new glossary entry first, then select it here; no restart or source-code changes are needed. Links use stable entry IDs, so later definition edits update their hover and keyboard-focus tooltips. Clicking a link opens its reference in the glossary sidebar.
+5. Choose **Preview** to check the same rendering used by the library, then **Save content** and **View saved content**. Previews do not save your draft. Saved entries participate in search, category views and sidebars. Other open tabs refresh after saves or when brought into focus. If another editor saved first, your save is rejected with a conflict message so it cannot overwrite that revision silently; preserve your draft before reloading.
+
+Custom content and local revisions are stored in the workstation's SIFTed database (`SIFTED_DATABASE_PATH`, normally `data/sifted.sqlite3`). Keep the same database when upgrading or restarting. Stop SIFTed before making a filesystem backup of the database, or use SQLite's backup facility while it is running. The shipped catalog is in `content/builtin.json`; normal authoring does not require editing it.
+
+![Guide editor with formatting controls and a tooltip for a newly created Browser collection notes entry](screenshots/guide-authoring.png)
+
+## DFIR guide writing guidelines
+
 Concise, Coherent, and Quietly Instructive
 
 These guidelines exist to keep DFIR guides useful under pressure.

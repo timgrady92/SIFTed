@@ -224,7 +224,7 @@ const initSourceTabs = () => {
 
 initSourceTabs();
 
-// Guide cards are now handled by guides.js with modal functionality
+// Reference pages, guide dialogs and tooltips are handled by reference.js.
 
 const updateJobPill = (jobs) => {
   const pill = document.getElementById("activeJobs");

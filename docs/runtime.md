@@ -2,6 +2,12 @@
 
 `app.py` creates Flask instances and registers the web and execution blueprints. Importing it does not create databases or launch workers. `config.py` is the shared configuration boundary for both processes; `context.py` creates an application-scoped repository lazily. `tool_base.py` holds the plan contract and shared validation; `adapters.py` owns the registry, `disk_tools.py` and `examination_tools.py` implement their tool families, and `tool_results.py` interprets successful output while retaining raw reports. `web.py`, `presentation.py`, and `viewers.py` own page behavior, curated content, and bounded result parsing.
 
+## Reference content
+
+`reference.py` merges the shipped `content/builtin.json` catalog with custom entries and local revisions in the existing SQLite database. Schema version 3 adds `reference_content` without changing case or evidence records. Stable IDs connect glossary links to entries; optimistic revision checks reject conflicting edits. The shipped catalog contains 212 glossary entries and 22 guides.
+
+`/reference/new` and `/reference/<id>/edit` share one editor. JSON endpoints under `/api/reference` validate structured fields and allowlisted guide markup before previews or saves. `_reference_detail.html` renders both shipped and authored entries for pages, sidebars and previews. `static/reference.js` manages the live catalog, search, navigation and tooltips; `static/content-editor.js` provides typed fields, guide formatting and a glossary picker. Saves notify other browser tabs and focus refreshes the catalog, so post-install entries and revised definitions are available without rebuilding static files. See the [authoring guide](GUIDECREATION.md).
+
 ## Execution contract
 
 `evidence_workspace.py` resolves registered evidence and complete material outputs by case-scoped IDs. Bounded signature checks, native capabilities and persisted results determine contextual actions; raw block provenance overrides apparent document headers. `evidence_web.py` exposes the optional `/evidence` workspace alongside the existing tool pages. Both interfaces submit through `compile_plan` and the same worker. A supplied `workspace_input` must match the selected case and source, and partition-map continuations must match a hash-verified allocated row. Analyst type corrections are stored with their basis; workspace progress is projected from runs rather than duplicated in a workflow-state table. Supporting reports remain accessible with their producing runs.

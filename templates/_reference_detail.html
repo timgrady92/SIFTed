@@ -1,0 +1,19 @@
+{% set data = entry.data %}
+{% if entry.kind == 'guide' %}{{ data.body|safe }}
+{% else %}
+<h3>{{ title }}</h3>
+{% if entry.section == 'artifacts' %}
+  {% for key, label in [('takeaway','Key takeaway'),('what','What it is'),('why','Why it matters'),('question','Analyst question')] %}
+  {% if data.get(key) %}<div class="detail-section"><div class="detail-label">{{ label }}</div><p class="detail-text">{{ data[key] }}</p></div>{% endif %}
+  {% endfor %}
+  {% for key, label in [('corroborate','Corroborate with'),('location','Where to look'),('keyFields','Key fields to query')] %}
+  {% if data.get(key) %}<div class="detail-section"><div class="detail-label">{{ label }}</div><ul class="detail-list">{% for item in data[key] %}<li>{% if key == 'location' %}<code>{{ item }}</code>{% else %}{{ item }}{% endif %}</li>{% endfor %}</ul></div>{% endif %}
+  {% endfor %}
+  {% for field, label, columns in [('databases','Key databases & tables',['file','tables','timestamps']), ('eventLogs','Related Event IDs',['id','log','meaning'])] %}
+  {% if data.get(field) %}<div class="detail-section"><div class="detail-label">{{ label }}</div>{% for group, rows in data[field].items() %}<h4>{{ group }}</h4><div class="reference-table"><table><thead><tr>{% for column in columns %}<th>{{ column|title }}</th>{% endfor %}</tr></thead><tbody>{% for row in rows %}<tr>{% for column in columns %}<td>{{ row[column] }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% endfor %}</div>{% endif %}
+  {% endfor %}
+{% else %}
+  {% set labels = {'key':'Registry path','purpose':'Purpose','lookFor':'What to look for','path':'Location','scope':'Scope','trigger':'Trigger','notes':'Interpretation','event_id':'Event ID','log':'Log or provider','name':'Event name'} %}
+  {% for key, value in data.items() %}<div class="detail-section"><div class="detail-label">{{ labels.get(key,key) }}</div><p class="detail-text">{{ value }}</p></div>{% endfor %}
+{% endif %}
+{% endif %}

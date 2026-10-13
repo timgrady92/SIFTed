@@ -282,6 +282,8 @@ def test_carving_recovery_table_and_hash_verified_followup(carving_runtime, tool
             assert '1 recovered files' in page.locator('main').inner_text()
             assert 'Offset Bytes' in page.locator('table').inner_text()
             page.click('a[href*="/workflow/xxd?"]')
+            page.wait_for_url('**/workflow/xxd?**')
+            page.locator('#commandPreview').wait_for()
             page.wait_for_function('document.querySelector("#commandPreview").textContent.includes("00000000.jpg")')
             page.click('#runWorkflow')
             page.wait_for_function('document.querySelector("#runStatus").textContent.includes("Queued")')
