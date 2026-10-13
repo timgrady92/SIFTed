@@ -104,6 +104,6 @@ def test_native_bundled_scan_and_pasted_cli_agree(tmp_path):
     def rows(path):
         return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     managed_rows = rows(report)
-    assert managed_rows == rows(output / (action['plugin'] + '.jsonl'))
+    assert managed_rows == [json.loads(line) for line in native.stdout.splitlines() if line.strip()]
     assert run['plugin_results'][0]['row_count'] == len(managed_rows)
     print(f"Citadel: managed scan and pasted CLI agree; {len(managed_rows)} matches, {library['rule_count']} rules; case {case}, evidence {key}")

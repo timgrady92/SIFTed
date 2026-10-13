@@ -159,7 +159,7 @@ def test_preview_queue_completion_and_polling_without_event_stream(tmp_path):
             command = page.locator('#commandPreview').inner_text()
             assert command.count('\n') == 1
             assert shlex.quote(str(source)) in command
-            assert command.endswith(' > strings.txt\n')
+            assert '>' not in command and 'mkdir' not in command
             assert '<staging_output>' not in page.locator('#commandPreview').inner_text()
             # Copy includes every line, even when the displayed block scrolls.
             page.evaluate("() => { window.copiedSnippet = ''; document.execCommand = () => { window.copiedSnippet = document.querySelector('textarea').value; return true; }; }")
@@ -731,6 +731,15 @@ def test_bundled_yara_defaults_in_guided_and_standalone_ui(memory_workspace, mon
             assert values['yara_string'] == 'known marker' and 'yara_file' not in values
             block.locator('[data-option="yara_string"]').fill('')
             assert page.evaluate('buildPayload()')['plugin_options'][plugin]['yara_file'] == str(DEFAULT_RULES)
+            assert page.get_by_role('link', name='Symbol setup guide', exact=True).get_attribute('href') == '/guides/volatility-symbols'
+            page.goto(base + '/guides/volatility-symbols')
+            assert page.get_by_role('heading', name='Volatility symbols', exact=True).is_visible()
+            assert page.get_by_text('Offline symbol packs', exact=True).is_visible()
+            assert not page.locator('details').first.evaluate('(el) => el.open')
+            page.get_by_text('Offline symbol packs', exact=True).click()
+            assert page.get_by_role('link', name='linux.zip', exact=True).is_visible()
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert page.evaluate("Array.from(document.querySelectorAll('.symbol-guide .command')).filter(el => el.getClientRects().length).every(el => el.getBoundingClientRect().right <= el.closest('.card').getBoundingClientRect().right)")
             assert not errors, errors
             browser.close()
     finally:

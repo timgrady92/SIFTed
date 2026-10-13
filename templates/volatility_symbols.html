@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SIFTed | Volatility symbols</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+<div class="noise"></div>
+{% from '_components.html' import site_nav %}{{ site_nav('guides') }}
+<header class="hero compact"><div class="hero-text"><p class="eyebrow">Workstation setup</p><h1>Volatility symbols</h1><p class="lead">Prepare matching symbols once, then focus on the evidence.</p></div></header>
+<div class="guides-layout"><main class="guides-main symbol-guide">
+  <section class="card block">
+    <h2>Windows: download for your image</h2>
+    <p>Replace <code>/cases/memory.img</code> with your capture. Volatility obtains the matching PDB from <a href="https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/microsoft-public-symbols">Microsoft's public symbol server</a> and converts it to its JSON symbol format. This setup needs internet access.</p>
+    <pre class="command">mkdir -p -- {{ download_root }}
+vol -f /cases/memory.img -s {{ download_root }} windows.info.Info</pre>
+    <p>After identification succeeds, install the downloaded tables in Volatility's default search path. This lets ordinary <code>vol</code> commands find them without <code>-s</code>. Installation requires sudo; analysis runs as your normal account.</p>
+    {% if symbol_root %}
+    <p class="helper">Detected installation: <code>{{ symbol_root }}</code>. Revisit after upgrading Volatility.</p>
+    <pre class="command">sudo cp -R --update=none -- {{ download_root }}/windows {{ quoted_root }}/
+sudo chmod -R a+rX -- {{ quoted_root }}/windows</pre>
+    {% else %}<p role="status">{{ discovery_error or 'No native symbol directory was discovered.' }} Install Volatility before copying symbols into its installation.</p>{% endif %}
+    <p>Check the setup, then run your investigation:</p>
+    <pre class="command">vol -q --offline -f /cases/memory.img windows.info.Info
+vol -q -f /cases/memory.img -r jsonl windows.cmdline.CmdLine --pid 1812</pre>
+    <p class="helper">Use a PID from your process inventory. Repeat symbol onboarding for a different Windows build if its symbols are missing.</p>
+  </section>
+  <details class="card block"><summary>Offline symbol packs</summary>
+    <p>The <a href="https://github.com/volatilityfoundation/volatility3#symbol-tables">official symbol packs</a> can be downloaded on a connected machine and transferred to SIFT. Keep the ZIP filenames and verify their hashes before installation. Packs cover selected builds, not every capture.</p>
+    <pre class="command">curl -fL --output windows.zip https://github.com/volatilityfoundation/volatility3-test-data/releases/download/v0.0.1/windows.zip
+curl -fL --output SHA256SUMS https://raw.githubusercontent.com/volatilityfoundation/volatility3-test-data/refs/tags/v0.0.1/symbols/SHA256SUMS
+sha256sum --check --ignore-missing SHA256SUMS</pre>
+    {% if symbol_root %}<p>Proceed only when <code>windows.zip: OK</code> is reported:</p><pre class="command">sudo install -m 644 -- windows.zip {{ quoted_root }}/windows.zip</pre>{% endif %}
+    <p>Other official packs: <a href="https://github.com/volatilityfoundation/volatility3-test-data/releases/download/v0.0.1/linux.zip">linux.zip</a> · <a href="https://github.com/volatilityfoundation/volatility3-test-data/releases/download/v0.0.1/mac.zip">mac.zip</a>. Substitute that filename in the download and install commands; the same checksum file covers all three. Leave the archives zipped. The first scan indexes new symbols and may take longer.</p>
+  </details>
+  <details class="card block"><summary>Linux and macOS: match the captured kernel</summary>
+    <pre class="command">vol -f /cases/memory.img banners.Banners</pre>
+    <p>Match the entire kernel banner, including build details. Check the official packs and the <a href="https://github.com/Abyss-W4tcher/volatility3-symbols">community collection</a> linked from <a href="https://volatility3.readthedocs.io/en/stable/getting-started-linux-tutorial.html">Volatility's Linux tutorial</a>. When no table matches, use the captured kernel's debug image with <a href="https://github.com/volatilityfoundation/dwarf2json">dwarf2json</a>; an ordinary stripped kernel is insufficient. Follow the <a href="https://volatility3.readthedocs.io/en/stable/symbol-tables.html">official symbol generation instructions</a>.</p>
+    <p>With dwarf2json available and matching debug files in <code>/cases/kernel/</code>:</p>
+    <pre class="command">dwarf2json linux --elf /cases/kernel/vmlinux --system-map /cases/kernel/System.map &gt; kernel.json</pre>
+    {% if symbol_root %}<pre class="command">sudo install -D -m 644 -- kernel.json {{ quoted_root }}/linux/kernel.json
+vol -q --offline -f /cases/memory.img linux.pslist.PsList</pre>{% endif %}
+    <p>For macOS, generate with <code>dwarf2json mac --macho /cases/kernel/kernel.debug &gt; kernel.json</code> and install under <code>mac/</code>. Use distinct filenames for different kernels. Successful Linux/macOS analysis still requires a matching capture and supported plugin.</p>
+  </details>
+  <details class="card block"><summary>SIFTed storage and permissions</summary>
+    <p>SIFTed uses <code>{{ managed_symbols }}</code> for automatic downloads. The service account needs read, write and directory traversal access there. It also reads symbols from the installed Volatility search paths. It never needs sudo to analyze memory.</p>
+    <p>For another managed directory, configure <code>SIFTED_VOLATILITY_SYMBOLS</code> with a directory owned by the service account. Additional Linux/macOS symbol directories must be allowed by <code>SIFTED_SYMBOL_ROOTS</code> and selected in the plugin examiner. Explicitly selected directories remain in CLI examples.</p>
+    <p>Grant write access only to the chosen download directory; keep Volatility's program files administrator-owned. The commands above install readable symbol data without granting the app permission to change program code.</p>
+  </details>
+  <p class="helper"><a href="{{ url_for('web.guides') }}">All guides</a> · <a href="{{ url_for('web.volatility') }}">Volatility examiner</a></p>
+</main></div>
+</body></html>

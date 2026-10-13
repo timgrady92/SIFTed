@@ -2,6 +2,8 @@
 import json
 import logging
 import os
+from pathlib import Path
+import shlex
 import uuid
 from datetime import datetime, timezone
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
@@ -168,6 +170,20 @@ def workflow_analysis(run_id):
 @web.route("/guides")
 def guides():
     return render_template("guides.html")
+
+
+@web.route('/guides/volatility-symbols')
+def volatility_symbols():
+    error, root = None, None
+    try:
+        paths = discover_volatility(runtime_settings())['symbol_paths']
+        root = paths[0] if paths else None
+    except ValidationError as exc:
+        error = str(exc)
+    return render_template('volatility_symbols.html', discovery_error=error,
+                           symbol_root=root, quoted_root=shlex.quote(root) if root else None,
+                           download_root=shlex.quote(str(Path.home() / '.local/share/volatility3/symbols')),
+                           managed_symbols=runtime_settings().volatility_symbols)
 
 
 @web.route("/glossary")

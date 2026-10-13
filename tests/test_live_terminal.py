@@ -1,6 +1,7 @@
 """Analyst CLI commands on native SIFT tools, without a running app or worker."""
 import csv
 import json
+import io
 import os
 import shutil
 import shlex
@@ -46,14 +47,14 @@ def run_terminal(plan):
     result, output = paste(plan)
     assert result.returncode == 0, result.stdout + result.stderr
     assert output.is_dir()
-    return output
+    return result, output
 
 
 @pytest.mark.parametrize("tool,options", [
     ("strings", {}), ("strings", {"encoding": "l"}),
     ("exiftool", {"output_format": "csv"}), ("exiftool", {"output_format": "json"}),
     ("filetype", {"mismatch_only": True}), ("bulk-extractor", {"focus_scanners": ["email"]}),
-    ("artifact-triage", {"timezone": "UTC"}),
+    ("artifact-triage", {"timezone": "UTC"}), ("clamscan", {}),
 ])
 def test_native_generic_terminal_workflows(installed_runtime, tool, options):
     runtime = installed_runtime
@@ -69,23 +70,24 @@ def test_native_generic_terminal_workflows(installed_runtime, tool, options):
         source = source.with_suffix(".log")
         source.write_text("Jan  1 00:00:01 test-host test-service: known-terminal-marker\n")
     before = source.read_bytes()
-    output = run_terminal(terminal_plan(runtime, tool, source, **options))
+    result, output = run_terminal(terminal_plan(runtime, tool, source, **options))
     if tool == "strings":
-        assert ("known_utf16_marker" if options else "known_ascii_marker") in (output / "strings.txt").read_text()
+        assert ("known_utf16_marker" if options else "known_ascii_marker") in result.stdout
     elif tool == "exiftool":
         if options["output_format"] == "json":
-            rows = json.loads((output / "metadata.json").read_text())
+            rows = json.loads(result.stdout)
         else:
-            with (output / "metadata.csv").open(newline="") as handle:
-                rows = list(csv.DictReader(handle))
+            rows = list(csv.DictReader(io.StringIO(result.stdout)))
         assert any("TestCamera" in row.values() for row in rows)
     elif tool == "filetype":
-        text = (output / "filetypes.txt").read_text()
+        text = result.stdout
         assert str(source) in text and "image/jpeg" in text
     elif tool == "bulk-extractor":
         assert "known.user@example.com" in (output / "bulk-features/email.txt").read_text()
-    else:
+    elif tool == 'artifact-triage':
         assert "known-terminal-marker" in (output / "timeline.csv").read_text()
+    else:
+        assert 'Scanned files: 1' in result.stdout and 'Infected files: 0' in result.stdout
     assert source.read_bytes() == before and runtime[0].runs() == []
 
 
@@ -98,7 +100,7 @@ def test_all_native_tsk_terminal_workflows(disk_runtime, tool):
                     "blkstat": {"block_address": disk["block"]}, "blkcat": {"block_address": disk["block"]},
                     "blkls": {"block_address": disk["free_block"]},
                     "blkcalc": {"block_address": disk["free_block"], "direction": "original_to_unallocated"}}.get(tool, {}))
-    output = run_terminal(terminal_plan(runtime, tool, **options))
+    result, output = run_terminal(terminal_plan(runtime, tool, **options))
     if tool == "icat":
         assert (output / "extracted known.bin").read_bytes() == disk["payload"]
     elif tool == "blkcat":
@@ -106,19 +108,19 @@ def test_all_native_tsk_terminal_workflows(disk_runtime, tool):
     elif tool == "blkls":
         assert (output / "blkls.bin").stat().st_size == 1024
     elif tool == "fls":
-        text = (output / "fls.txt").read_text()
+        text = result.stdout
         assert "known.bin" in text and "nested/known.pdf" in text
     elif tool == "mmls":
-        assert str(disk["offset"]) in (output / "mmls.txt").read_text()
+        assert str(disk["offset"]) in result.stdout
     elif tool == "fsstat":
-        assert "Ext4" in (output / "fsstat.txt").read_text()
+        assert "Ext4" in result.stdout
     elif tool == "istat":
-        assert "Allocated" in (output / "istat.txt").read_text()
+        assert "Allocated" in result.stdout
     elif tool == "blkstat":
-        assert "Allocated" in (output / "blkstat.txt").read_text()
+        assert "Allocated" in result.stdout
     else:
-        assert (output / "blkcalc.txt").read_text().strip().isdigit()
-        assert f"{disk['free_block']}|f" in (output / "mapping_units.txt").read_text()
+        assert result.stdout.strip().isdigit()
+        assert "blkls" not in recipe(terminal_plan(runtime, tool, **options))["terminal_command"]
 
 
 @pytest.mark.parametrize("tool", ["head", "xxd", "pdfinfo", "pdftotext"])
@@ -131,8 +133,8 @@ def test_native_examination_terminal_workflows(installed_runtime, tool):
     else:
         source.write_bytes(b"known_text_marker\n" * 1000)
         options = {"byte_limit": 32}
-    output = run_terminal(terminal_plan(runtime, tool, source, **options))
-    data = (output / (tool + ".txt")).read_bytes()
+    result, output = run_terminal(terminal_plan(runtime, tool, source, **options))
+    data = result.stdout.encode()
     if tool == "head":
         assert data == source.read_bytes()[:32]
     elif tool == "xxd":
@@ -149,7 +151,7 @@ def test_native_carving_terminal_rules_recover_known_bytes(native_carving, tool)
         pytest.skip(tool + " is not installed")
     runtime = native_carving
     plan = terminal_plan(runtime, tool, types=["png", "gif", "pdf", "zip"])
-    output = run_terminal(plan)
+    result, output = run_terminal(plan)
     assert (output / (tool + "-carved") / "audit.txt").is_file()
     for kind in ("png", "gif", "pdf", "zip"):
         expected = next(data for k, _, data in runtime[4] if k == kind)
@@ -172,7 +174,8 @@ def test_native_zimmerman_terminal_known_records(native_zimmerman, tool, name, d
     installed(native_zimmerman, tool)
     source = native_zimmerman[2] / name
     source.write_bytes(data)
-    output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id=tool)) / (tool + "-csv")
+    result, output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id=tool))
+    output = output / (tool + "-csv")
     rows = []
     for p in output.rglob("*.csv"):
         with p.open(newline="", encoding="utf-8-sig") as handle:
@@ -196,7 +199,8 @@ def test_native_zimmerman_terminal_public_artifacts(native_zimmerman, tool, name
         folder.mkdir()
         source.rename(folder / name)
         source = folder
-    output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id=tool, **options)) / (tool + "-csv")
+    result, output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id=tool, **options))
+    output = output / (tool + "-csv")
     rows = []
     for path in output.glob("*.csv"):
         with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -229,9 +233,12 @@ def test_native_mft_terminal_on_real_ntfs_metadata(native_zimmerman):
     source = native_zimmerman[2] / "$MFT"
     with source.open("wb") as handle:
         subprocess.run(["icat", str(image), "0"], stdout=handle, stderr=subprocess.PIPE, check=True)
-    output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="mftecmd"))
-    with (output / "mftecmd-csv/mft.csv").open(newline="", encoding="utf-8-sig") as handle:
-        assert any(row["FileName"] == "$MFT" for row in csv.DictReader(handle))
+    result, output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="mftecmd"))
+    rows = []
+    for path in (output / "mftecmd-csv").glob("*.csv"):
+        with path.open(newline="", encoding="utf-8-sig") as handle:
+            rows.extend(csv.DictReader(handle))
+    assert any(row.get("FileName") == "$MFT" for row in rows)
 
 
 def test_native_sqlite_inspection_and_query_on_vanilla_sift(native_zimmerman):
@@ -241,9 +248,8 @@ def test_native_sqlite_inspection_and_query_on_vanilla_sift(native_zimmerman):
         connection.execute("CREATE TABLE moz_formhistory(id INTEGER,fieldname TEXT,value TEXT,timesUsed INTEGER,firstUsed INTEGER,lastUsed INTEGER,guid TEXT)")
         connection.execute("INSERT INTO moz_formhistory VALUES(1,'search','known terminal sqlite marker',2,1704067200000000,1704153600000000,'known-guid')")
     before = source.read_bytes()
-    output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="sqlecmd"))
-    with next(output.glob("query*.csv")).open(newline="") as handle:
-        row = next(csv.DictReader(handle))
+    result, output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="sqlecmd"))
+    row = next(csv.DictReader(io.StringIO(result.stdout)))
     assert row["Value"] == "known terminal sqlite marker" and row["First Used"] == "2024-01-01 00:00:00"
     assert source.read_bytes() == before
 
@@ -254,11 +260,10 @@ def test_native_volatility_terminal_offline_banner(installed_memory):
                              "plugins": ["banners.Banners"], "offline": True, "renderer": "jsonl"}, settings, repo, preview=True)
     code = recipe(plan)["terminal_command"]
     assert str(settings.volatility_symbols) not in code and "--save-config" not in code
-    assert '.local/share/volatility3/symbols' in code
-    assert code.index("-s ") < code.index("banners.Banners >")
+    assert "mkdir" not in code and " -s " not in code and ">" not in code
     assert "$symbol_dirs" not in code and "export " not in code
-    output = run_terminal(plan)
-    assert "Linux version 6.8.0-sifted-test" in (output / "banners.Banners.jsonl").read_text()
+    result, output = run_terminal(plan)
+    assert "Linux version 6.8.0-sifted-test" in result.stdout
 
 
 def test_native_volatility_terminal_windows_processes(installed_memory):
@@ -267,13 +272,12 @@ def test_native_volatility_terminal_windows_processes(installed_memory):
     if not value:
         pytest.skip("Set SIFTED_TEST_MEMORY_IMAGE to the documented public Windows memory image")
     source = default.parent / "windows memory.img"
-    source.symlink_to(Path(value).resolve())
-    settings.input_roots += [str(Path(value).resolve().parent)]
+    shutil.copyfile(Path(value).resolve(), source)
     plan, _, _ = compile_plan("volatility", {"source_path": str(source), "output_path": str(default.parent / "terminal"),
                              "plugins": ["windows.pslist.PsList"], "plugin_options": {"windows.pslist.PsList": {"pid": [1812], "dump": True}},
                              "renderer": "jsonl"}, settings, repo, preview=True)
-    output = run_terminal(plan)
-    text = (output / "windows.pslist.PsList.jsonl").read_text()
+    result, output = run_terminal(plan)
+    text = result.stdout
     assert "explorer.exe" in text and "1812" in text
     extracted = list(output.glob("*.dmp"))
     assert extracted and any(path.read_bytes().startswith(b"MZ") for path in extracted)
@@ -294,7 +298,8 @@ def test_native_cli_parsers_accept_collected_directories(native_zimmerman, tool,
     code = recipe(plan)["terminal_command"]
     assert "-d " + shlex.quote(str(source)) in code
     assert "inputs/0000" not in code and "parser-log.txt" not in code
-    output = run_terminal(plan) / (tool + "-csv")
+    result, output = run_terminal(plan)
+    output = output / (tool + "-csv")
     rows = []
     for path in output.glob("*.csv"):
         with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -314,13 +319,9 @@ def test_native_sqlite_cli_handles_multiple_databases_in_a_collection(native_zim
             connection.execute("CREATE TABLE moz_formhistory(id INTEGER,fieldname TEXT,value TEXT,timesUsed INTEGER,firstUsed INTEGER,lastUsed INTEGER,guid TEXT)")
             connection.execute("INSERT INTO moz_formhistory VALUES(1,'search',?,2,1704067200000000,1704153600000000,'known-guid')", (f"collection marker {index}",))
         originals[database] = database.read_bytes()
-    output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="sqlecmd"))
-    values = []
-    for path in output.glob("query*.csv"):
-        with path.open(newline="") as handle:
-            values.extend(row["Value"] for row in csv.DictReader(handle))
-    assert sorted(values) == ["collection marker 1", "collection marker 2"]
-    assert len(list(output.glob("schema*.sql"))) == 2
+    result, output = run_terminal(terminal_plan(native_zimmerman, "eric-zimmerman", source, tool_id="sqlecmd"))
+    assert "collection marker 1" in result.stdout and "collection marker 2" in result.stdout
+    assert not list(output.glob("query*.csv"))
     assert all(path.read_bytes() == data for path, data in originals.items())
 
 

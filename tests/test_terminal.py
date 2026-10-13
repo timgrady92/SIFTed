@@ -1,6 +1,7 @@
 """Paste analyst CLI examples into Bash without importing the application."""
 import csv
 import hashlib
+import io
 import os
 import re
 import shutil
@@ -19,6 +20,7 @@ from sifted_core.terminal import recipe
 from sifted_core.tool_base import OUTPUT, Plan, Settings, Step
 from test_zimmerman import zimmerman_runtime as zimmerman_runtime, input_for, queued
 from test_sqlite_maps import set_map
+from test_volatility import memory_runtime as memory_runtime, option
 
 
 def paste(plan, settings=None):
@@ -56,14 +58,15 @@ def test_single_strings_command_quotes_evidence_and_repeats_correctly(tmp_path):
     second, repeated = paste(plan)
     assert first.returncode == second.returncode == 0, first.stderr + second.stderr
     assert output != repeated
-    assert (output / "strings.txt").read_text() == (repeated / "strings.txt").read_text()
-    assert "known forensic text" in (output / "strings.txt").read_text()
+    assert first.stdout == second.stdout
+    assert "known forensic text" in first.stdout
+    assert not (output / "strings.txt").exists()
     assert (chosen / "original.txt").read_text() == "preserve this"
     assert not (tmp_path / "injected").exists()
     assert not (output / "injected").exists() and not (repeated / "injected").exists()
     assert source.read_bytes() == b"known forensic text\0"
     code = recipe(plan)["terminal_command"]
-    assert code == "strings -a -e s -n 4 -t x -- " + shlex.quote(str(source)) + " > strings.txt\n"
+    assert code == "strings -a -e s -n 4 -t x -- " + shlex.quote(str(source)) + "\n"
     for backend_detail in ("sha256sum", "timeout", "trap", "workspace", "SIFT_TERMINAL", "sifted_core", "bash <<", "mktemp", "set -e", "export ", "$evidence", "$results"):
         assert backend_detail not in code
 
@@ -74,7 +77,7 @@ def test_native_failure_returns_failure_without_app_validation(tmp_path):
     plan = Plan("false", str(source), str(tmp_path / "out"),
                 [Step(["false"], "Fail", OUTPUT + "/partial.txt")])
     result, output = paste(plan)
-    assert result.returncode != 0 and (output / "partial.txt").is_file()
+    assert result.returncode != 0 and not (output / "partial.txt").exists()
     assert "Results:" not in result.stdout
 
 
@@ -88,7 +91,7 @@ def test_file_identification_teaches_file_and_find_with_correct_scope(tmp_path, 
     plan = plan_for(tmp_path, "filetype", source, recursive=recursive, mismatch_only=True)
     result, output = paste(plan)
     assert result.returncode == 0, result.stderr
-    rows = (output / "filetypes.txt").read_text().splitlines()
+    rows = result.stdout.splitlines()
     assert len(rows) == expected and any("text.txt:" in row and "text/plain" in row for row in rows)
     if recursive:
         assert any("misleading.png:" in row and "image/jpeg" in row for row in rows)
@@ -103,18 +106,18 @@ def test_file_identification_retains_filename_and_content_type(tmp_path, mode, e
     source.write_bytes((Path(__file__).parent / "samples/images/geotagged.jpg").read_bytes())
     result, output = paste(plan_for(tmp_path, "filetype", source, mode=mode))
     assert result.returncode == 0, result.stderr
-    assert (str(source) in (output / "filetypes.txt").read_text()) == (mode != "brief")
-    assert expected in (output / "filetypes.txt").read_text()
+    assert (str(source) in result.stdout) == (mode != "brief")
+    assert expected in result.stdout
 
 
 def test_empty_directory_identification_has_an_empty_native_report(tmp_path):
     source = tmp_path / "empty"
     source.mkdir()
     result, output = paste(plan_for(tmp_path, "filetype", source))
-    assert result.returncode == 0 and (output / "filetypes.txt").read_bytes() == b""
+    assert result.returncode == 0 and result.stdout == ""
 
 
-def test_sqlite_teaches_native_schema_inspection_and_sql_with_wal(zimmerman_runtime):
+def test_sqlite_teaches_native_query_with_wal(zimmerman_runtime):
     if not shutil.which("sqlite3"):
         pytest.skip("Native sqlite3 is unavailable")
     runtime = zimmerman_runtime
@@ -132,13 +135,11 @@ def test_sqlite_teaches_native_schema_inspection_and_sql_with_wal(zimmerman_runt
         _, plan, _ = queued(runtime, "sqlecmd", source)
         result, output = paste(plan)
         assert result.returncode == 0, result.stderr
-        with next(output.glob("query*.csv")).open(newline="") as handle:
-            row = next(csv.DictReader(handle))
+        row = next(csv.DictReader(io.StringIO(result.stdout)))
         assert row == {"value": "committed WAL terminal marker", "Address": "9223372036854775807", "Data": "00FF012A"}
-        assert "CREATE TABLE known" in (output / "schema.sql").read_text()
         assert all(hashlib.sha256(p.read_bytes()).hexdigest() == digest for p, digest in originals.items())
     code = recipe(plan)["terminal_command"]
-    assert "sqlite3 -readonly" in code and ".tables" in code and ".schema" in code
+    assert "sqlite3 -readonly" in code and ">" not in code
     assert "SELECT value" in code and "cp -p" in code
     for app_detail in ("python", "sqlite-request", "sqlite-maps", "map-summary", "input-before", "native-parameters"):
         assert app_detail not in code
@@ -171,5 +172,36 @@ def test_partition_example_is_exactly_the_native_command(tmp_path):
     source = tmp_path / "disk.E01"
     source.write_bytes(b"test")
     plan = plan_for(tmp_path, "mmls", source)
-    assert recipe(plan)["terminal_command"] == f"mmls -B {source} > mmls.txt\n"
-    assert "current directory" in recipe(plan)["terminal_note"]
+    assert recipe(plan)["terminal_command"] == f"mmls -B {source}\n"
+
+
+def test_volatility_teaches_the_plugin_without_managed_setup(memory_runtime):
+    repo, settings, source, installed = memory_runtime
+    installed['argv_prefix'] = ['/usr/local/bin/vol']
+    data = {'source_path': str(source), 'plugins': ['windows.pslist.PsList'],
+            'plugin_options': {'windows.pslist.PsList': {'pid': [1812]}}, 'renderer': 'jsonl'}
+    plan, _, _ = compile_plan('volatility', data, settings, repo, preview=True)
+    assert recipe(plan)['terminal_command'] == f'vol -q -f {shlex.quote(str(source))} -r jsonl windows.pslist.PsList --pid 1812\n'
+    assert any(str(settings.volatility_symbols) in arg for arg in plan.steps[0].argv)
+    symbols = source.parent / "chosen kernel symbols"
+    symbols.mkdir()
+    settings.symbol_roots = [str(symbols)]
+    plan, _, _ = compile_plan('volatility', {**data, 'symbol_path': str(symbols), 'offline': True}, settings, repo, preview=True)
+    cli = recipe(plan)['terminal_command']
+    assert ' -s ' + shlex.quote(str(symbols)) + ' windows.pslist.PsList' in cli
+    assert '--offline' in cli and str(settings.volatility_symbols) not in cli
+    assert 'mkdir' not in cli and '>' not in cli
+
+
+def test_volatility_file_options_use_paths_without_changing_literal_patterns(memory_runtime):
+    repo, settings, source, installed = memory_runtime
+    plugin = 'windows.strings.Strings'
+    installed['plugins'][plugin]['options'].append(option('label', 'string'))
+    strings = source.parent / "$(touch injected) 'quoted' # strings.txt"
+    strings.write_text('0 known text')
+    data = {'source_path': str(source), 'plugins': [plugin],
+            'plugin_options': {plugin: {'strings_file': str(strings), 'label': strings.as_uri()}}}
+    plan, _, _ = compile_plan('volatility', data, settings, repo, preview=True)
+    argv = shlex.split(recipe(plan)['terminal_command'])
+    assert '--strings-file=' + str(strings) in argv
+    assert '--label=' + strings.as_uri() in argv

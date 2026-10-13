@@ -38,7 +38,7 @@ Every action teaches:
 
 The UI is explicit about what it's doing. Nothing is hidden. Nothing is magic.
 
-Examples show the native command with the absolute evidence path, such as `mmls -B /cases/disk.E01 > mmls.txt`. Run them from a working results directory; reports use the filenames shown, which you can change for another run. There are no shell variables, environment exports or execution wrappers. Necessary tool preparation appears as ordinary commands, such as creating a writable Volatility symbol directory or defining Scalpel rules. Saved examples run with `bash forensic-commands.sh`. SQLite examples use `sqlite3` for schema inspection and SQL queries; file identification uses `file` and `find`. [CLI example validation](docs/terminal-validation.md) describes the native checks and output conventions.
+Examples show the analytical command with an absolute evidence path, such as `mmls -B /cases/disk.E01` or `vol -q -f /cases/memory.img -r jsonl windows.cmdline.CmdLine --pid 1812`. Ordinary reports print in the terminal. Output files remain where the tool needs them, including binary recovery, carving and timeline export. Volatility's one-time [symbol setup guide](docs/volatility-symbols.md) keeps installation commands out of analysis snippets. Explicitly selected symbol directories remain visible. Saved examples run with `bash forensic-commands.sh`. [CLI validation](docs/terminal-validation.md) documents native checks and necessary evidence preparation.
 
 ### Structured Output
 
@@ -199,7 +199,7 @@ export SIFTED_BINARIES='{"volatility":["/usr/local/bin/vol"],"evtxecmd":["/usr/b
 
 Zimmerman adapters invoke `dotnet` plus the installed assembly directly because some SIFT shell wrappers lose argument boundaries for paths with spaces. SQLite maps use SIFTed's own read-only executor. Volatility discovers canonical plugins and typed options from the installed `vol` console script using its own Python environment. It automatically downloads Windows symbols to a user-writable directory; select offline mode to use available symbols only. Linux and macOS need matching kernel symbol files in an additional directory permitted by `SIFTED_SYMBOL_ROOTS`. No plugin catalog, separate tool checkout, or Volatility dependency in the app virtual environment is needed. Intake memory probes use this same native interpreter offline, without symbol downloads. Disk probes use SIFT’s system Python and installed `pytsk3`/`pyewf`; `SIFTED_BINARIES["forensic-python"]` can select that interpreter explicitly. Missing probe capabilities leave identification unresolved and are recorded in the profile.
 
-See [Volatility validation](docs/volatility-validation.md) for the tested SIFT installation, real memory fixture, coverage, and reproduction commands.
+See [symbol onboarding](docs/volatility-symbols.md) for official downloads, installation commands and service-account permissions. See [Volatility validation](docs/volatility-validation.md) for the tested SIFT installation, real memory fixture, coverage, and reproduction commands.
 
 Memory YARA examinations include a [reviewed starter library](docs/yara-rules.md): 72 rules from Google GCTI, Mandiant and ESET, with pinned sources and original licenses. Guided analysis and the plugin examiner prefill its absolute path. Each run retains the exact rules and provenance; custom rules remain available. The library works offline with SIFT's installed Volatility YARA engine.
 

@@ -3912,6 +3912,10 @@ footer {
   margin-right: var(--glossary-width);
 }
 
+.symbol-guide .block { grid-template-columns: minmax(0, 1fr); }
+.symbol-guide p { overflow-wrap: anywhere; }
+.symbol-guide a { color: var(--neon-teal); }
+
 .guides-controls {
   position: relative;
 }

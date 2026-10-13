@@ -23,7 +23,7 @@
   <section id="workspaceOperation" class="workspace-panel" hidden aria-label="Current examination">
     <div class="workspace-heading"><h3 id="operationTitle" tabindex="-1">Examination</h3><button class="workspace-text-button" id="closeOperation" type="button">Close result</button></div>
     <form id="operationForm"><details id="operationOptions"><summary>Adjust settings</summary><div id="operationFields" class="workspace-fields"></div></details>
-      <details id="operationCli"><summary>Run this yourself on SIFT</summary><pre id="operationCommand"></pre><button class="ghost" id="copyOperation" type="button" disabled>Copy command</button><p id="operationNote" class="helper"></p></details>
+      <details id="operationCli"><summary>Run this yourself on SIFT</summary><pre id="operationCommand"></pre><button class="ghost" id="copyOperation" type="button" disabled>Copy command</button><p id="operationNote" class="helper"></p>{% if workspace.memory %}<p class="helper"><a href="{{ url_for('web.volatility_symbols') }}" target="_blank" rel="noopener">Volatility symbol setup</a></p>{% endif %}</details>
       <div class="tool-actions"><button class="action" id="runOperation" type="submit" hidden>Run examination</button><button class="ghost" id="cancelOperation" type="button" hidden>Cancel job</button></div>
     </form>
     <p id="operationStatus" role="status" aria-live="polite"></p>

@@ -40,7 +40,7 @@
             <select id="renderer"><option value="json">JSON (up to 64 MiB per plugin)</option><option value="jsonl">JSON Lines (large results)</option><option value="pretty">Readable table</option></select>
           </label>
           <label class="toggle"><input id="offline" type="checkbox" />Offline: use available symbols only</label>
-          <p class="helper">Automatic symbol downloads are enabled by default and saved in a writable directory for this user. Linux and macOS require symbols matching the captured kernel.</p>
+          <p class="helper">Automatic symbol downloads use a writable directory. Linux and macOS require matching kernel symbols. <a href="{{ url_for('web.volatility_symbols') }}" target="_blank" rel="noopener">Symbol setup guide</a></p>
           <label class="input-stack">Additional local symbol directory
             <input id="symbolPath" type="text" list="symbolDirectories" placeholder="Leave empty for installed and downloaded symbols" />
             <datalist id="symbolDirectories">{% for path in symbol_roots %}<option value="{{ path }}"></option>{% endfor %}</datalist>

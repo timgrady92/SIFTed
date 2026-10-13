@@ -1,45 +1,45 @@
 # Native SIFT CLI examples
 
-The **Run it in a SIFT terminal** panel teaches how to use the installed forensic tool directly. **Copy CLI commands** copies the entire example; **Save .sh** saves the same text for `bash forensic-commands.sh`. The controls are disabled until the evidence path and options are valid. Clipboard copying also works over ordinary HTTP.
+**Run it in a SIFT terminal** and the evidence workspace's **Run this yourself on SIFT** use the same presenter. Copy and Save .sh use the displayed analytical commands. Invalid evidence paths disable copying.
 
-Examples show the selected absolute evidence path directly in the native command:
+Examples show only the selected native operation and its absolute evidence path:
 
 ```bash
-mmls -B /cases/nps-2009-canon2-gen6.E01 > mmls.txt
+mmls -B /cases/nps-2009-canon2-gen6.E01
+vol -q -f /cases/demo/memory/windows-xp.img -r jsonl windows.cmdline.CmdLine --pid 1812
 ```
 
-Run commands from a working results directory. Reports use the filenames shown in the current directory, separately from the app's output selection. Change those names to keep previous results. There are no shell variables, environment exports, subshells, strict-mode settings, temporary-folder generators or result-printing scaffolds. Literal paths and rules are quoted where needed, including spaces, apostrophes, dollar signs, backticks, Unicode and supported newlines.
+Ordinary reports print to the terminal. Optional report redirection, managed symbol directories, configuration snapshots and backend verification steps are omitted. Paths and literal arguments remain shell-quoted, including spaces, apostrophes, dollar signs, backticks, Unicode and supported newlines. Examples contain no app executors, timeout wrappers, audit manifests or SIFTed job directories.
 
-The commands use installed executable names, native reports and shell redirection. They contain no worker timeouts, audit manifests, app validators, embedded Python executors, installation snapshots or SIFTed job directories. Explanations beside the commands describe the flags and how to interpret their output. A saved example requires the forensic tool and its installed resources, independently of SIFTed.
+## Native requirements that remain
 
-## Tool-specific preparation
+- Binary extraction (`icat`, `blkcat`, `blkls`) redirects recovered bytes to a file. Other Sleuth Kit commands print their result directly; `blkcalc` does not include SIFTed's additional allocation-verification command. Sector offsets, geometry and record addresses remain selected analytical inputs.
+- Foremost, Scalpel and Bulk Extractor require native output directories. Scalpel also needs selected header/footer definitions, supplied as a short configuration. Plaso requires its storage file and exported timeline. Run file-producing operations in a working directory and choose fresh destinations for subsequent runs.
+- Volatility uses installed symbols. The separate [onboarding guide](volatility-symbols.md) covers downloading, validating and installing them once. A deliberately selected additional symbol directory remains in the analytical command, as do offline mode and plugin options. Extracted memory files use Volatility's current-directory default.
+- Zimmerman commands invoke the native .NET parser and installed resources. CSV destinations remain because those parsers produce files; app-specific report filenames, debug output, timestamp formatting and JLECmd's backend-only quiet flag are removed. Analytical options such as deleted-entry inclusion and transaction-log replay stay intact.
+- Registry logs with lowercase names need uppercase `.LOG1`/`.LOG2` filenames on the tested Linux parsers. Those examples still prepare working copies so the native parser can replay the selected logs without renaming originals. SQLite databases with sidecars likewise need working copies to preserve the source WAL/SHM/journal bytes. Necessary preparation chains with `&&`; it does not reproduce worker staging or provenance.
+- SQLite examples run the first SQL query from each selected profile through `sqlite3 -readonly -header -csv`, printing results. Repeated schema exports and automatic `.tables`/`.schema` commands are removed. Those native exploration commands remain described in the helper text.
+- File identification uses `file` or `find -exec`. Strings, metadata, text, hex and PDF inspection print to the terminal. ClamAV uses its native scan defaults; the note calls out scan limits and return codes. An explicitly configured nondefault signature directory is retained.
 
-- Foremost uses `-t` with its built-in parsers and the workstation's default configuration. Scalpel needs active header/footer rules: its example creates a short local configuration containing the selected signatures. They write to `foremost-carved/` or `scalpel-carved/`; review the native audit and recovered files.
-- Bulk Extractor writes its native feature files into `bulk-features/`. Plaso demonstrates extraction with `log2timeline.py`, followed by CSV export with `psort.py`.
-- Volatility adds a writable symbol directory under `~/.local/share/volatility3/symbols`, alongside any explicitly selected symbol directory. This is necessary on the tested vanilla SIFT workstation because its system symbol directories are read-only to the analyst account. Global options precede the exact installed plugin name; selected plugin options follow it. Each plugin writes a named report such as `windows.pslist.PsList.jsonl`; native extracted files go into the current working directory. The example does not save SIFTed's execution configuration.
-- Zimmerman examples invoke the installed .NET DLL with `dotnet`, select a file with `-f` or a directory with `-d`, and export with `--csv`. RECmd references the installed batch profile; EvtxECmd references its installed maps. Registry parsers read the original hive directly when no filename preparation is necessary. On Linux, lowercase transaction logs need uppercase `.LOG1`/`.LOG2` filenames: those examples prepare writable copies of the selected hives and logs under the analyst's home directory, preserving the originals. Preparation creates a fresh copy directory and chains the commands with `&&`, so a failed preparation step stops the example. Parser CSV directories have simple names such as `recmd-csv/`. Native diagnostics remain visible in the terminal; review them even when the parser exits zero.
-- SQLite examples teach `sqlite3`, rather than reproducing SIFTed's map executor. They list tables, save the schema, and pass the first SQL query from each selected profile as a quoted CLI argument using `-readonly -header -csv`. A database with WAL/SHM/journal sidecars is copied with those sidecars before inspection; a database without sidecars is inspected directly. No time zone is exported: SQLite `localtime` expressions use the workstation's time zone. Analysts should check those queries against the schema before reusing them. Automatic map matching, deduplication and configured blob extraction remain app features. The native Linux SQLECmd installation on the tested workstation lacks its required SQLite library.
-- File identification uses native `file` output and `find -exec` for directory scope. MIME reports retain filenames so analysts can compare content types with extensions. The app's mismatch filtering and CSV formatting are not emulated.
-- Sleuth Kit examples retain the selected geometry, metadata addresses and binary redirection. `-o` is a sector offset; inode and block addresses are filesystem-relative. `blkcalc -d` includes a native `blkls -A -l` allocation listing because index conventions vary between builds.
-- Examination examples use `head`, `xxd`, `pdfinfo` or `pdftotext` directly, with the selected byte or page limits.
+The worker's managed output files and evidence provenance remain independent of CLI presentation. Standalone tools, case workflows, copied commands and saved scripts all use this shared rule.
 
 ## Validation
 
-Tests execute the exact displayed text through a separate Bash process with an empty `PYTHONPATH`. No web server or worker executes the commands. Known inputs establish native behavior: strings and metadata, disk geometry and extracted bytes, carving signatures, SQLite queries and WAL contents, registry log replay, native parser records and Volatility process enumeration. App-only result schemas and validation summaries are deliberately absent from these checks.
+Tests paste the exact displayed command text into Bash with an empty `PYTHONPATH`, capture its terminal output, and inspect native files only for operations that produce files. They verify substantive results: text and metadata, disk structures, exact binary recovery, carving, registry replay, SQL/WAL rows, memory process records and extraction. They also verify preserved evidence and shell quoting. Obsolete expectations for redirected text reports were replaced.
 
 ```bash
-.venv/bin/python -m pytest -q tests/test_terminal.py tests/test_live_terminal.py
+.venv/bin/python -m pytest -q tests/test_terminal.py tests/test_live_terminal.py tests/test_symbol_setup.py
 .venv/bin/python -m pytest -q tests/test_browser.py
 ```
 
-For the installed SIFT tools and optional public fixtures:
+Native SIFT reproduction, with the documented public fixtures already available:
 
 ```bash
 SIFTED_TEST_ZIMMERMAN_FIXTURES=/tmp/sifted-zimmerman-review/sifted-zimmerman-fixtures \
-SIFTED_TEST_MEMORY_IMAGE=/tmp/sifted-volatility-review/windows.img \
-  .venv/bin/python -m pytest -q tests/test_terminal.py tests/test_live_terminal.py
+SIFTED_TEST_MEMORY_IMAGE=/cases/demo/memory/windows-xp.img \
+  .venv/bin/python -m pytest -q tests/test_terminal.py tests/test_live_terminal.py tests/test_symbol_setup.py
 ```
 
-Fixtures must already be available; the tests never download tools or evidence. See [Zimmerman validation](zimmerman-validation.md) and [Volatility validation](volatility-validation.md) for their provenance. Browser checks exercise complete copy/save text, invalid-path disabling, selected options and the existing app execution flow. The backend execution record remains an audit of the app's work, distinct from these educational commands.
+Follow symbol onboarding before the bare Windows CLI tests. On the connected SIFT workstation, a fresh targeted Windows symbol download and installation made the exact `windows.cmdline.CmdLine --pid 1812` example above succeed. It reports `explorer.exe` and `C:\WINDOWS\Explorer.EXE`. No system tool or Python package was installed, and the Volatility code remains administrator-owned.
 
-The simplified examples passed **53 CLI checks** on the connected SIFT workstation, including real Windows memory analysis and process extraction. The native CLI and affected worker/parser regression passed **110 checks**. The full local suite passed **331 checks**, including **eight Chromium checks**, with 146 skips for unavailable tools or fixtures. Tests verify that the examples contain no shell variable assignments, environment exports or execution wrappers.
+Browser checks cover copy/save equality, ordinary HTTP clipboard fallback, guided and standalone examples, invalid paths, and the unobtrusive symbol guide on desktop and phone. Symbol-guide checks cover discovered paths, shell quoting and missing installations. Large offline packs and native Linux/macOS capture analysis are not exercised by these tests.

@@ -6,6 +6,7 @@ removes managed execution details and teaches the corresponding terminal task.
 import json
 import shlex
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from .sqlite_maps import load_map
 from .tool_base import OUTPUT, WORKSPACE
@@ -16,7 +17,7 @@ TOOL_NOTES = {
     "exiftool": "-csv/-json select the report format; -r visits subdirectories; -G1 identifies tag groups; -s uses tag names.",
     "bulk-extractor": "-o writes feature reports; -x all disables default scanners when a focus is selected; -e enables each selected scanner.",
     "artifact-triage": "log2timeline builds the Plaso storage file; psort exports l2tcsv using the selected display time zone.",
-    "volatility": "Global options precede the plugin name; plugin options follow it. -r selects the report format; -o holds extracted files. -s adds symbol directories. The writable directory under ~/.local/share lets Volatility download symbols without changing its system installation.",
+    "volatility": "Global options precede the plugin; plugin options follow it. -r selects the display format. Kernel plugins need matching symbols; see the symbol setup guide. Extracted files go into the current directory.",
     "eric-zimmerman": "dotnet runs the installed parser DLL; -f selects a file and -d selects a directory; --csv selects the export folder. Read the parser's terminal diagnostics along with its CSV reports.",
     "head": "-c limits the number of bytes read; -- separates options from the evidence filename.",
     "xxd": "-s is a byte offset; -l limits bytes; -g 1 groups individual bytes; -c 16 sets bytes per line.",
@@ -102,17 +103,13 @@ def sqlite_commands(plan, body):
     database = copied_evidence(plan, body) if has_sidecars else plan.source
     selected = plan.parameters["selected_inputs"]
     request = json.loads(plan.configs["sqlite-request.json"])
-    for index, source in enumerate(selected):
+    for source in selected:
         path = str(Path(database) / Path(source).relative_to(plan.source)) if Path(plan.source).is_dir() else database
-        suffix = f"-{index + 1}" if len(selected) > 1 else ""
-        body += [command_text(["sqlite3", "-readonly", path, ".tables"]),
-                 command_text(["sqlite3", "-readonly", path, ".schema"], "schema" + suffix + ".sql")]
         task = next(task for task in request["inputs"] if task["source"] == source)
-        for map_index, name in enumerate(task["maps"]):
+        for name in task["maps"]:
             query = load_map(plan.configs["maps/" + name])["Queries"][0]
             sql = query["Query"].strip().removesuffix(";") + ";"
-            body += [command_text(["sqlite3", "-readonly", "-bail", "-header", "-csv", path, sql],
-                                  f"query{suffix}-{map_index + 1}.csv")]
+            body += [command_text(["sqlite3", "-readonly", "-bail", "-header", "-csv", path, sql])]
     return bool(has_sidecars)
 
 
@@ -124,8 +121,10 @@ def zimmerman_commands(plan, body, settings):
     rename_logs = parser in REGISTRY and any(Path(source).name != Path(destination).name
                                              for source, destination in plan.input_copies.items())
     source = copied_evidence(plan, body) if rename_logs else plan.source
-    args = without_options(native_argv(first.argv), {"--debug": 0, "--dt": 1, "--csv": 1,
+    args = without_options(native_argv(first.argv), {"--debug": 0, "--dt": 1, "--csv": 1, "--csvf": 1,
                                                    "--bn": 1, "--maps": 1, "-f": 1, "-d": 1})
+    if parser == 'jlecmd':
+        args = without_options(args, {'-q': 0})
     args += ["-d" if Path(plan.source).is_dir() else "-f", source, "--csv", parser + "-csv"]
     if parser in {"recmd", "evtxecmd"}:
         root = resource_root(first.argv, parser, settings)
@@ -143,26 +142,31 @@ def file_commands(plan, body):
     if Path(plan.source).is_dir():
         depth = [] if plan.parameters["recursive"] else ["-maxdepth", "1"]
         args = ["find", plan.source, *depth, "-type", "f", "-exec", *["{}" if word == plan.source else word for word in args], "+"]
-    body += [command_text(args, "filetypes.txt")]
+    body += [command_text(args)]
 
 
 def volatility_commands(plan, body):
-    symbols = str(Path.home() / ".local/share/volatility3/symbols")
-    body += [command_text(["mkdir", "-p", "--", symbols])]
-    symbol_dirs = plan.parameters["symbol_path"] + ";" + symbols if plan.parameters["symbol_path"] else symbols
+    installed = json.loads(plan.configs['volatility-installation.json'])['plugins']
     for step in plan.steps:
         name = step.label
         args = without_options(native_argv(step.argv), {"--save-config": 1, "-s": 1, "-o": 1})
+        file_flags = {option['flag'] for option in installed[name]['options'] if option['type'] == 'file'}
+        for index, arg in enumerate(args):
+            flag, _, value = arg.partition('=')
+            if flag in file_flags and value.startswith('file:///'):
+                args[index] = flag + '=' + unquote(urlparse(value).path)
         library = plan.parameters.get('yara_libraries', {}).get(name)
         if library:
             args = [library['path'] if arg == WORKSPACE + '/yara/memory.yar' else arg for arg in args]
-        args[args.index(name):args.index(name)] = ["-s", symbol_dirs]
-        suffix = "txt" if plan.parameters["renderer"] == "pretty" else plan.parameters["renderer"]
-        body += [command_text(args, name + "." + suffix)]
+        # Retain a directory the analyst explicitly chose (e.g. matching Linux
+        # symbols), but never add the worker's managed symbol/cache directory.
+        if plan.parameters['symbol_path']:
+            args[args.index(name):args.index(name)] = ['-s', plan.parameters['symbol_path']]
+        body += [command_text(args)]
 
 
 def recipe(plan, settings=None):
-    note = "Run from a working results directory in the SIFT terminal. Evidence paths are absolute; reports use the filenames shown in your current directory. Change output names to keep previous results. "
+    note = ""
     if plan.operation == "evidence-intake":
         path = shlex.quote(plan.source)
         command = f"sha256sum -- {path}\nfile --mime-type -- {path}"
@@ -178,7 +182,7 @@ def recipe(plan, settings=None):
     prepared_copy = False
     if parser == "sqlecmd":
         prepared_copy = sqlite_commands(plan, body)
-        note += "sqlite3 -readonly opens the database for inspection; .tables lists tables, .schema shows SQL definitions, and -header -csv exports query results. The SQL example is the first query from each selected profile; check it against the schema. Databases with sidecars are copied together before inspection. SQLite localtime expressions use the workstation's time zone."
+        note += "sqlite3 -readonly opens the database for inspection; -header -csv displays query results. Use .tables and .schema to explore the database. The SQL example is the first query from each selected profile; check it against the schema. Databases with sidecars are copied together before inspection. SQLite localtime expressions use the workstation's time zone."
     elif parser:
         prepared_copy = zimmerman_commands(plan, body, settings)
         note += TOOL_NOTES[plan.tool]
@@ -191,27 +195,34 @@ def recipe(plan, settings=None):
         note += "file identifies content; --mime-type reports MIME types and -b omits filenames. find -exec applies it to files in a directory. Compare the reported types with the filename extensions; mismatch filtering and CSV formatting are app features."
     elif plan.tool == 'clamscan':
         args = native_argv(plan.steps[1].argv)
-        args = without_options(args, {'--database': 1})
+        args = without_options(args, {'--database': 1, '--stdout': 0, '--allmatch': 0,
+                                     '--alert-exceeds-max=yes': 0, '--max-filesize=512M': 0, '--max-scansize=1024M': 0})
         boundary = args.index('--')
-        args[boundary:boundary] = ['--database', plan.parameters['database_directory']]
-        body += [command_text(args, 'clamscan.txt')]
-        note += 'Exit code 1 means a signature match; 2 means an error. Inspect matches and scan limits. The installed signature set can change; SIFTed records the database hashes used for its run.'
+        if plan.parameters['database_directory'] != '/var/lib/clamav':
+            args[boundary:boundary] = ['--database', plan.parameters['database_directory']]
+        body += [command_text(args)]
+        note += 'Exit code 1 means a signature match; 2 means an error. Native scan limits apply; review the summary for skipped or incomplete scans.'
     elif plan.tool == "volatility":
         volatility_commands(plan, body)
-        note += TOOL_NOTES[plan.tool] + " Extracted files are written to the current directory."
+        note += TOOL_NOTES[plan.tool]
     else:
         if plan.tool == "scalpel":
             config = "\n".join(line for line in plan.configs["scalpel.conf"].splitlines() if line and not line.startswith("#")) + "\n"
             delimiter = heredoc(config, "SCALPEL_RULES")
             body += ["cat > scalpel.conf <<'" + delimiter + "'", config + delimiter]
-        for step in plan.steps:
+        # blkcalc's second step verifies SIFTed's normalized mapping; it is not
+        # part of asking the native tool to map a block address.
+        steps = plan.steps[:1] if plan.tool == 'blkcalc' else plan.steps
+        for step in steps:
             args = native_argv(step.argv)
             if plan.tool == "foremost":
                 args = without_options(args, {"-c": 1})
             if plan.tool in {"foremost", "scalpel", "bulk-extractor"}:
                 directory = "bulk-features" if plan.tool == "bulk-extractor" else plan.tool + "-carved"
                 args = [directory if arg == OUTPUT else arg for arg in args]
-            body += [command_text(args, step.stdout)]
+            # Save recovered binary bytes, not ordinary terminal reports.
+            destination = step.stdout if plan.tool in {'icat', 'blkcat', 'blkls'} else None
+            body += [command_text(args, destination)]
         note += TOOL_NOTES.get(plan.tool, "")
         if plan.tool in {"foremost", "scalpel"}:
             note += " Carving requires a complete raw byte stream; export image containers to raw first."

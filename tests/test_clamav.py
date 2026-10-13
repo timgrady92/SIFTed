@@ -86,5 +86,8 @@ def test_terminal_example_keeps_native_arguments_and_evidence_path(scanner):
     _, plan = submit(scanner)
     completed, output = paste(plan, settings)
     assert completed.returncode == 0, completed.stderr
-    assert 'Scanned files: 1' in (output / 'clamscan.txt').read_text()
-    assert str(source) in recipe(plan, settings)['terminal_command']
+    assert 'Scanned files: 1' in completed.stdout
+    assert not (output / 'clamscan.txt').exists()
+    command = recipe(plan, settings)['terminal_command']
+    assert str(source) in command and '>' not in command
+    assert '--max-filesize' not in command and '--stdout' not in command
