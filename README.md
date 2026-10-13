@@ -23,19 +23,21 @@ Open <http://127.0.0.1:5000> in the SIFT Workstation's browser, create a case, a
 
 ## Evidence workflows
 
-![Verified public demonstration evidence organized in the case workspace](docs/screenshots/evidence-workspace.png)
+*Case workspace: six verified public samples, with evidence types and SHA-256 fingerprints.*
+
+![Six verified public samples displayed as evidence cards with types and SHA-256 fingerprints](docs/screenshots/evidence-workspace.png)
 
 <details>
-<summary>Disk file triage and metadata inspection</summary>
+<summary>Disk triage: IMG_0003.JPG and its recorded filesystem metadata</summary>
 
-![Disk file triage with filesystem entries and inline metadata inspection](docs/screenshots/disk-file-triage.png)
+![File triage filtered to IMG_0003.JPG, with metadata address 1031 and a successful istat report open](docs/screenshots/disk-file-triage.png)
 
 </details>
 
 <details>
-<summary>Memory process inspection and native terminal commands</summary>
+<summary>Memory inspection: explorer.exe, its command line and a native Volatility command</summary>
 
-![Memory process inspection with Volatility results and a native terminal command](docs/screenshots/memory-process-inspection.png)
+![Explorer.exe at PID 1812, with the native Volatility command expanded and its successful command-line report below](docs/screenshots/memory-process-inspection.png)
 
 </details>
 
@@ -43,13 +45,17 @@ Open <http://127.0.0.1:5000> in the SIFT Workstation's browser, create a case, a
 
 **Guides** provide searchable playbooks for starting with a hypothesis, such as suspected phishing or data theft, or with an artifact you need to understand. Each playbook connects investigative questions to evidence sources, corroboration, pitfalls, limitations and stopping points. **Glossary** is a searchable forensic reference covering artifacts, registry keys, persistence locations and Windows event codes, with operating-system filters, evidence locations and interpretation guidance. Open either from the navigation bar; contextual artifact links in the guides connect the playbooks to the reference material.
 
-![Searchable investigation guides organized by hypothesis and artifact](docs/screenshots/investigation-guides.png)
+*Guides library: the Hypothesis driven tab is selected; the Artifact driven tab is available beside it.*
+
+![Guides library showing the Hypothesis driven tab, search field, and playbooks for phishing, data theft and other investigations](docs/screenshots/investigation-guides.png)
 
 <details>
-<summary>Inside a guide: investigating a suspected phishing email</summary>
+<summary>Phishing playbook: investigative questions and evidence sources</summary>
 
 ![Phishing investigation playbook showing questions and evidence sources](docs/screenshots/investigation-playbook.png)
 
 </details>
 
-![Forensic glossary with the Prefetch reference open](docs/screenshots/forensic-glossary.png)
+*Glossary: the Prefetch reference is open, with its purpose, corroborating artifacts and evidence locations.*
+
+![Forensic glossary on the Artifacts tab, with Prefetch selected and its interpretation and evidence-location guidance visible](docs/screenshots/forensic-glossary.png)
