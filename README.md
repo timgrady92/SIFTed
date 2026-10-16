@@ -1,6 +1,7 @@
 ```
 !!! Full transparency; this application is largely developed with assistance from Codex.
-!!! If you are a member of the larger Digital Forensics community, I'd love to collaborate and get it in front of a legitimate development team!
+!!! If you are a member of the larger Digital Forensics community...
+!!! I'd love to collaborate and get it in front of a legitimate development team!
 ``` 
 
 # SIFTed
