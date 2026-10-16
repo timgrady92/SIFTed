@@ -1,3 +1,8 @@
+```
+!!! Full transparency; this application is largely developed with assistance from Codex.
+!!! If you are a member of the larger Digital Forensics community, I'd love to collaborate and get it in front of a legitimate development team!
+``` 
+
 # SIFTed
 
 SIFTed is a web interface for digital forensics on a SIFT Workstation, built to help analysts move from evidence to reviewable results. Create a case, upload files or register workstation paths, and let SIFTed hash and identify the evidence before analysis. The evidence workspace guides disk investigations through partition mapping, filesystem inventory, file inspection and recovery. Memory investigations use Volatility 3 to identify captures, review processes and parent–child relationships, investigate network activity and injection, and examine recovered files.
